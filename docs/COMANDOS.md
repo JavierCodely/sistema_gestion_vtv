@@ -170,14 +170,12 @@ npx supabase functions deploy admin-usuarios
 
 > En una base ya instalada **nunca** se vuelve a correr `01_esquema_completo.sql`.
 
-**Estado de la nube (`gestion_vtv`) al 2026-11-20:** tiene aplicadas hasta la migración `014`.
-Faltan `015` a `021` (nombres de catálogo, privilegios de funciones, costos solo admin,
-certificados, topes de stock y edición de compras) y volver a publicar `admin-usuarios`:
+**Estado de la nube (`gestion_vtv`) al 2026-11-20:** tiene aplicadas hasta la migración `021`.
+Falta `022` (`cajas_para_turno`, para la pantalla de caja de la fase 4):
 
 ```bash
-npx supabase migration list --linked     # confirmar que faltan 20261120000015 … 20261120000021
-npx supabase db push                     # aplicarlas
-npx supabase functions deploy admin-usuarios
+npx supabase migration list --linked     # confirmar que falta 20261120000022
+npx supabase db push                     # aplicarla
 ```
 
 ## Parte F — Volver a probar la instalación desde cero (solo proyecto de prueba)

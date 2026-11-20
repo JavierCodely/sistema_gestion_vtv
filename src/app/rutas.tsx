@@ -23,7 +23,18 @@ export const rutas: RouteObject[] = [
     ),
     children: [
       { index: true, element: <EnConstruccion titulo="Dashboard" fase={6} /> },
-      { path: "ventas", element: <EnConstruccion titulo="Ventas" fase={6} /> },
+      {
+        path: "ventas",
+        lazy: async () => ({
+          Component: (await import("@/modulos/ventas/paginas/Ventas")).Ventas,
+        }),
+      },
+      {
+        path: "ventas/turnos/:id",
+        lazy: async () => ({
+          Component: (await import("@/modulos/ventas/paginas/DetalleTurno")).DetalleTurno,
+        }),
+      },
       { path: "alertas", element: <EnConstruccion titulo="Alertas" fase={6} /> },
       {
         path: "usuarios",
@@ -69,7 +80,14 @@ export const rutas: RouteObject[] = [
         </Suspense>
       </RutaProtegida>
     ),
-    children: [{ index: true, element: <EnConstruccion titulo="Caja" fase={4} /> }],
+    children: [
+      {
+        index: true,
+        lazy: async () => ({
+          Component: (await import("@/modulos/caja/paginas/Caja")).Caja,
+        }),
+      },
+    ],
   },
   { path: "*", element: <NoEncontrada /> },
 ];

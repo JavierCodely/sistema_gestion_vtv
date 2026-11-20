@@ -1,6 +1,11 @@
 import { screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authDePrueba, perfilDePrueba, renderRuta } from "@tests/soporte/render";
+import { reiniciarSupabaseFalso, responder, responderRpc } from "@tests/soporte/supabase-falso";
+
+vi.mock("@/compartido/lib/supabase", async () => ({
+  supabase: (await import("@tests/soporte/supabase-falso")).supabaseFalso,
+}));
 
 vi.mock("@/compartido/lib/salud", () => ({
   verificarConexion: vi.fn(() => Promise.resolve(true)),
@@ -8,6 +13,13 @@ vi.mock("@/compartido/lib/salud", () => ({
 
 const admin = perfilDePrueba({ rol: "admin", nombre: "Admin Prueba" });
 const cajero = perfilDePrueba();
+
+beforeEach(() => {
+  reiniciarSupabaseFalso();
+  // La caja sin turno abierto: muestra "Abrir turno".
+  responder("turnos", "select", { data: null });
+  responderRpc("cajas_para_turno", { data: [] });
+});
 
 describe("rutas protegidas", () => {
   it("sin sesión, una ruta privada manda al login recordando el destino", async () => {
@@ -40,7 +52,7 @@ describe("rutas protegidas", () => {
     await waitFor(() => {
       expect(router.state.location.pathname).toBe("/caja");
     });
-    expect(await screen.findByRole("heading", { name: "Caja" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Abrir turno" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Panel admin" })).not.toBeInTheDocument();
   });
 

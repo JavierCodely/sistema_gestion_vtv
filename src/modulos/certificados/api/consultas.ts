@@ -1,4 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { siguienteCursor, TAMANO_PAGINA } from "@/compartido/lib/paginacion";
 import { supabase } from "@/compartido/lib/supabase";
 import type { Enums, Tablas } from "@/compartido/tipos";
 import { claveEfectivo } from "@/modulos/efectivo/api/consultas";
@@ -42,8 +43,6 @@ export type Movimiento = Pick<
 > & { perfiles: { nombre: string } | null };
 
 export type FuenteFondos = Enums["fuente_fondos"];
-
-export const TAMANO_PAGINA = 50;
 
 export const claves = {
   stock: ["certificados", "stock"] as const,
@@ -94,13 +93,14 @@ function convertirCompra(fila: FilaCompra): Compra {
   return { ...fila, hojas_por_unidad: fila.hojas_por_unidad, editable: fila.editable === true };
 }
 
-async function paginaCompras(desde: number): Promise<Compra[]> {
-  const { data, error } = await supabase
+async function paginaCompras(antesDe: number | null): Promise<Compra[]> {
+  let consulta = supabase
     .from("v_compras_certificado")
     .select(COLUMNAS_COMPRA)
-    .order("creado_en", { ascending: false })
     .order("id", { ascending: false })
-    .range(desde, desde + TAMANO_PAGINA - 1);
+    .limit(TAMANO_PAGINA);
+  if (antesDe !== null) consulta = consulta.lt("id", antesDe);
+  const { data, error } = await consulta;
   if (error) throw error;
   return data.map(convertirCompra);
 }
@@ -108,10 +108,9 @@ async function paginaCompras(desde: number): Promise<Compra[]> {
 export function useCompras() {
   return useInfiniteQuery({
     queryKey: claves.compras,
-    initialPageParam: 0,
+    initialPageParam: null as number | null,
     queryFn: ({ pageParam }) => paginaCompras(pageParam),
-    getNextPageParam: (ultima, paginas) =>
-      ultima.length === TAMANO_PAGINA ? paginas.length * TAMANO_PAGINA : undefined,
+    getNextPageParam: siguienteCursor,
   });
 }
 
@@ -131,16 +130,17 @@ export function useCertificado(id: number) {
   });
 }
 
-async function paginaMovimientos(id: number, desde: number): Promise<Movimiento[]> {
-  const { data, error } = await supabase
+async function paginaMovimientos(id: number, antesDe: number | null): Promise<Movimiento[]> {
+  let consulta = supabase
     .from("movimientos_certificado")
     .select(
       "id, creado_en, tipo, hojas, costo_unitario, costo_total, stock_resultante, costo_promedio_resultante, nota, venta_id, compra_id, perfiles(nombre)",
     )
     .eq("certificado_id", id)
-    .order("creado_en", { ascending: false })
     .order("id", { ascending: false })
-    .range(desde, desde + TAMANO_PAGINA - 1);
+    .limit(TAMANO_PAGINA);
+  if (antesDe !== null) consulta = consulta.lt("id", antesDe);
+  const { data, error } = await consulta;
   if (error) throw error;
   return data;
 }
@@ -150,10 +150,9 @@ export function useMovimientos(id: number) {
   return useInfiniteQuery({
     queryKey: claves.movimientos(id),
     enabled: id > 0,
-    initialPageParam: 0,
+    initialPageParam: null as number | null,
     queryFn: ({ pageParam }) => paginaMovimientos(id, pageParam),
-    getNextPageParam: (ultima, paginas) =>
-      ultima.length === TAMANO_PAGINA ? paginas.length * TAMANO_PAGINA : undefined,
+    getNextPageParam: siguienteCursor,
   });
 }
 

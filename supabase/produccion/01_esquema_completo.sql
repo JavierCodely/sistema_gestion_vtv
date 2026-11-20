@@ -29,10 +29,11 @@
 --   19. 20261120000019_ajuste_stock_tope.sql
 --   20. 20261120000020_stock_tope.sql
 --   21. 20261120000021_corregir_compra.sql
+--   22. 20261120000022_cajas_para_turno.sql
 --
 -- Después de ejecutarlo, registrá las migraciones como aplicadas para que
 -- `supabase db push` no intente aplicarlas de nuevo:
---   npx supabase migration repair --status applied 20261119000001 20261119000002 20261119000003 20261119000004 20261119000005 20261119000006 20261119000007 20261119000008 20261119000009 20261119000010 20261119000011 20261119000012 20261119000013 20261120000014 20261120000015 20261120000016 20261120000017 20261120000018 20261120000019 20261120000020 20261120000021
+--   npx supabase migration repair --status applied 20261119000001 20261119000002 20261119000003 20261119000004 20261119000005 20261119000006 20261119000007 20261119000008 20261119000009 20261119000010 20261119000011 20261119000012 20261119000013 20261120000014 20261120000015 20261120000016 20261120000017 20261120000018 20261120000019 20261120000020 20261120000021 20261120000022
 -- =====================================================================
 
 begin;
@@ -2841,5 +2842,35 @@ left join public.perfiles a on a.id = c.anulada_por
 left join public.movimientos_certificado m on m.compra_id = c.id and m.tipo = 'compra';
 
 grant select on public.v_compras_certificado to authenticated;
+
+-- ---------------------------------------------------------------------
+-- 20261120000022_cajas_para_turno.sql
+-- ---------------------------------------------------------------------
+-- Fase 4: para abrir un turno el cajero necesita saber qué cajas están libres. La RLS de `turnos`
+-- solo le muestra los propios, así que no puede verlo leyendo la tabla: esta función expone lo
+-- mínimo (si la caja está ocupada y por quién), sin totales ni datos del turno ajeno.
+
+create function public.cajas_para_turno()
+returns table (id bigint, nombre text, ocupada boolean, ocupada_por text)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  perform public._exigir_usuario();
+
+  return query
+  select c.id, c.nombre, t.id is not null, p.nombre
+  from public.cajas c
+  left join public.turnos t on t.caja_id = c.id and t.cerrado_en is null
+  left join public.perfiles p on p.id = t.usuario_id
+  where c.activa
+  order by c.nombre;
+end;
+$$;
+
+revoke all on function public.cajas_para_turno() from public, anon;
+grant execute on function public.cajas_para_turno() to authenticated;
 
 commit;

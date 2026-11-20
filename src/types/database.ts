@@ -749,6 +749,11 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"cajas_para_turno":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "id": number,"nombre": string,"ocupada": boolean,"ocupada_por": string
+            }[]
+                           },
 "cerrar_turno":
 { Args: { "p_observaciones"?: string,"p_turno_id"?: number }; Returns: {
               "abierto_en": string,

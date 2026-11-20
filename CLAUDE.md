@@ -79,6 +79,10 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
 - Pantallas nuevas: entrada en `app/rutas.tsx` con `lazy` (code splitting); el login queda liviano.
 - `RutaProtegida` es solo UX: la seguridad real es la RLS/RPC.
 - `compartido/` crece solo con cosas usadas por 2+ módulos; si algo es de un módulo, va en el módulo.
+- Un módulo puede usar la `api/` y los `componentes/` de otro (ej. `ventas` usa `TablaVentas` y
+  `DialogoCerrarTurno` de `caja`), nunca sus `paginas/`, y sin ciclos entre módulos.
+- Listados con "Ver más": `useInfiniteQuery` con cursor sobre `id` (`order("id", desc)` + `lt("id", …)`,
+  `siguienteCursor` y `TAMANO_PAGINA` de `compartido/lib/paginacion.ts`), nunca `range` por posición.
 - shadcn: tras `add`, verificar que importe `cn` de `@/compartido/lib/utils` (el CLI a veces mete un paquete `cn` externo).
 - Versiones: React 19, React Router 8, Vite 8, TS 6, Tailwind 4, ESLint 10 (flat config), Vitest 5.
   En React 19.3 `FormEvent` está deprecado: usar `SubmitEvent<HTMLFormElement>`.
@@ -155,6 +159,7 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
 | 19 | `ajuste_stock_tope` | `ajustar_stock_certificado`: máximo 100.000 hojas por movimiento |
 | 20 | `stock_tope` | Tope del stock acumulado por certificado (1.000.000.000 hojas): CHECK + mensaje claro en compra y ajuste |
 | 21 | `corregir_compra` | Editar compras: `corregir_compra_certificado()` (anula la original revirtiendo hojas, costo promedio, gasto y efectivo, y registra la corregida), columnas `anulada*`/`reemplazada_por`, tipo de kardex `anulacion_compra`, vista `v_compras_certificado` (con `editable`) |
+| 22 | `cajas_para_turno` | `cajas_para_turno()`: cajas activas con `ocupada`/`ocupada_por` (la RLS de `turnos` no deja ver los ajenos) |
 
 Reglas que no son obvias leyendo una sola tabla:
 - **Certificado a usar**: el activo más específico (servicio > categoría > global).
@@ -182,6 +187,13 @@ Reglas que no son obvias leyendo una sola tabla:
   Usuario, turno y caja se completan solos.
 - **Totales de turno**: `cerrar_turno` guarda una foto en `turnos.total_*`; `v_turnos` los
   calcula en vivo. Los anulados nunca suman.
+- **El cajero no ve totales** (decisión del negocio, 2026-11-20): en `/caja` ve solo la lista de ventas
+  de su turno actual (sin sumas) y el cierre pide solo observaciones. Los totales por medio, gastos y
+  neto los ve el admin en `/admin/ventas` (lee `v_turnos`). No hay arqueo al cerrar. Es una regla
+  **de pantalla, no de seguridad**: el cajero ve el precio de cada venta de su turno (y la RLS le deja
+  leer su fila de `turnos`/`v_turnos`), así que los totales se pueden calcular igual.
+- **Ventas del admin**: `/admin/ventas` lista turnos con totales; el detalle permite anular ventas
+  (`anular_venta`) y cerrar un turno ajeno que quedó abierto (`cerrar_turno(p_turno_id)`).
 
 ## 5. Contrato de RPC
 
@@ -201,6 +213,7 @@ Todas requieren usuario autenticado y **activo**. Devuelven la fila afectada.
 | `movimiento_efectivo(p_tipo tipo_mov_efectivo, p_monto numeric, p_nota text) → movimientos_efectivo` | admin | Solo `fondo_inicial`, `ingreso`, `retiro`; monto positivo |
 | `marcar_alertas_leidas(p_ids bigint[] = null) → int` | admin | `null` = todas; devuelve cuántas marcó |
 | `certificado_para_servicio(p_servicio_id bigint) → bigint` | todos | Para mostrar en Ventas qué hoja se usará |
+| `cajas_para_turno() → setof (id, nombre, ocupada, ocupada_por)` | todos | Cajas activas para abrir turno; sin datos ni totales del turno ajeno |
 | `stock_certificados_valorizado() → setof (… columnas de v_stock_certificados, costo_promedio, valor_stock)` | admin | Stock con valuación |
 | `resumen_diario(p_desde date = null, p_hasta date = null) → setof (fecha, cantidad_ventas, total_*, total_gastos, flujo_neto, costo_certificados, margen_bruto, ventas_sin_stock)` | admin | Reporte por día (hora AR), sin anulados; rango opcional |
 | `rol_actual() → rol_usuario`, `es_admin() → boolean` | todos | `null`/`false` si el usuario está desactivado |
@@ -258,7 +271,7 @@ No se pasa de fase con tests en rojo.
 | 1 | (**hecha**) Auth, layout por rol, guardas de rutas, pantalla de usuarios |
 | 2 | (**hecha**) Admin: cajas, categorías de servicio, servicios |
 | 3 | (**hecha**) Admin: certificados, compras (con edición/corrección), ajustes, kardex, stock |
-| 4 | Caja: abrir turno, ventas, historial, cerrar turno |
+| 4 | (**hecha**) Caja: abrir turno, ventas, historial del turno (sin totales), cerrar turno; admin: turnos con totales, anular venta, cerrar turno ajeno |
 | 4b | Facturación electrónica ARCA (agente `arca`): configuración en admin, facturar desde el historial, notas de crédito, log avanzado. Ver §9 |
 | 5 | Gastos (admin y caja) + caja de efectivo |
 | 6 | Dashboard, reportes, alertas en tiempo real |
