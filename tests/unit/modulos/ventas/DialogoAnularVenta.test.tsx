@@ -4,11 +4,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Venta } from "@/modulos/caja/api/consultas";
 import { DialogoAnularVenta } from "@/modulos/ventas/componentes/DialogoAnularVenta";
 import { renderConQuery } from "@tests/soporte/render";
-import { argumentosRpc, reiniciarSupabaseFalso, responderRpc } from "@tests/soporte/supabase-falso";
+import {
+  argumentosDe,
+  argumentosRpc,
+  reiniciarSupabaseFalso,
+  responder,
+  responderRpc,
+} from "@tests/soporte/supabase-falso";
 
 vi.mock("@/compartido/lib/supabase", async () => ({
   supabase: (await import("@tests/soporte/supabase-falso")).supabaseFalso,
 }));
+const { invocarFuncion } = vi.hoisted(() => ({ invocarFuncion: vi.fn() }));
+vi.mock("@/compartido/lib/funciones", () => ({ invocarFuncion }));
 
 const venta = (cambios: Partial<Venta> = {}): Venta => ({
   id: 81,
@@ -27,6 +35,9 @@ const venta = (cambios: Partial<Venta> = {}): Venta => ({
 
 beforeEach(() => {
   reiniciarSupabaseFalso();
+  invocarFuncion.mockReset();
+  // Sin factura: no hay nota de crédito que emitir.
+  responder("comprobantes", "select", { data: null });
 });
 
 describe("DialogoAnularVenta", () => {
@@ -69,5 +80,71 @@ describe("DialogoAnularVenta", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "No hay suficiente efectivo en la caja de cambio",
     );
+  });
+
+  it("si la venta estaba facturada emite enseguida la nota de crédito que dejó la BD", async () => {
+    responderRpc("anular_venta", { data: { id: 81, anulada: true } });
+    responder("comprobantes", "select", { data: { id: 33, estado: "pendiente" } });
+    invocarFuncion.mockResolvedValue({
+      comprobante: {
+        id: 33,
+        venta_id: 81,
+        turno_id: 5,
+        tipo: "nota_credito",
+        clase: "B",
+        cbte_tipo: 8,
+        ambiente: "homologacion",
+        cuit_emisor: "30712345671",
+        punto_venta: 3,
+        numero: 2,
+        estado: "autorizado",
+        fecha: "2026-11-20",
+        fecha_servicio: "2026-11-20",
+        doc_tipo: 99,
+        doc_nro: 0,
+        receptor_nombre: null,
+        condicion_iva_receptor: "Consumidor Final",
+        neto: 24793.39,
+        iva: 5206.61,
+        total: 30000,
+        cae: "76123456789013",
+        cae_vencimiento: "2026-11-30",
+        mensaje: null,
+        intentos: 1,
+        a_reconciliar: false,
+        creado_en: "2026-11-20T13:00:00Z",
+        servicio_nombre: "VTV auto",
+        patente: null,
+        asociado_cbte_tipo: 6,
+        asociado_punto_venta: 3,
+        asociado_numero: 41,
+        asociado_fecha: "2026-11-20",
+        qr_url: null,
+      },
+    });
+    const onCerrar = vi.fn();
+    renderConQuery(<DialogoAnularVenta venta={venta()} onCerrar={onCerrar} />);
+    await userEvent.type(screen.getByLabelText("Motivo"), "Cobro duplicado");
+    await userEvent.click(screen.getByRole("button", { name: "Anular venta" }));
+    await vi.waitFor(() => {
+      expect(invocarFuncion).toHaveBeenCalledWith("arca", { accion: "emitir", comprobante_id: 33 });
+    });
+    expect(argumentosDe("comprobantes", "select", "eq")).toEqual(["venta_id", 81]);
+    expect(onCerrar).toHaveBeenCalled();
+  });
+
+  it("sin factura autorizada no llama a ARCA", async () => {
+    responderRpc("anular_venta", { data: { id: 81, anulada: true } });
+    const onCerrar = vi.fn();
+    renderConQuery(<DialogoAnularVenta venta={venta()} onCerrar={onCerrar} />);
+    await userEvent.type(screen.getByLabelText("Motivo"), "Cobro duplicado");
+    await userEvent.click(screen.getByRole("button", { name: "Anular venta" }));
+    await vi.waitFor(() => {
+      expect(onCerrar).toHaveBeenCalled();
+    });
+    await vi.waitFor(() => {
+      expect(argumentosDe("comprobantes", "select")).toBeDefined();
+    });
+    expect(invocarFuncion).not.toHaveBeenCalled();
   });
 });

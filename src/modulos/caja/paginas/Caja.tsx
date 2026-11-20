@@ -6,6 +6,8 @@ import { formatearFechaHora } from "@/compartido/lib/formato";
 import { Alert, AlertDescription } from "@/compartido/ui/alert";
 import { Button } from "@/compartido/ui/button";
 import { useAuth } from "@/modulos/auth/contexto";
+import { useComprobantesDeTurno } from "@/modulos/facturacion/api/consultas";
+import { FacturaDeVenta } from "@/modulos/facturacion/componentes/FacturaDeVenta";
 import { useCategorias, useServicios } from "@/modulos/servicios/api/consultas";
 import { useTurnoActual, useVentasDeTurno, type TurnoActual } from "../api/consultas";
 import { AbrirTurno } from "../componentes/AbrirTurno";
@@ -25,6 +27,7 @@ function TurnoAbierto({ turno }: { turno: TurnoActual }) {
   const categorias = useCategorias();
   const servicios = useServicios();
   const ventas = useVentasDeTurno(turno.id);
+  const comprobantes = useComprobantesDeTurno(turno.id);
   const [cerrando, setCerrando] = useState(false);
   const caja = turno.cajas?.nombre ?? "";
 
@@ -66,7 +69,21 @@ function TurnoAbierto({ turno }: { turno: TurnoActual }) {
           ) : ventas.isError ? (
             <MensajeError error={ventas.error} />
           ) : (
-            <TablaVentas ventas={ventas.data} />
+            <>
+              {comprobantes.isError && <MensajeError error={comprobantes.error} />}
+              <TablaVentas
+                ventas={ventas.data}
+                acciones={(venta) =>
+                  comprobantes.data && (
+                    <FacturaDeVenta
+                      venta={venta}
+                      anulada={venta.anulada}
+                      comprobantes={comprobantes.data.filter((c) => c.venta_id === venta.id)}
+                    />
+                  )
+                }
+              />
+            </>
           )}
         </section>
       </div>

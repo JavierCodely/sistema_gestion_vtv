@@ -30,6 +30,7 @@ build, pgTAP, Edge Functions y E2E).
 |---|---|
 | [`docs/COMANDOS.md`](docs/COMANDOS.md) | Todos los comandos en orden: local, tests, instalación en la nube, cambios futuros |
 | [`supabase/produccion/LEEME.md`](supabase/produccion/LEEME.md) | Instalación de la base en producción (SQL Editor) |
+| [`docs/arca/LEEME.md`](docs/arca/LEEME.md) | Facturación electrónica: certificado de ARCA, homologación y producción, errores frecuentes |
 | [`CLAUDE.md`](CLAUDE.md) | Arquitectura, reglas de negocio, modelo de datos, contrato de RPC y fases |
 
 ## Estado
@@ -42,8 +43,8 @@ build, pgTAP, Edge Functions y E2E).
 | 2 | Admin: cajas, categorías de servicio y servicios | Hecha |
 | 3 | Admin: certificados, compras (con edición), ajustes, movimientos y stock | Hecha |
 | 4 | Caja: turnos, ventas, historial, cierre; admin: totales por turno y anulaciones | Hecha |
-| 4b | Facturación electrónica ARCA | Próxima |
-| 5 | Gastos y caja de efectivo | Pendiente |
+| 4b | Facturación electrónica ARCA: configuración, facturas A/B, comprobante con QR, notas de crédito, log | Hecha |
+| 5 | Gastos y caja de efectivo | Próxima |
 | 6 | Dashboard, reportes, alertas en tiempo real | Pendiente |
 | 7 | Pulido y E2E completo | Pendiente |
 

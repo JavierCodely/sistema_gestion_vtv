@@ -17,6 +17,7 @@ const cajero = () => authDePrueba({ perfil: perfilDePrueba() });
 
 beforeEach(() => {
   reiniciarSupabaseFalso();
+  responder("v_comprobantes", "select", { data: [] });
   responder("categorias_servicio", "select", { data: [{ id: 1, nombre: "Autos", activa: true }] });
   responder("servicios", "select", {
     data: [

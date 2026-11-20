@@ -77,6 +77,9 @@ async function nuevaVenta(token = cajero, medio = "tarjeta") {
     .id;
 }
 
+/** Plazo mínimo entre dos intentos del cajero sobre el mismo comprobante. */
+const esperarPlazoCajero = () => new Promise((r) => setTimeout(r, 5_200));
+
 async function facturarConsumidorFinal(token, ventaId) {
   return rpc(token, "preparar_factura", {
     p_venta_id: ventaId,
@@ -226,6 +229,12 @@ test("un rechazo de ARCA queda con el motivo y se puede reintentar", async () =>
   assert.equal(log.body[0].exito, false);
   assert.equal(log.body[0].observaciones[0].codigo, 10063);
 
+  // El cajero no reintenta en ráfaga
+  const rafaga = await funcion(cajero, { accion: "emitir", comprobante_id: comp.id });
+  assert.equal(rafaga.status, 409);
+  assert.equal(rafaga.body.error, "Esperá unos segundos antes de volver a intentar");
+
+  await esperarPlazoCajero();
   const reintento = await funcion(cajero, { accion: "emitir", comprobante_id: comp.id });
   assert.equal(reintento.body.comprobante.estado, "autorizado");
   assert.equal(reintento.body.comprobante.intentos, 2);
@@ -252,6 +261,17 @@ test("si la respuesta no llega, el reintento reconcilia con ARCA: nunca dos CAE"
   });
   assert.equal(anular.status, 400);
 
+  // Numeración reservada: otra Factura B del mismo punto de venta espera la confirmación
+  const otraVenta = await nuevaVenta();
+  const otra = await facturarConsumidorFinal(cajero, otraVenta);
+  const bloqueada = await funcion(cajero, { accion: "emitir", comprobante_id: otra.id });
+  assert.equal(bloqueada.status, 409);
+  assert.equal(
+    bloqueada.body.error,
+    `La factura de la venta N° ${venta} quedó a confirmar con ARCA: reintentala primero (hasta confirmarla no se puede emitir otra del mismo tipo)`,
+  );
+
+  await esperarPlazoCajero();
   const reintento = await funcion(cajero, { accion: "emitir", comprobante_id: comp.id });
   const ok = reintento.body.comprobante;
   assert.equal(ok.estado, "autorizado", ok.mensaje);
@@ -260,6 +280,11 @@ test("si la respuesta no llega, el reintento reconcilia con ARCA: nunca dos CAE"
   assert.match(ok.mensaje, /confirmado con ARCA/);
   const despues = (await control.estado()).comprobantes.filter((x) => x.tipo === 6);
   assert.equal(despues.length, enArca.length, "no se pidió otro CAE");
+
+  // Confirmada la primera, la otra ya se emite con el número siguiente
+  const liberada = await funcion(cajero, { accion: "emitir", comprobante_id: otra.id });
+  assert.equal(liberada.body.comprobante.estado, "autorizado", liberada.body.comprobante.mensaje);
+  assert.equal(liberada.body.comprobante.numero, ok.numero + 1);
 });
 
 test("si WSAA no responde, la factura queda pendiente sin número", async () => {
@@ -272,6 +297,7 @@ test("si WSAA no responde, la factura queda pendiente sin número", async () => 
   assert.equal(r.body.comprobante.estado, "pendiente");
   assert.equal(r.body.comprobante.a_reconciliar, false);
   assert.match(r.body.comprobante.mensaje, /HTTP 503/);
+  await esperarPlazoCajero();
   const reintento = await funcion(cajero, { accion: "emitir", comprobante_id: comp.id });
   assert.equal(reintento.body.comprobante.estado, "autorizado", reintento.body.comprobante.mensaje);
 });
@@ -314,6 +340,29 @@ test("el cajero no emite comprobantes de ventas ajenas", async () => {
   } finally {
     await rpc(admin, "cerrar_turno", {});
   }
+});
+
+test("el simulador nunca se usa en producción (el pedido firmado no sale hacia él)", async () => {
+  const antes = (await control.estado()).comprobantes.length;
+  await rest(admin, "arca_configuracion?id=eq.true", {
+    method: "PATCH",
+    body: JSON.stringify({ ambiente: "produccion" }),
+  });
+  try {
+    const r = await funcion(admin, { accion: "probar_conexion" });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.prueba.ok, false);
+    assert.equal(
+      r.body.prueba.mensaje,
+      "ARCA_URL_SIMULADOR solo se permite en Supabase local y en homologación",
+    );
+  } finally {
+    await rest(admin, "arca_configuracion?id=eq.true", {
+      method: "PATCH",
+      body: JSON.stringify({ ambiente: "homologacion" }),
+    });
+  }
+  assert.equal((await control.estado()).comprobantes.length, antes);
 });
 
 test("el log guarda cada llamada saneada: sin token, firma ni CMS", async () => {

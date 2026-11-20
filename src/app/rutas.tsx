@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import type { RouteObject } from "react-router";
+import { Outlet, type RouteObject } from "react-router";
 import { RedireccionInicial, RutaProtegida } from "@/modulos/auth/RutaProtegida";
 import { Cargando } from "@/compartido/componentes/Cargando";
 import { EnConstruccion } from "@/app/paginas/EnConstruccion";
@@ -33,6 +33,19 @@ export const rutas: RouteObject[] = [
         path: "ventas/turnos/:id",
         lazy: async () => ({
           Component: (await import("@/modulos/ventas/paginas/DetalleTurno")).DetalleTurno,
+        }),
+      },
+      {
+        path: "facturacion",
+        lazy: async () => ({
+          Component: (await import("@/modulos/facturacion/paginas/Facturacion")).Facturacion,
+        }),
+      },
+      {
+        path: "arca",
+        lazy: async () => ({
+          Component: (await import("@/modulos/facturacion/paginas/ConfiguracionArca"))
+            .ConfiguracionArca,
         }),
       },
       { path: "alertas", element: <EnConstruccion titulo="Alertas" fase={6} /> },
@@ -85,6 +98,25 @@ export const rutas: RouteObject[] = [
         index: true,
         lazy: async () => ({
           Component: (await import("@/modulos/caja/paginas/Caja")).Caja,
+        }),
+      },
+    ],
+  },
+  {
+    // Representación impresa: sin menú, para imprimir solo el comprobante.
+    path: "/comprobantes/:id",
+    element: (
+      <RutaProtegida roles={["cajero", "admin"]}>
+        <Suspense fallback={<Cargando />}>
+          <Outlet />
+        </Suspense>
+      </RutaProtegida>
+    ),
+    children: [
+      {
+        index: true,
+        lazy: async () => ({
+          Component: (await import("@/modulos/facturacion/paginas/VerComprobante")).VerComprobante,
         }),
       },
     ],

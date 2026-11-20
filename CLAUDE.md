@@ -33,7 +33,8 @@ Primera vez: `npm install` → `npx playwright install chromium` → `npm run db
 | `npm run sql:produccion` | Regenera `supabase/produccion/01_esquema_completo.sql` (todas las migraciones en una transacción, para el SQL Editor). Ver `supabase/produccion/LEEME.md` |
 | `npm run db:types` | Regenera `src/types/database.ts`. **Correrlo tras cada migración** |
 | `npm run test:db` | Tests pgTAP (`supabase/tests/database/*.sql`) |
-| `npm run test:functions` | Tests de integración de Edge Functions (node:test) |
+| `npm run test:functions` | Tests de integración de Edge Functions (node:test); `arca` corre contra el simulador |
+| `npm run arca:simulador` | Simulador de ARCA (WSAA + WSFEv1) en `:54399` para probar la facturación en local. **Nunca ARCA real en tests** |
 | `npm run verificar` (= `verify`) | typecheck + lint + format + unit + build + db:reset + pgTAP + funciones + E2E. **Debe pasar antes de entregar cualquier cambio** |
 
 - Un test unitario: `npx vitest run tests/unit/compartido/lib/formato.test.ts` (o `-t "nombre"`).
@@ -62,7 +63,7 @@ src/
     componentes/           Cargando, Campo, ErrorFormulario…
     lib/                   supabase, formato (ARS / hora AR), errores, validaciones, query-client, salud
     tipos.ts               Rol, Perfil, Tablas, Enums (derivados de types/database.ts)
-  modulos/<modulo>/        una carpeta por área de negocio: auth, usuarios, panel-admin, caja, (cajas, certificados, ventas, gastos…)
+  modulos/<modulo>/        una carpeta por área de negocio: auth, usuarios, panel-admin, caja, cajas, certificados, ventas, facturacion, (gastos…)
     api/                   acceso a datos: llamadas RPC/Edge Functions + hooks TanStack Query
     componentes/           un componente por archivo
     lib/                   lógica pura del módulo (validaciones, mapeos)
@@ -162,6 +163,7 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
 | 22 | `cajas_para_turno` | `cajas_para_turno()`: cajas activas con `ocupada`/`ocupada_por` (la RLS de `turnos` no deja ver los ajenos) |
 | 23 | `facturacion_arca` | Configuración ARCA (fila única; certificado y clave en Vault), `arca_condiciones_iva` (de `FEParamGetCondicionIvaReceptor`), `comprobantes` (factura/NC, estados, numeración serializada), log `arca_intentos`, tickets WSAA, `preparar_factura()`, `puede_emitir_comprobante()`, internas `_arca_*` (solo service role), `anular_venta` genera la NC, vista `v_comprobantes` (con `qr_url`) |
 | 24 | `arca_safeupdate` | `_arca_guardar_credenciales` y `_arca_actualizar_condiciones` con `WHERE` (pg-safeupdate rechazaba el UPDATE de la fila única) |
+| 25 | `arca_emision_segura` | Numeración reservada mientras un número espera confirmación (índice `comprobantes_numeracion_reservada`); `toma` uuid que exigen todas las `_arca_*` de cierre (una ejecución vieja no pisa el estado); retomar una emisión colgada a los 10 min; foto del emisor en el comprobante (`emisor_*`, en `v_comprobantes`); el cajero espera 5 s entre intentos — auditoría 2026-11-20 |
 
 Reglas que no son obvias leyendo una sola tabla:
 - **Certificado a usar**: el activo más específico (servicio > categoría > global).
@@ -216,6 +218,8 @@ Todas requieren usuario autenticado y **activo**. Devuelven la fila afectada.
 | `marcar_alertas_leidas(p_ids bigint[] = null) → int` | admin | `null` = todas; devuelve cuántas marcó |
 | `certificado_para_servicio(p_servicio_id bigint) → bigint` | todos | Para mostrar en Ventas qué hoja se usará |
 | `cajas_para_turno() → setof (id, nombre, ocupada, ocupada_por)` | todos | Cajas activas para abrir turno; sin datos ni totales del turno ajeno |
+| `preparar_factura(p_venta_id bigint, p_condicion_iva_id int, p_doc_tipo smallint, p_doc_nro bigint, p_receptor_nombre text = null) → comprobantes` | todos | Cajero: solo ventas de su turno abierto. Crea o corrige la factura pendiente/rechazada (clase, importes, cliente); no emite |
+| `puede_emitir_comprobante(p_comprobante_id bigint) → comprobantes` | todos | Lo llama la Edge Function `arca` antes de emitir: cajero solo facturas de su turno abierto y 5 s entre intentos; NC solo admin |
 | `stock_certificados_valorizado() → setof (… columnas de v_stock_certificados, costo_promedio, valor_stock)` | admin | Stock con valuación |
 | `resumen_diario(p_desde date = null, p_hasta date = null) → setof (fecha, cantidad_ventas, total_*, total_gastos, flujo_neto, costo_certificados, margen_bruto, ventas_sin_stock)` | admin | Reporte por día (hora AR), sin anulados; rango opcional |
 | `rol_actual() → rol_usuario`, `es_admin() → boolean` | todos | `null`/`false` si el usuario está desactivado |
@@ -229,6 +233,17 @@ Edge Function `admin-usuarios` (POST, `Authorization: Bearer <jwt del admin>`), 
 `{accion:"activar", id, activo}` · `{accion:"cambiar_password", id, password}` (mín. 8 caracteres).
 El admin no puede desactivarse ni quitarse el rol a sí mismo.
 
+Edge Function `arca` (POST, JWT del usuario; la UI la llama con `invocarFuncion` de
+`compartido/lib/funciones.ts`), responde `{ comprobante }` (fila de `v_comprobantes`) /
+`{ configuracion }` / `{ prueba }` o `{ error }` (409 regla, 403 permiso):
+`{accion:"emitir", comprobante_id}` (permiso de `puede_emitir_comprobante`: cajero solo facturas de su
+turno abierto; NC solo admin) · `{accion:"guardar_certificado", certificado, clave}` (admin; PEM, valida
+par, CUIT y vencimiento; a Vault) · `{accion:"probar_conexion"}` (admin; WSAA + condiciones IVA + último
+número). Flujo de una factura: `preparar_factura()` (BD: clase, importes, cliente) → `emitir`. El número
+se registra antes del `FECAESolicitar`; si no hubo respuesta, el siguiente `emitir` reconcilia con
+`FECompConsultar`. Local: `ARCA_URL_SIMULADOR` en `supabase/config.toml`; en la nube no existe. Ver
+`docs/arca/LEEME.md`.
+
 ## 6. Vistas
 
 | Vista | Uso |
@@ -238,6 +253,7 @@ El admin no puede desactivarse ni quitarse el rol a sí mismo.
 | `v_stock_certificados` | Stock en hojas, `semaforo` (ok/bajo/sin_stock), `aplica_a`. **Sin costos** (el admin usa `stock_certificados_valorizado()`) |
 | `v_compras_certificado` | Compras con certificado, usuario, estado de anulación y `editable` (regla de §4). Solo admin (RLS) |
 | `v_gastos_por_categoria` | Totales por fecha, rubro, subcategoría y fuente |
+| `v_comprobantes` | Facturas y NC con venta, turno, cliente, importes, `a_reconciliar`, comprobante asociado y `qr_url` (RLS: el cajero, los de sus ventas) |
 
 Saldo de efectivo: `select saldo from caja_efectivo` (visible para todos).
 Alertas en tiempo real: Realtime `postgres_changes` sobre `public.alertas` (RLS: solo admin).
@@ -277,7 +293,7 @@ No se pasa de fase con tests en rojo.
 | 2 | (**hecha**) Admin: cajas, categorías de servicio, servicios |
 | 3 | (**hecha**) Admin: certificados, compras (con edición/corrección), ajustes, kardex, stock |
 | 4 | (**hecha**) Caja: abrir turno, ventas, historial del turno (sin totales), cerrar turno; admin: turnos con totales, anular venta, cerrar turno ajeno |
-| 4b | Facturación electrónica ARCA (agente `arca`): configuración en admin, facturar desde el historial, notas de crédito, log avanzado. Ver §9 |
+| 4b | (**hecha**) Facturación electrónica ARCA (agente `arca`): configuración en admin, facturar desde el historial, comprobante con QR, notas de crédito, log avanzado. Ver §9 |
 | 5 | Gastos (admin y caja) + caja de efectivo |
 | 6 | Dashboard, reportes, alertas en tiempo real |
 | 7 | Pulido: responsive, accesibilidad, estados vacíos/errores, rendimiento; E2E completo |
@@ -289,12 +305,16 @@ flujo) en cada fase, ejecutados y en verde. Si un requisito es ambiguo, pregunta
 
 Se implementa en la fase 4b, después de la caja (necesita el historial de ventas real).
 
-- **Emisor Responsable Inscripto**: Factura **B** a consumidor final / exento / monotributista y
-  Factura **A** a responsable inscripto (tipos y condiciones confirmados contra el WS de ARCA).
+- **Emisor Responsable Inscripto**: la clase la decide la tabla de ARCA (`FEParamGetCondicionIvaReceptor`,
+  guardada en `arca_condiciones_iva` al probar la conexión): **B** si la condición la admite
+  (consumidor final, exento) y si no **A** con CUIT (responsable inscripto y **monotributista**, según
+  RG 5616; decisión 2026-11-20 que reemplaza "B a monotributista").
 - **Precios con IVA 21% incluido**: la BD calcula neto = precio / 1,21 e IVA discriminado; el total
   facturado es el precio de la venta. Nada de esto se calcula en el frontend.
 - **Se factura después, desde el historial** (no al vender). Pueden facturar el **cajero** (ventas de
-  su turno) y el **admin** (cualquier venta). Reintentos y log avanzado: admin.
+  su turno **abierto**) y el **admin** (cualquier venta). El cajero puede corregir y reintentar una
+  factura rechazada de su turno; las NC, el panel `/admin/facturacion` (sin CAE + log) y la
+  configuración son del admin.
 - **Cliente**: Consumidor Final por defecto; opcionalmente CUIT o DNI + nombre/razón social y
   condición frente al IVA (obligatorio para Factura A y para montos sobre el tope vigente de ARCA).
 - Al autorizarse, **la venta queda vinculada a su comprobante** con todos los datos: tipo, punto de
@@ -302,12 +322,16 @@ Se implementa en la fase 4b, después de la caja (necesita el historial de venta
 - **Errores**: la factura queda **pendiente** (o rechazada, con el motivo de ARCA) y se puede reintentar.
   Un **log avanzado** (solo admin) guarda cada intento: request/response SOAP saneados (sin token ni
   clave), códigos `Errors`/`Observaciones`, tiempos y quién lo hizo. Nunca dos CAE para una venta:
-  ante error de red se reconcilia con `FECompConsultar` antes de reintentar.
+  ante error de red se reconcilia con `FECompConsultar` antes de reintentar. Mientras un número espera
+  confirmación, ese punto de venta y tipo no emite otro (migración 25).
 - **Anular una venta facturada** emite **nota de crédito automática** asociada a la factura (A o B
   según el original). Si ARCA falla, la NC queda pendiente con el mismo esquema de reintento y log.
 - **Configuración ARCA (solo admin)**: CUIT, razón social, domicilio, inicio de actividades, IIBB,
   punto de venta, ambiente (homologación/producción) y **certificado .crt + clave .key subidos desde la
   pantalla**, guardados cifrados en Supabase Vault y nunca devueltos al navegador (solo CUIT del
   certificado y vencimiento). Botón "Probar conexión".
-- Representación impresa del comprobante con **QR** (RG 4892).
+- Representación impresa del comprobante con **QR** (RG 4892) en `/comprobantes/:id` (sin menú, para
+  imprimir); en homologación lleva la leyenda "sin validez fiscal". La Factura B informa el IVA
+  contenido (Ley 27.743). Los datos del emisor del impreso son los guardados al enviarlo (`emisor_*`),
+  no la configuración actual.
 

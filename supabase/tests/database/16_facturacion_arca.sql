@@ -142,15 +142,16 @@ select is((puede_emitir_comprobante(:fact)).id, :fact::bigint, 'y el admin');
 reset role;
 
 set local role service_role;
-select is((_arca_tomar(:fact)).estado::text, 'procesando', 'tomar la factura la pasa a procesando');
+select (_arca_tomar(:fact)).toma as toma \gset
+select is((select estado::text from comprobantes where id = :fact), 'procesando', 'tomar la factura la pasa a procesando');
 select throws_ok(format('select _arca_tomar(%s)', :fact), 'P0001',
   'El comprobante se está emitiendo en este momento: esperá unos segundos', 'no se toma dos veces');
 select throws_ok(format('select _arca_tomar(%s)', :fact_a), 'P0001',
   'Hay otro comprobante del mismo tipo emitiéndose: probá de nuevo en unos segundos',
   'un solo comprobante por punto de venta y tipo a la vez (numeración correlativa)');
-select _arca_registrar_numero(:fact, 41, '2026-11-20');
+select _arca_registrar_numero(:fact, :'toma', 41, '2026-11-20');
 -- Error de red: queda pendiente y a reconciliar
-select is((_arca_liberar(:fact, 'Sin respuesta de ARCA')).numero_intentado, 41::bigint,
+select is((_arca_liberar(:fact, :'toma', 'Sin respuesta de ARCA')).numero_intentado, 41::bigint,
   'un corte de comunicación conserva el número para reconciliar');
 reset role;
 
@@ -168,8 +169,8 @@ reset role;
 
 -- Reintento: se reconcilia y se autoriza
 set local role service_role;
-select _arca_tomar(:fact);
-select _arca_autorizar(:fact, 41, '2026-11-20', '75123456789012', '2026-11-30');
+select (_arca_tomar(:fact)).toma as toma \gset
+select _arca_autorizar(:fact, :'toma', 41, '2026-11-20', '75123456789012', '2026-11-30');
 reset role;
 select is(
   (select row(estado::text, numero, numero_intentado, cae, procesando_desde)::text from comprobantes where id = :fact),
@@ -188,21 +189,22 @@ reset role;
 
 -- Rechazo: el número no se consume
 set local role service_role;
-select _arca_tomar(:fact_a);
-select _arca_registrar_numero(:fact_a, 42, '2026-11-20');
-select is((_arca_rechazar(:fact_a, '10015: documento inválido')).numero_intentado, null::bigint,
+select (_arca_tomar(:fact_a)).toma as toma \gset
+select _arca_registrar_numero(:fact_a, :'toma', 42, '2026-11-20');
+select is((_arca_rechazar(:fact_a, :'toma', '10015: documento inválido')).numero_intentado, null::bigint,
   'un rechazo libera el número');
 reset role;
 select is((select estado::text from comprobantes where id = :fact_a), 'rechazado', 'queda rechazada con el motivo');
 
--- Una emisión abandonada (más de 2 minutos) se retoma
+-- Una emisión abandonada (más de 10 minutos: el máximo de una Edge Function) se retoma
 set local role service_role;
 select _arca_tomar(:fact_a);
 reset role;
-update comprobantes set procesando_desde = now() - interval '3 minutes' where id = :fact_a;
+update comprobantes set procesando_desde = now() - interval '11 minutes' where id = :fact_a;
 set local role service_role;
-select is((_arca_tomar(:fact_a)).intentos, 3, 'una emisión colgada se puede retomar');
-select _arca_liberar(:fact_a, 'corte');
+select (_arca_tomar(:fact_a)).toma as toma \gset
+select is((select intentos from comprobantes where id = :fact_a), 3, 'una emisión colgada se puede retomar');
+select _arca_liberar(:fact_a, :'toma', 'corte');
 reset role;
 
 -- ------------------------------------------------------------------ anulación y nota de crédito

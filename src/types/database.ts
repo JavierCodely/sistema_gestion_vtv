@@ -299,14 +299,14 @@ isOneToOne: false
                   ]
                 },"comprobantes": {
                   Row: {
-                    "actualizado_en": string,"ambiente": Database["public"]['Enums']["ambiente_arca"],"asociado_id": number | null,"autorizado_en": string | null,"cae": string | null,"cae_vencimiento": string | null,"cbte_tipo": number,"clase": string,"condicion_iva_receptor_id": number,"creado_en": string,"creado_por": string,"cuit_emisor": string,"doc_nro": number,"doc_tipo": number,"estado": Database["public"]['Enums']["estado_comprobante"],"fecha": string | null,"fecha_servicio": string,"id": number,"intentos": number,"iva": number,"mensaje": string | null,"neto": number,"numero": number | null,"numero_intentado": number | null,"procesando_desde": string | null,"punto_venta": number,"receptor_nombre": string | null,"tipo": Database["public"]['Enums']["tipo_comprobante"],"total": number,"venta_id": number
+                    "actualizado_en": string,"ambiente": Database["public"]['Enums']["ambiente_arca"],"asociado_id": number | null,"autorizado_en": string | null,"cae": string | null,"cae_vencimiento": string | null,"cbte_tipo": number,"clase": string,"condicion_iva_receptor_id": number,"creado_en": string,"creado_por": string,"cuit_emisor": string,"doc_nro": number,"doc_tipo": number,"emisor_domicilio": string | null,"emisor_iibb": string | null,"emisor_inicio_actividades": string | null,"emisor_razon_social": string | null,"estado": Database["public"]['Enums']["estado_comprobante"],"fecha": string | null,"fecha_servicio": string,"id": number,"intentos": number,"iva": number,"mensaje": string | null,"neto": number,"numero": number | null,"numero_intentado": number | null,"procesando_desde": string | null,"punto_venta": number,"receptor_nombre": string | null,"tipo": Database["public"]['Enums']["tipo_comprobante"],"toma": string | null,"tomado_en": string | null,"total": number,"venta_id": number
                   }
                   ComputedFields: never
                   Insert: {
-                    "actualizado_en"?: string,"ambiente": Database["public"]['Enums']["ambiente_arca"],"asociado_id"?: number | null,"autorizado_en"?: string | null,"cae"?: string | null,"cae_vencimiento"?: string | null,"cbte_tipo": number,"clase": string,"condicion_iva_receptor_id": number,"creado_en"?: string,"creado_por": string,"cuit_emisor": string,"doc_nro": number,"doc_tipo": number,"estado"?: Database["public"]['Enums']["estado_comprobante"],"fecha"?: string | null,"fecha_servicio": string,"id"?: never,"intentos"?: number,"iva": number,"mensaje"?: string | null,"neto": number,"numero"?: number | null,"numero_intentado"?: number | null,"procesando_desde"?: string | null,"punto_venta": number,"receptor_nombre"?: string | null,"tipo": Database["public"]['Enums']["tipo_comprobante"],"total": number,"venta_id": number
+                    "actualizado_en"?: string,"ambiente": Database["public"]['Enums']["ambiente_arca"],"asociado_id"?: number | null,"autorizado_en"?: string | null,"cae"?: string | null,"cae_vencimiento"?: string | null,"cbte_tipo": number,"clase": string,"condicion_iva_receptor_id": number,"creado_en"?: string,"creado_por": string,"cuit_emisor": string,"doc_nro": number,"doc_tipo": number,"emisor_domicilio"?: string | null,"emisor_iibb"?: string | null,"emisor_inicio_actividades"?: string | null,"emisor_razon_social"?: string | null,"estado"?: Database["public"]['Enums']["estado_comprobante"],"fecha"?: string | null,"fecha_servicio": string,"id"?: never,"intentos"?: number,"iva": number,"mensaje"?: string | null,"neto": number,"numero"?: number | null,"numero_intentado"?: number | null,"procesando_desde"?: string | null,"punto_venta": number,"receptor_nombre"?: string | null,"tipo": Database["public"]['Enums']["tipo_comprobante"],"toma"?: string | null,"tomado_en"?: string | null,"total": number,"venta_id": number
                   }
                   Update: {
-                    "actualizado_en"?: string,"ambiente"?: Database["public"]['Enums']["ambiente_arca"],"asociado_id"?: number | null,"autorizado_en"?: string | null,"cae"?: string | null,"cae_vencimiento"?: string | null,"cbte_tipo"?: number,"clase"?: string,"condicion_iva_receptor_id"?: number,"creado_en"?: string,"creado_por"?: string,"cuit_emisor"?: string,"doc_nro"?: number,"doc_tipo"?: number,"estado"?: Database["public"]['Enums']["estado_comprobante"],"fecha"?: string | null,"fecha_servicio"?: string,"id"?: never,"intentos"?: number,"iva"?: number,"mensaje"?: string | null,"neto"?: number,"numero"?: number | null,"numero_intentado"?: number | null,"procesando_desde"?: string | null,"punto_venta"?: number,"receptor_nombre"?: string | null,"tipo"?: Database["public"]['Enums']["tipo_comprobante"],"total"?: number,"venta_id"?: number
+                    "actualizado_en"?: string,"ambiente"?: Database["public"]['Enums']["ambiente_arca"],"asociado_id"?: number | null,"autorizado_en"?: string | null,"cae"?: string | null,"cae_vencimiento"?: string | null,"cbte_tipo"?: number,"clase"?: string,"condicion_iva_receptor_id"?: number,"creado_en"?: string,"creado_por"?: string,"cuit_emisor"?: string,"doc_nro"?: number,"doc_tipo"?: number,"emisor_domicilio"?: string | null,"emisor_iibb"?: string | null,"emisor_inicio_actividades"?: string | null,"emisor_razon_social"?: string | null,"estado"?: Database["public"]['Enums']["estado_comprobante"],"fecha"?: string | null,"fecha_servicio"?: string,"id"?: never,"intentos"?: number,"iva"?: number,"mensaje"?: string | null,"neto"?: number,"numero"?: number | null,"numero_intentado"?: number | null,"procesando_desde"?: string | null,"punto_venta"?: number,"receptor_nombre"?: string | null,"tipo"?: Database["public"]['Enums']["tipo_comprobante"],"toma"?: string | null,"tomado_en"?: string | null,"total"?: number,"venta_id"?: number
                   }
                   Relationships: [
                     {
@@ -662,7 +662,7 @@ isOneToOne: false
                   ]
                 },"v_comprobantes": {
                   Row: {
-                    "a_reconciliar": boolean | null,"ambiente": Database["public"]['Enums']["ambiente_arca"],"asociado_cbte_tipo": number | null,"asociado_fecha": string | null,"asociado_id": number | null,"asociado_numero": number | null,"asociado_punto_venta": number | null,"autorizado_en": string | null,"cae": string | null,"cae_vencimiento": string | null,"cbte_tipo": number,"clase": string,"condicion_iva_receptor": string,"condicion_iva_receptor_id": number,"creado_en": string,"cuit_emisor": string,"doc_nro": number,"doc_tipo": number,"estado": Database["public"]['Enums']["estado_comprobante"],"fecha": string | null,"fecha_servicio": string,"id": number,"intentos": number,"iva": number,"mensaje": string | null,"neto": number,"numero": number | null,"patente": string | null,"punto_venta": number,"qr_url": string | null,"receptor_nombre": string | null,"servicio_nombre": string,"tipo": Database["public"]['Enums']["tipo_comprobante"],"total": number,"turno_id": number,"venta_id": number
+                    "a_reconciliar": boolean | null,"ambiente": Database["public"]['Enums']["ambiente_arca"],"asociado_cbte_tipo": number | null,"asociado_fecha": string | null,"asociado_id": number | null,"asociado_numero": number | null,"asociado_punto_venta": number | null,"autorizado_en": string | null,"cae": string | null,"cae_vencimiento": string | null,"cbte_tipo": number,"clase": string,"condicion_iva_receptor": string,"condicion_iva_receptor_id": number,"creado_en": string,"cuit_emisor": string,"doc_nro": number,"doc_tipo": number,"emisor_domicilio": string | null,"emisor_iibb": string | null,"emisor_inicio_actividades": string | null,"emisor_razon_social": string | null,"estado": Database["public"]['Enums']["estado_comprobante"],"fecha": string | null,"fecha_servicio": string,"id": number,"intentos": number,"iva": number,"mensaje": string | null,"neto": number,"numero": number | null,"patente": string | null,"punto_venta": number,"qr_url": string | null,"receptor_nombre": string | null,"servicio_nombre": string,"tipo": Database["public"]['Enums']["tipo_comprobante"],"total": number,"turno_id": number,"venta_id": number
                   }
                   ComputedFields: never
                   Relationships: [
@@ -767,7 +767,7 @@ isOneToOne: false
 { Args: { "p_condiciones": Json }; Returns: number
                            },
 "_arca_autorizar":
-{ Args: { "p_cae": string,"p_cae_vencimiento": string,"p_comprobante_id": number,"p_fecha": string,"p_mensaje"?: string,"p_numero": number }; Returns: {
+{ Args: { "p_cae": string,"p_cae_vencimiento": string,"p_comprobante_id": number,"p_fecha": string,"p_mensaje"?: string,"p_numero": number,"p_toma": string }; Returns: {
               "actualizado_en": string,
 "ambiente": Database["public"]['Enums']["ambiente_arca"],
 "asociado_id": number | null,
@@ -782,6 +782,10 @@ isOneToOne: false
 "cuit_emisor": string,
 "doc_nro": number,
 "doc_tipo": number,
+"emisor_domicilio": string | null,
+"emisor_iibb": string | null,
+"emisor_inicio_actividades": string | null,
+"emisor_razon_social": string | null,
 "estado": Database["public"]['Enums']["estado_comprobante"],
 "fecha": string | null,
 "fecha_servicio": string,
@@ -796,6 +800,8 @@ isOneToOne: false
 "punto_venta": number,
 "receptor_nombre": string | null,
 "tipo": Database["public"]['Enums']["tipo_comprobante"],
+"toma": string | null,
+"tomado_en": string | null,
 "total": number,
 "venta_id": number
             }
@@ -836,7 +842,7 @@ isOneToOne: false
 { Args: Record<PropertyKey, never>; Returns: Record<string, unknown>
                            },
 "_arca_descartar_numero":
-{ Args: { "p_comprobante_id": number }; Returns: {
+{ Args: { "p_comprobante_id": number,"p_toma": string }; Returns: {
               "actualizado_en": string,
 "ambiente": Database["public"]['Enums']["ambiente_arca"],
 "asociado_id": number | null,
@@ -851,6 +857,10 @@ isOneToOne: false
 "cuit_emisor": string,
 "doc_nro": number,
 "doc_tipo": number,
+"emisor_domicilio": string | null,
+"emisor_iibb": string | null,
+"emisor_inicio_actividades": string | null,
+"emisor_razon_social": string | null,
 "estado": Database["public"]['Enums']["estado_comprobante"],
 "fecha": string | null,
 "fecha_servicio": string,
@@ -865,6 +875,53 @@ isOneToOne: false
 "punto_venta": number,
 "receptor_nombre": string | null,
 "tipo": Database["public"]['Enums']["tipo_comprobante"],
+"toma": string | null,
+"tomado_en": string | null,
+"total": number,
+"venta_id": number
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "comprobantes"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"_arca_en_emision":
+{ Args: { "p_comprobante_id": number,"p_toma": string }; Returns: {
+              "actualizado_en": string,
+"ambiente": Database["public"]['Enums']["ambiente_arca"],
+"asociado_id": number | null,
+"autorizado_en": string | null,
+"cae": string | null,
+"cae_vencimiento": string | null,
+"cbte_tipo": number,
+"clase": string,
+"condicion_iva_receptor_id": number,
+"creado_en": string,
+"creado_por": string,
+"cuit_emisor": string,
+"doc_nro": number,
+"doc_tipo": number,
+"emisor_domicilio": string | null,
+"emisor_iibb": string | null,
+"emisor_inicio_actividades": string | null,
+"emisor_razon_social": string | null,
+"estado": Database["public"]['Enums']["estado_comprobante"],
+"fecha": string | null,
+"fecha_servicio": string,
+"id": number,
+"intentos": number,
+"iva": number,
+"mensaje": string | null,
+"neto": number,
+"numero": number | null,
+"numero_intentado": number | null,
+"procesando_desde": string | null,
+"punto_venta": number,
+"receptor_nombre": string | null,
+"tipo": Database["public"]['Enums']["tipo_comprobante"],
+"toma": string | null,
+"tomado_en": string | null,
 "total": number,
 "venta_id": number
             }
@@ -905,7 +962,7 @@ isOneToOne: false
 { Args: { "p_ambiente": Database["public"]['Enums']["ambiente_arca"],"p_cuit": string,"p_expira": string,"p_firma": string,"p_token": string }; Returns: undefined
                            },
 "_arca_liberar":
-{ Args: { "p_comprobante_id": number,"p_mensaje": string }; Returns: {
+{ Args: { "p_comprobante_id": number,"p_mensaje": string,"p_toma": string }; Returns: {
               "actualizado_en": string,
 "ambiente": Database["public"]['Enums']["ambiente_arca"],
 "asociado_id": number | null,
@@ -920,6 +977,10 @@ isOneToOne: false
 "cuit_emisor": string,
 "doc_nro": number,
 "doc_tipo": number,
+"emisor_domicilio": string | null,
+"emisor_iibb": string | null,
+"emisor_inicio_actividades": string | null,
+"emisor_razon_social": string | null,
 "estado": Database["public"]['Enums']["estado_comprobante"],
 "fecha": string | null,
 "fecha_servicio": string,
@@ -934,6 +995,8 @@ isOneToOne: false
 "punto_venta": number,
 "receptor_nombre": string | null,
 "tipo": Database["public"]['Enums']["tipo_comprobante"],
+"toma": string | null,
+"tomado_en": string | null,
 "total": number,
 "venta_id": number
             }
@@ -944,7 +1007,7 @@ isOneToOne: false
         isSetofReturn: false
       } },
 "_arca_rechazar":
-{ Args: { "p_comprobante_id": number,"p_mensaje": string }; Returns: {
+{ Args: { "p_comprobante_id": number,"p_mensaje": string,"p_toma": string }; Returns: {
               "actualizado_en": string,
 "ambiente": Database["public"]['Enums']["ambiente_arca"],
 "asociado_id": number | null,
@@ -959,6 +1022,10 @@ isOneToOne: false
 "cuit_emisor": string,
 "doc_nro": number,
 "doc_tipo": number,
+"emisor_domicilio": string | null,
+"emisor_iibb": string | null,
+"emisor_inicio_actividades": string | null,
+"emisor_razon_social": string | null,
 "estado": Database["public"]['Enums']["estado_comprobante"],
 "fecha": string | null,
 "fecha_servicio": string,
@@ -973,6 +1040,8 @@ isOneToOne: false
 "punto_venta": number,
 "receptor_nombre": string | null,
 "tipo": Database["public"]['Enums']["tipo_comprobante"],
+"toma": string | null,
+"tomado_en": string | null,
 "total": number,
 "venta_id": number
             }
@@ -986,7 +1055,7 @@ isOneToOne: false
 { Args: { "p_ambiente": Database["public"]['Enums']["ambiente_arca"],"p_comprobante_id": number,"p_duracion_ms": number,"p_errores": Json,"p_exito": boolean,"p_mensaje": string,"p_observaciones": Json,"p_operacion": string,"p_respuesta": string,"p_solicitud": string,"p_usuario_id": string }; Returns: undefined
                            },
 "_arca_registrar_numero":
-{ Args: { "p_comprobante_id": number,"p_fecha": string,"p_numero": number }; Returns: {
+{ Args: { "p_comprobante_id": number,"p_fecha": string,"p_numero": number,"p_toma": string }; Returns: {
               "actualizado_en": string,
 "ambiente": Database["public"]['Enums']["ambiente_arca"],
 "asociado_id": number | null,
@@ -1001,6 +1070,10 @@ isOneToOne: false
 "cuit_emisor": string,
 "doc_nro": number,
 "doc_tipo": number,
+"emisor_domicilio": string | null,
+"emisor_iibb": string | null,
+"emisor_inicio_actividades": string | null,
+"emisor_razon_social": string | null,
 "estado": Database["public"]['Enums']["estado_comprobante"],
 "fecha": string | null,
 "fecha_servicio": string,
@@ -1015,6 +1088,8 @@ isOneToOne: false
 "punto_venta": number,
 "receptor_nombre": string | null,
 "tipo": Database["public"]['Enums']["tipo_comprobante"],
+"toma": string | null,
+"tomado_en": string | null,
 "total": number,
 "venta_id": number
             }
@@ -1054,6 +1129,10 @@ isOneToOne: false
 "cuit_emisor": string,
 "doc_nro": number,
 "doc_tipo": number,
+"emisor_domicilio": string | null,
+"emisor_iibb": string | null,
+"emisor_inicio_actividades": string | null,
+"emisor_razon_social": string | null,
 "estado": Database["public"]['Enums']["estado_comprobante"],
 "fecha": string | null,
 "fecha_servicio": string,
@@ -1068,6 +1147,8 @@ isOneToOne: false
 "punto_venta": number,
 "receptor_nombre": string | null,
 "tipo": Database["public"]['Enums']["tipo_comprobante"],
+"toma": string | null,
+"tomado_en": string | null,
 "total": number,
 "venta_id": number
             }
@@ -1335,6 +1416,10 @@ isOneToOne: false
 "cuit_emisor": string,
 "doc_nro": number,
 "doc_tipo": number,
+"emisor_domicilio": string | null,
+"emisor_iibb": string | null,
+"emisor_inicio_actividades": string | null,
+"emisor_razon_social": string | null,
 "estado": Database["public"]['Enums']["estado_comprobante"],
 "fecha": string | null,
 "fecha_servicio": string,
@@ -1349,6 +1434,8 @@ isOneToOne: false
 "punto_venta": number,
 "receptor_nombre": string | null,
 "tipo": Database["public"]['Enums']["tipo_comprobante"],
+"toma": string | null,
+"tomado_en": string | null,
 "total": number,
 "venta_id": number
             }
@@ -1374,6 +1461,10 @@ isOneToOne: false
 "cuit_emisor": string,
 "doc_nro": number,
 "doc_tipo": number,
+"emisor_domicilio": string | null,
+"emisor_iibb": string | null,
+"emisor_inicio_actividades": string | null,
+"emisor_razon_social": string | null,
 "estado": Database["public"]['Enums']["estado_comprobante"],
 "fecha": string | null,
 "fecha_servicio": string,
@@ -1388,6 +1479,8 @@ isOneToOne: false
 "punto_venta": number,
 "receptor_nombre": string | null,
 "tipo": Database["public"]['Enums']["tipo_comprobante"],
+"toma": string | null,
+"tomado_en": string | null,
 "total": number,
 "venta_id": number
             }

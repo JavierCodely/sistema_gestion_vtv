@@ -82,8 +82,8 @@ npm run verificar         # TODO junto. Debe pasar antes de entregar/commitear c
 | 6 | `npm run build` | Que la app compile |
 | 7 | `npm run db:reset` | Base local limpia |
 | 8 | `npm run test:db` | Tests de base de datos (pgTAP) |
-| 9 | `npm run test:functions` | Tests de la Edge Function `admin-usuarios` |
-| 10 | `npm run test:e2e` | Tests de punta a punta en el navegador (Playwright), siempre contra Supabase local |
+| 9 | `npm run test:functions` | Tests de las Edge Functions `admin-usuarios` y `arca` (contra el simulador de ARCA) |
+| 10 | `npm run test:e2e` | Tests de punta a punta en el navegador (Playwright), siempre contra Supabase local y el simulador de ARCA |
 
 Correr un solo test:
 
@@ -97,6 +97,12 @@ node --test --test-name-pattern "ciclo completo" supabase/tests/functions/admin-
 > En los E2E, las acciones que llaman a una Edge Function se envuelven en `conFuncion(...)`
 > (`tests/e2e/utilidades.ts`): espera la respuesta de la función antes de seguir, en vez de
 > depender de un tiempo fijo.
+
+> **Simulador de ARCA**: los tests nunca hablan con ARCA real. `npm run test:functions` levanta el
+> simulador dentro del test y Playwright lo levanta solo (puerto **54399**). Para probar la
+> facturación a mano en local: `npm run arca:simulador` en otra terminal (la Edge Function local lo
+> usa por `ARCA_URL_SIMULADOR` en `supabase/config.toml`). Para probar contra la homologación real
+> de ARCA, ver [`docs/arca/LEEME.md`](arca/LEEME.md).
 
 > Los E2E levantan su propio servidor en el puerto **5174** y toman la URL y la clave de
 > `supabase status`, sin importar los `.env`: aunque tengas `npm run dev:remoto` abierto, nunca
@@ -135,9 +141,14 @@ npx supabase migration repair --status applied <versiones>
    (editar el email en la línea marcada con `<<<`). Lo convierte en administrador.
 
 ```bash
-# 8. Publicar la Edge Function que crea/edita usuarios desde la app
+# 8. Publicar las Edge Functions: usuarios y facturación electrónica
 npx supabase functions deploy admin-usuarios
+npx supabase functions deploy arca
 ```
+
+> En la nube **no** se configura `ARCA_URL_SIMULADOR` (es solo local): la función `arca` habla con
+> ARCA real según el ambiente elegido en Configuración ARCA. Guía completa en
+> [`docs/arca/LEEME.md`](arca/LEEME.md).
 
 ```bash
 # 9. Probar la app contra la nube (lee .env.remoto.local) → http://localhost:5173
@@ -164,18 +175,21 @@ npm run verificar
 npx supabase migration list --linked     # ver qué falta aplicar
 npx supabase db push                     # aplica las pendientes
 
-# 6. Si cambió la Edge Function, volver a publicarla
+# 6. Si cambió una Edge Function, volver a publicarla
 npx supabase functions deploy admin-usuarios
+npx supabase functions deploy arca
 ```
 
 > En una base ya instalada **nunca** se vuelve a correr `01_esquema_completo.sql`.
 
 **Estado de la nube (`gestion_vtv`) al 2026-11-20:** tiene aplicadas hasta la migración `021`.
-Falta `022` (`cajas_para_turno`, para la pantalla de caja de la fase 4):
+Faltan `022` (`cajas_para_turno`, caja de la fase 4), `023` (`facturacion_arca`), `024`
+(`arca_safeupdate`) y `025` (`arca_emision_segura`), y publicar la Edge Function `arca` (fase 4b):
 
 ```bash
-npx supabase migration list --linked     # confirmar que falta 20261120000022
-npx supabase db push                     # aplicarla
+npx supabase migration list --linked     # confirmar que faltan 022, 023, 024 y 025
+npx supabase db push                     # aplicarlas
+npx supabase functions deploy arca       # publicar la facturación electrónica
 ```
 
 ## Parte F — Volver a probar la instalación desde cero (solo proyecto de prueba)

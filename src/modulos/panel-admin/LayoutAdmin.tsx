@@ -3,6 +3,8 @@ import {
   Bell,
   ClipboardList,
   FileText,
+  FileCheck,
+  KeyRound,
   LayoutDashboard,
   Receipt,
   Store,
@@ -27,6 +29,7 @@ interface ItemMenu {
 const MENU_ADMIN: ItemMenu[] = [
   { a: "/admin", texto: "Dashboard", icono: LayoutDashboard },
   { a: "/admin/ventas", texto: "Ventas", icono: Receipt },
+  { a: "/admin/facturacion", texto: "Facturación", icono: FileCheck },
   { a: "/admin/alertas", texto: "Alertas", icono: Bell },
   { a: "/admin/usuarios", texto: "Usuarios", icono: Users },
   { a: "/admin/cajas", texto: "Cajas", icono: Store },
@@ -34,6 +37,7 @@ const MENU_ADMIN: ItemMenu[] = [
   { a: "/admin/certificados", texto: "Certificados", icono: FileText },
   { a: "/admin/gastos", texto: "Gastos", icono: Wallet },
   { a: "/admin/efectivo", texto: "Caja de efectivo", icono: Banknote },
+  { a: "/admin/arca", texto: "Configuración ARCA", icono: KeyRound },
 ];
 
 export function LayoutAdmin() {

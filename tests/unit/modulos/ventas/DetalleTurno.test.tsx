@@ -8,6 +8,7 @@ import {
   responder,
   responderRpc,
 } from "@tests/soporte/supabase-falso";
+import { comprobanteDePrueba } from "../facturacion/datos";
 import { turnoDePrueba, ventaDePrueba } from "./datos";
 
 vi.mock("@/compartido/lib/supabase", async () => ({
@@ -19,6 +20,9 @@ const normal = (texto: string | null) => (texto ?? "").replace(/\s/g, " ");
 
 beforeEach(() => {
   reiniciarSupabaseFalso();
+  responder("v_comprobantes", "select", { data: [] });
+  // Al anular, se busca la nota de crédito a emitir: sin factura no hay.
+  responder("comprobantes", "select", { data: null });
   responder("ventas", "select", {
     data: [
       ventaDePrueba({ id: 82, medio_pago: "tarjeta", precio: 20000 }),
@@ -86,5 +90,32 @@ describe("DetalleTurno (admin)", () => {
     responder("v_turnos", "select", { error: { code: "42501", message: "permission denied" } });
     renderRuta("/admin/ventas/turnos/5", admin());
     expect(await screen.findByRole("alert")).toBeInTheDocument();
+  });
+
+  it("muestra el estado de facturación de cada venta", async () => {
+    responder("v_turnos", "select", { data: turnoDePrueba() });
+    responder("v_comprobantes", "select", {
+      data: [
+        comprobanteDePrueba({ venta_id: 82 }),
+        comprobanteDePrueba({
+          id: 11,
+          venta_id: 81,
+          estado: "rechazado",
+          numero: null,
+          cae: null,
+        }),
+      ],
+    });
+    renderRuta("/admin/ventas/turnos/5", admin());
+    expect(
+      await within(await screen.findByTestId("venta-82")).findByRole("link", {
+        name: "Ver Factura B 00003-00000041",
+      }),
+    ).toBeInTheDocument();
+    // La 81 está anulada y su factura nunca se autorizó: ni enlace ni botón de facturar.
+    expect(within(screen.getByTestId("venta-81")).queryByRole("link")).not.toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("venta-81")).queryByRole("button", { name: /Facturar|Reintentar/ }),
+    ).not.toBeInTheDocument();
   });
 });

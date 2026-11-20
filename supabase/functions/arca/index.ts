@@ -67,6 +67,8 @@ interface Comprobante {
   cuit_emisor: string;
   punto_venta: number;
   numero_intentado: number | null;
+  /** Identificador de esta toma: lo exigen todas las funciones que cierran la emisión. */
+  toma: string;
   fecha: string | null;
   fecha_servicio: string;
   doc_tipo: number;
@@ -258,7 +260,11 @@ async function emitir(req: Request, body: Record<string, unknown>) {
 
   const arca = new Arca(servicio, comp.ambiente, comp.cuit_emisor, usuarioId, id);
   const rpc = async (nombre: string, args: Record<string, unknown>) => {
-    const { error } = await servicio.rpc(nombre, { p_comprobante_id: id, ...args });
+    const { error } = await servicio.rpc(nombre, {
+      p_comprobante_id: id,
+      p_toma: comp.toma,
+      ...args,
+    });
     if (error) throw errorBd(error, nombre);
   };
 
@@ -387,6 +393,7 @@ async function emitir(req: Request, body: Record<string, unknown>) {
     }
     const { error } = await servicio.rpc("_arca_liberar", {
       p_comprobante_id: id,
+      p_toma: comp.toma,
       p_mensaje: mensaje,
     });
     if (error) console.error("arca (liberar):", error.message);

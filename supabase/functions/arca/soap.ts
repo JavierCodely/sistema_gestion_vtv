@@ -1,6 +1,6 @@
 // Transporte SOAP con ARCA: direcciones por ambiente, timeout, parseo y saneado para el log.
 
-import { XMLParser } from "npm:fast-xml-parser@5.11.2";
+import { XMLParser } from "npm:fast-xml-parser@5.12.0";
 
 export type Ambiente = "homologacion" | "produccion";
 
@@ -18,11 +18,19 @@ const URLS: Record<Ambiente, { wsaa: string; wsfe: string }> = {
 
 /**
  * Direcciones a usar. `ARCA_URL_SIMULADOR` existe solo en el entorno local (supabase/config.toml)
- * para que los tests usen el simulador de ARCA y nunca el servicio real.
+ * para que los tests usen el simulador de ARCA y nunca el servicio real. Se respeta únicamente en
+ * homologación y con Supabase local (API por http, no https): si por error se configurara en la
+ * nube, el pedido firmado con el certificado real nunca sale hacia otra dirección.
  */
 export function direcciones(ambiente: Ambiente): { wsaa: string; wsfe: string } {
   const simulador = Deno.env.get("ARCA_URL_SIMULADOR");
-  if (simulador) return { wsaa: `${simulador}/wsaa`, wsfe: `${simulador}/wsfe` };
+  if (simulador) {
+    const local = (Deno.env.get("SUPABASE_URL") ?? "").startsWith("http://");
+    if (!local || ambiente !== "homologacion") {
+      throw new Error("ARCA_URL_SIMULADOR solo se permite en Supabase local y en homologación");
+    }
+    return { wsaa: `${simulador}/wsaa`, wsfe: `${simulador}/wsfe` };
+  }
   return URLS[ambiente];
 }
 

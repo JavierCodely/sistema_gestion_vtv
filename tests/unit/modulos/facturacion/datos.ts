@@ -1,0 +1,67 @@
+import type { Comprobante, CondicionIva } from "@/modulos/facturacion/api/consultas";
+
+export function comprobanteDePrueba(cambios: Partial<Comprobante> = {}): Comprobante {
+  return {
+    id: 10,
+    venta_id: 82,
+    turno_id: 5,
+    tipo: "factura",
+    clase: "B",
+    cbte_tipo: 6,
+    ambiente: "homologacion",
+    cuit_emisor: "30712345671",
+    punto_venta: 3,
+    numero: 41,
+    estado: "autorizado",
+    fecha: "2026-11-20",
+    fecha_servicio: "2026-11-20",
+    doc_tipo: 99,
+    doc_nro: 0,
+    receptor_nombre: null,
+    condicion_iva_receptor: "Consumidor Final",
+    neto: 16528.93,
+    iva: 3471.07,
+    total: 20000,
+    cae: "76123456789012",
+    cae_vencimiento: "2026-11-30",
+    mensaje: null,
+    intentos: 1,
+    a_reconciliar: false,
+    creado_en: "2026-11-20T13:00:00Z",
+    servicio_nombre: "VTV auto",
+    patente: "AB123CD",
+    asociado_cbte_tipo: null,
+    asociado_punto_venta: null,
+    asociado_numero: null,
+    asociado_fecha: null,
+    qr_url: "https://www.arca.gob.ar/fe/qr/?p=eyJ2ZXIiOjF9",
+    emisor_razon_social: "VTV Emitida SA",
+    emisor_domicilio: "Ruta 3 km 10",
+    emisor_iibb: "901-123456-7",
+    emisor_inicio_actividades: "2020-01-01",
+    ...cambios,
+  };
+}
+
+export const CONDICIONES: CondicionIva[] = [
+  { id: 1, descripcion: "IVA Responsable Inscripto", clases: ["A", "M", "C"] },
+  { id: 4, descripcion: "IVA Sujeto Exento", clases: ["B", "C"] },
+  { id: 5, descripcion: "Consumidor Final", clases: ["B", "C"] },
+  { id: 6, descripcion: "Responsable Monotributo", clases: ["A", "M", "C"] },
+];
+
+export const CONFIGURACION = {
+  cuit: "30712345671",
+  razon_social: "VTV Pruebas SA",
+  domicilio: "Av. Siempre Viva 742, CABA",
+  inicio_actividades: "2020-01-01",
+  iibb: "901-123456-7",
+  punto_venta: 3,
+  ambiente: "homologacion" as const,
+  tope_identificacion: 10000000,
+  certificado_cuit: "30712345671",
+  certificado_sujeto: "CN=vtv",
+  certificado_vence: "2027-11-20T00:00:00Z",
+  certificado_cargado_en: "2026-11-20T10:00:00Z",
+  condiciones_actualizadas_en: "2026-11-20T10:05:00Z",
+};

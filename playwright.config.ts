@@ -43,6 +43,11 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: [["list"], ["html", { open: "never" }]],
+  // Supabase local corre en Docker (en Windows, sobre WSL): con la máquina cargada, una lectura de
+  // menos de 1 ms en Postgres llega a tardar 3–5 s de punta a punta (medido con trazas y logs de
+  // Kong). 10 s evita fallas intermitentes sin esconder errores reales: un dato que no aparece
+  // sigue fallando igual.
+  expect: { timeout: 10_000 },
   use: {
     baseURL: `http://localhost:${PUERTO_E2E}`,
     locale: "es-AR",
@@ -50,11 +55,25 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  webServer: {
-    command: `npx vite --port ${PUERTO_E2E} --strictPort`,
-    url: `http://localhost:${PUERTO_E2E}`,
-    reuseExistingServer: false,
-    timeout: 60_000,
-    env: { VITE_SUPABASE_URL: url, VITE_SUPABASE_ANON_KEY: clave },
-  },
+  webServer: [
+    {
+      command: `npx vite --port ${PUERTO_E2E} --strictPort`,
+      url: `http://localhost:${PUERTO_E2E}`,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      env: {
+        VITE_SUPABASE_URL: url,
+        VITE_SUPABASE_ANON_KEY: clave,
+      },
+    },
+    {
+      // Simulador de ARCA (nunca ARCA real): la Edge Function local lo usa por
+      // ARCA_URL_SIMULADOR (supabase/config.toml). Puede reutilizarse uno ya abierto
+      // con `npm run arca:simulador`.
+      command: "node tests/arca/simulador.mjs",
+      url: "http://127.0.0.1:54399/_control/estado",
+      reuseExistingServer: true,
+      timeout: 30_000,
+    },
+  ],
 });

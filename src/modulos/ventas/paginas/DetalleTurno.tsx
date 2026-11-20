@@ -11,6 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/compartido/ui/card";
 import { useVentasDeTurno, type Venta } from "@/modulos/caja/api/consultas";
 import { DialogoCerrarTurno } from "@/modulos/caja/componentes/DialogoCerrarTurno";
 import { TablaVentas } from "@/modulos/caja/componentes/TablaVentas";
+import { useComprobantesDeTurno } from "@/modulos/facturacion/api/consultas";
+import { FacturaDeVenta } from "@/modulos/facturacion/componentes/FacturaDeVenta";
 import { useTurno, type Turno } from "../api/consultas";
 import { DialogoAnularVenta } from "../componentes/DialogoAnularVenta";
 
@@ -63,6 +65,7 @@ export function DetalleTurno() {
   const idValido = Number.isInteger(id) && id > 0;
   const turno = useTurno(idValido ? id : 0);
   const ventas = useVentasDeTurno(idValido ? id : 0);
+  const comprobantes = useComprobantesDeTurno(idValido ? id : 0);
   const [anulando, setAnulando] = useState<Venta | null>(null);
   const [cerrando, setCerrando] = useState(false);
 
@@ -75,12 +78,12 @@ export function DetalleTurno() {
     );
   }
 
-  const error = turno.error ?? ventas.error;
+  const error = turno.error ?? ventas.error ?? comprobantes.error;
 
   return (
     <section className="flex flex-col gap-4">
       <Volver />
-      {turno.isPending || ventas.isPending ? (
+      {turno.isPending || ventas.isPending || comprobantes.isPending ? (
         <Cargando texto="Cargando turno…" />
       ) : error ? (
         <Alert variant="destructive">
@@ -88,7 +91,8 @@ export function DetalleTurno() {
         </Alert>
       ) : (
         turno.data &&
-        ventas.data && (
+        ventas.data &&
+        comprobantes.data && (
           <>
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="flex flex-col gap-1">
@@ -130,21 +134,29 @@ export function DetalleTurno() {
               </h2>
               <TablaVentas
                 ventas={ventas.data}
-                acciones={(venta) =>
-                  !venta.anulada && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      aria-label={`Anular venta N° ${String(venta.id)}`}
-                      onClick={() => {
-                        setAnulando(venta);
-                      }}
-                    >
-                      <Ban aria-hidden />
-                      Anular
-                    </Button>
-                  )
-                }
+                acciones={(venta) => (
+                  <div className="flex flex-wrap items-center justify-end gap-1">
+                    <FacturaDeVenta
+                      venta={venta}
+                      anulada={venta.anulada}
+                      comprobantes={comprobantes.data.filter((c) => c.venta_id === venta.id)}
+                      puedeEmitirNotas
+                    />
+                    {!venta.anulada && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`Anular venta N° ${String(venta.id)}`}
+                        onClick={() => {
+                          setAnulando(venta);
+                        }}
+                      >
+                        <Ban aria-hidden />
+                        Anular
+                      </Button>
+                    )}
+                  </div>
+                )}
               />
             </section>
 
