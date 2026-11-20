@@ -22,6 +22,15 @@ Además, en el Dashboard → Authentication:
 
 Y desplegar la Edge Function: `npx supabase functions deploy admin-usuarios`.
 
+## Volver a probar desde cero (solo proyectos de prueba)
+
+| Script | Qué borra | Después |
+|---|---|---|
+| `90_deshacer_primer_admin.sql` | Solo el usuario indicado (login + perfil). Se niega si ya tiene operaciones registradas | Repetir pasos 2 y 3 |
+| `99_borrar_todo.sql` | **Todo**: tablas y datos, funciones, tipos, usuarios de Authentication e historial de migraciones. Exige escribir `BORRAR TODO` en el script | Repetir desde el paso 1 |
+
+Los dos corren en una transacción: si algo falla, no se borra nada. **Nunca** uses `99` con datos reales.
+
 ## Mantenimiento
 - `01_esquema_completo.sql` es **generado**: no editarlo. Tras cambiar `supabase/migrations/`,
   correr `npm run sql:produccion`. `npm run verificar` falla si quedó desactualizado.
