@@ -17,6 +17,8 @@ Idioma: código de dominio, mensajes de error y UI en **español rioplatense** (
 
 Requieren Docker corriendo. La CLI de Supabase va como devDependency (`npx supabase ...`).
 
+Guía de comandos en orden (local, tests, instalación en la nube): `docs/COMANDOS.md`.
+
 Primera vez: `npm install` → `npx playwright install chromium` → `npm run db:start` → `npm run env:local` (genera `.env.local`).
 
 | Comando | Qué hace |
