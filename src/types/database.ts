@@ -496,17 +496,9 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
-                },"v_resumen_diario": {
-                  Row: {
-                    "cantidad_ventas": number | null,"costo_certificados": number | null,"fecha": string | null,"flujo_neto": number | null,"margen_bruto": number | null,"total_efectivo": number | null,"total_gastos": number | null,"total_tarjeta": number | null,"total_transferencia": number | null,"total_ventas": number | null,"ventas_sin_stock": number | null
-                  }
-                  ComputedFields: never
-                  Relationships: [
-                    
-                  ]
                 },"v_stock_certificados": {
                   Row: {
-                    "activo": boolean,"alcance": Database["public"]['Enums']["alcance_certificado"],"aplica_a": string | null,"categoria_id": number | null,"costo_promedio": number | null,"hojas_por_unidad": number,"id": number,"nombre": string,"semaforo": string | null,"servicio_id": number | null,"stock_hojas": number,"stock_minimo": number,"unidad_compra": Database["public"]['Enums']["unidad_compra"],"valor_stock": number | null
+                    "activo": boolean,"alcance": Database["public"]['Enums']["alcance_certificado"],"aplica_a": string | null,"categoria_id": number | null,"hojas_por_unidad": number,"id": number,"nombre": string,"semaforo": string | null,"servicio_id": number | null,"stock_hojas": number,"stock_minimo": number,"unidad_compra": Database["public"]['Enums']["unidad_compra"]
                   }
                   ComputedFields: never
                   Relationships: [
@@ -796,8 +788,18 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"resumen_diario":
+{ Args: { "p_desde"?: string,"p_hasta"?: string }; Returns: {
+              "cantidad_ventas": number,"costo_certificados": number,"fecha": string,"flujo_neto": number,"margen_bruto": number,"total_efectivo": number,"total_gastos": number,"total_tarjeta": number,"total_transferencia": number,"total_ventas": number,"ventas_sin_stock": number
+            }[]
+                           },
 "rol_actual":
 { Args: Record<PropertyKey, never>; Returns: Database["public"]['Enums']["rol_usuario"]
+                           },
+"stock_certificados_valorizado":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "activo": boolean,"alcance": Database["public"]['Enums']["alcance_certificado"],"aplica_a": string,"categoria_id": number,"costo_promedio": number,"hojas_por_unidad": number,"id": number,"nombre": string,"semaforo": string,"servicio_id": number,"stock_hojas": number,"stock_minimo": number,"unidad_compra": Database["public"]['Enums']["unidad_compra"],"valor_stock": number
+            }[]
                            }
           }
           Enums: {

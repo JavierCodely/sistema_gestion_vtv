@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { vi } from "vitest";
 import type { Perfil } from "@/compartido/tipos";
@@ -44,4 +45,10 @@ export function renderRuta(ruta: string, auth: ValorAuth = authDePrueba()) {
     </QueryClientProvider>,
   );
   return { ...resultado, router };
+}
+
+/** Renderiza un componente suelto con un QueryClient aislado (sin reintentos). */
+export function renderConQuery(componente: ReactElement) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={queryClient}>{componente}</QueryClientProvider>);
 }

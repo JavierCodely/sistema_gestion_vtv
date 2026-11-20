@@ -78,7 +78,7 @@ npm run verificar         # TODO junto. Debe pasar antes de entregar/commitear c
 | 7 | `npm run db:reset` | Base local limpia |
 | 8 | `npm run test:db` | Tests de base de datos (pgTAP) |
 | 9 | `npm run test:functions` | Tests de la Edge Function `admin-usuarios` |
-| 10 | `npm run test:e2e` | Tests de punta a punta en el navegador (Playwright) |
+| 10 | `npm run test:e2e` | Tests de punta a punta en el navegador (Playwright), siempre contra Supabase local |
 
 Correr un solo test:
 
@@ -89,8 +89,9 @@ npx supabase test db supabase/tests/database/05_ventas.sql
 node --test --test-name-pattern "ciclo completo" supabase/tests/functions/admin-usuarios.test.mjs
 ```
 
-> Los tests E2E usan el Supabase **local**. Si cambiaste `.env.local`, regeneralo con
-> `npm run env:local` antes de `verificar`.
+> Los E2E levantan su propio servidor en el puerto **5174** y toman la URL y la clave de
+> `supabase status`, sin importar los `.env`: aunque tengas `npm run dev:remoto` abierto, nunca
+> tocan la nube. Si Supabase local no está corriendo, avisan y no arrancan.
 
 ## Parte D — Instalar en la nube (proyecto `gestion_vtv`), una sola vez
 
@@ -108,9 +109,12 @@ npx supabase link --project-ref lrtxjqnskgfsckapfhfh
    (crea tablas, funciones, vistas y permisos; corre en una transacción).
 
 ```bash
-# 4. Marcar las 14 migraciones como aplicadas (para que un futuro db push no las repita)
-npx supabase migration repair --status applied 20261119000001 20261119000002 20261119000003 20261119000004 20261119000005 20261119000006 20261119000007 20261119000008 20261119000009 20261119000010 20261119000011 20261119000012 20261119000013 20261120000014
+# 4. Marcar las migraciones como aplicadas (para que un futuro db push no las repita)
+npx supabase migration repair --status applied <versiones>
 ```
+
+> Copiá el comando completo del encabezado de `supabase/produccion/01_esquema_completo.sql`:
+> ahí está siempre con todas las versiones al día.
 
 5. **Dashboard → Authentication** (configuración de seguridad):
    - Desactivar **Allow new users to sign up**.

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { validarEmail, validarNombre, validarPassword } from "@/compartido/lib/validaciones";
+import {
+  montoComoTexto,
+  parsearMonto,
+  validarEmail,
+  validarNombre,
+  validarPassword,
+} from "@/compartido/lib/validaciones";
 
 describe("validaciones", () => {
   it("email", () => {
@@ -19,5 +25,50 @@ describe("validaciones", () => {
     expect(validarNombre("x".repeat(100))).toBeUndefined();
     expect(validarPassword("x".repeat(73))).toMatch(/72 caracteres/);
     expect(validarEmail(`${"x".repeat(250)}@a.com`)).toBe("El email es demasiado largo.");
+  });
+});
+
+describe("parsearMonto", () => {
+  it.each([
+    ["20000", 20000],
+    ["20.000", 20000],
+    ["1.234.567,8", 1234567.8],
+    ["20000,50", 20000.5],
+    ["20.000,50", 20000.5],
+    ["20000.5", 20000.5],
+    ["$ 1500", 1500],
+    [" 0,01 ", 0.01],
+  ])("acepta %s", (texto, valor) => {
+    expect(parsearMonto(texto)).toEqual({ valor });
+  });
+
+  it.each([
+    ["", "Ingresá un monto."],
+    ["abc", "El monto no es válido."],
+    ["-5", "El monto no es válido."],
+    ["1,2,3", "El monto no es válido."],
+    ["20.00,5", "El monto no es válido."],
+    ["NaN", "El monto no es válido."],
+    ["1e5", "El monto no es válido."],
+    ["10,123", "El monto no puede tener más de 2 decimales."],
+    ["0", "El monto debe ser mayor a cero."],
+    ["10000000000", "El monto es demasiado grande."],
+  ])("rechaza %j", (texto, error) => {
+    expect(parsearMonto(texto)).toEqual({ error });
+  });
+
+  it("los mensajes usan el nombre del campo", () => {
+    expect(parsearMonto("", { nombre: "precio" })).toEqual({ error: "Ingresá un precio." });
+    expect(parsearMonto("x", { nombre: "costo" })).toEqual({ error: "El costo no es válido." });
+  });
+
+  it("el cero se permite solo si se pide (ej. precio de una reverificación)", () => {
+    expect(parsearMonto("0", { permitirCero: true })).toEqual({ valor: 0 });
+  });
+
+  it("montoComoTexto es la inversa para precargar formularios", () => {
+    expect(montoComoTexto(20000)).toBe("20000");
+    expect(montoComoTexto(1500.5)).toBe("1500,50");
+    expect(parsearMonto(montoComoTexto(1500.5))).toEqual({ valor: 1500.5 });
   });
 });

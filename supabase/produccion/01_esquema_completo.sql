@@ -22,10 +22,13 @@
 --   12. 20261119000012_vistas.sql
 --   13. 20261119000013_rls.sql
 --   14. 20261120000014_endurecimiento_seguridad.sql
+--   15. 20261120000015_catalogo_nombres.sql
+--   16. 20261120000016_privilegios_funciones.sql
+--   17. 20261120000017_costos_solo_admin.sql
 --
 -- Después de ejecutarlo, registrá las migraciones como aplicadas para que
 -- `supabase db push` no intente aplicarlas de nuevo:
---   npx supabase migration repair --status applied 20261119000001 20261119000002 20261119000003 20261119000004 20261119000005 20261119000006 20261119000007 20261119000008 20261119000009 20261119000010 20261119000011 20261119000012 20261119000013 20261120000014
+--   npx supabase migration repair --status applied 20261119000001 20261119000002 20261119000003 20261119000004 20261119000005 20261119000006 20261119000007 20261119000008 20261119000009 20261119000010 20261119000011 20261119000012 20261119000013 20261120000014 20261120000015 20261120000016 20261120000017
 -- =====================================================================
 
 begin;
@@ -1909,5 +1912,328 @@ alter table public.gastos add constraint gastos_anulado_motivo_largo check (char
 alter table public.compras_certificado add constraint compras_certificado_proveedor_largo check (char_length(proveedor) <= 200);
 alter table public.movimientos_certificado add constraint movimientos_certificado_nota_largo check (char_length(nota) <= 500);
 alter table public.movimientos_efectivo add constraint movimientos_efectivo_nota_largo check (char_length(nota) <= 600);
+
+-- ---------------------------------------------------------------------
+-- 20261120000015_catalogo_nombres.sql
+-- ---------------------------------------------------------------------
+-- Fase 2 (catálogo del admin):
+--   1. Nombres prolijos y únicos sin distinguir mayúsculas.
+--   2. Una categoría desactivada saca de la venta a todos sus servicios.
+-- El admin escribe directo en estas tablas (grants por columna), así que la regla vive en la BD:
+--   "  Caja   1 " se guarda como "Caja 1", y "caja 1" choca con "Caja 1".
+
+create function public.tg_normalizar_nombre()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  new.nombre := regexp_replace(btrim(new.nombre), '\s+', ' ', 'g');
+  return new;
+end;
+$$;
+
+create trigger cajas_normalizar_nombre
+  before insert or update of nombre on public.cajas
+  for each row execute function public.tg_normalizar_nombre();
+create trigger categorias_servicio_normalizar_nombre
+  before insert or update of nombre on public.categorias_servicio
+  for each row execute function public.tg_normalizar_nombre();
+create trigger servicios_normalizar_nombre
+  before insert or update of nombre on public.servicios
+  for each row execute function public.tg_normalizar_nombre();
+
+-- Normaliza solo los nombres que lo necesitan (no toca actualizado_en del resto).
+update public.cajas set nombre = nombre
+  where nombre is distinct from regexp_replace(btrim(nombre), '\s+', ' ', 'g');
+update public.categorias_servicio set nombre = nombre
+  where nombre is distinct from regexp_replace(btrim(nombre), '\s+', ' ', 'g');
+update public.servicios set nombre = nombre
+  where nombre is distinct from regexp_replace(btrim(nombre), '\s+', ' ', 'g');
+
+-- La unicidad sin mayúsculas reemplaza a la única exacta original (que queda redundante).
+alter table public.cajas drop constraint cajas_nombre_key;
+alter table public.categorias_servicio drop constraint categorias_servicio_nombre_key;
+alter table public.servicios drop constraint servicios_nombre_key;
+
+create unique index cajas_nombre_unico on public.cajas (lower(nombre));
+create unique index categorias_servicio_nombre_unico on public.categorias_servicio (lower(nombre));
+create unique index servicios_nombre_unico on public.servicios (lower(nombre));
+
+-- 2. registrar_venta: igual que en la migración 014, más el control de la categoría activa.
+create or replace function public.registrar_venta(
+  p_servicio_id bigint,
+  p_medio_pago  public.medio_pago,
+  p_patente     text default null
+)
+returns public.ventas
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_turno    public.turnos;
+  v_servicio public.servicios;
+  v_cert     public.certificados;
+  v_cert_id  bigint;
+  v_venta    public.ventas;
+  v_patente  text := nullif(upper(regexp_replace(coalesce(p_patente, ''), '\s', '', 'g')), '');
+begin
+  perform public._exigir_usuario();
+
+  if p_medio_pago is null then
+    raise exception 'Elegí un medio de pago' using errcode = '22023';
+  end if;
+
+  select * into v_turno from public.turnos
+  where usuario_id = auth.uid() and cerrado_en is null
+  for share;  -- serializa con cerrar_turno
+  if v_turno.id is null then
+    raise exception 'Necesitás un turno abierto para vender' using errcode = 'P0001';
+  end if;
+
+  select * into v_servicio from public.servicios where id = p_servicio_id;
+  if v_servicio.id is null or not v_servicio.activo then
+    raise exception 'El servicio no existe o está desactivado' using errcode = '22023';
+  end if;
+  if not exists (select 1 from public.categorias_servicio
+                 where id = v_servicio.categoria_id and activa) then
+    raise exception 'La categoría de este servicio está desactivada' using errcode = '22023';
+  end if;
+
+  insert into public.ventas
+    (turno_id, caja_id, usuario_id, servicio_id, servicio_nombre, categoria_id,
+     precio, medio_pago, patente)
+  values
+    (v_turno.id, v_turno.caja_id, auth.uid(), v_servicio.id, v_servicio.nombre, v_servicio.categoria_id,
+     v_servicio.precio, p_medio_pago, v_patente)
+  returning * into v_venta;
+
+  if v_servicio.requiere_certificado then
+    v_cert_id := public.certificado_para_servicio(v_servicio.id);
+
+    if v_cert_id is not null then
+      select * into v_cert from public.certificados where id = v_cert_id for update;
+    end if;
+
+    if v_cert.id is not null and v_cert.stock_hojas > 0 then
+      update public.certificados set stock_hojas = stock_hojas - 1 where id = v_cert.id;
+
+      insert into public.movimientos_certificado
+        (certificado_id, tipo, hojas, costo_unitario, costo_total,
+         stock_resultante, costo_promedio_resultante, venta_id, usuario_id)
+      values
+        (v_cert.id, 'venta', -1, v_cert.costo_promedio, -round(v_cert.costo_promedio, 2),
+         v_cert.stock_hojas - 1, v_cert.costo_promedio, v_venta.id, auth.uid());
+
+      update public.ventas
+      set certificado_id = v_cert.id, costo_certificado = v_cert.costo_promedio
+      where id = v_venta.id
+      returning * into v_venta;
+
+      -- Aviso al cruzar el stock mínimo.
+      if v_cert.stock_hojas > v_cert.stock_minimo and v_cert.stock_hojas - 1 <= v_cert.stock_minimo then
+        insert into public.alertas (tipo, mensaje, certificado_id, venta_id)
+        values ('stock_bajo',
+                format('Stock bajo de "%s": quedan %s hojas (mínimo %s)',
+                       v_cert.nombre, v_cert.stock_hojas - 1, v_cert.stock_minimo),
+                v_cert.id, v_venta.id);
+      end if;
+    else
+      update public.ventas
+      set certificado_id = v_cert.id, sin_stock = true
+      where id = v_venta.id
+      returning * into v_venta;
+
+      insert into public.alertas (tipo, mensaje, certificado_id, venta_id)
+      values ('venta_sin_stock',
+              case when v_cert.id is null
+                then format('Venta #%s (%s) sin certificado: no hay un certificado configurado para este servicio',
+                            v_venta.id, v_servicio.nombre)
+                else format('Venta #%s (%s) sin certificado: no hay stock de "%s"',
+                            v_venta.id, v_servicio.nombre, v_cert.nombre)
+              end,
+              v_cert.id, v_venta.id);
+    end if;
+  end if;
+
+  if p_medio_pago = 'efectivo' and v_venta.precio > 0 then
+    perform public._mover_efectivo('venta', v_venta.precio, 'Venta #' || v_venta.id,
+                                   v_turno.id, v_venta.id, null);
+  end if;
+
+  return v_venta;
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- 20261120000016_privilegios_funciones.sql
+-- ---------------------------------------------------------------------
+-- Corrige la base de privilegios de funciones.
+-- La migración 013 usó `alter default privileges in schema public revoke execute ... from public`,
+-- pero los privilegios por defecto A NIVEL DE ESQUEMA no pueden quitar el EXECUTE que PUBLIC recibe
+-- de fábrica: toda función creada después quedaba ejecutable por anon (ej. _validar_monto de la 014).
+-- Se corrige a nivel global para el rol que crea los objetos (postgres) y se limpia lo existente.
+
+alter default privileges for role postgres revoke execute on functions from public;
+
+-- La 013 ya lo había hecho con las funciones de ese momento; esto cubre las creadas después.
+-- Las RPC para usuarios conservan sus grants explícitos a `authenticated`.
+revoke execute on all functions in schema public from public;
+
+-- ---------------------------------------------------------------------
+-- 20261120000017_costos_solo_admin.sql
+-- ---------------------------------------------------------------------
+-- Costos de certificados: SOLO el administrador (decisión del negocio, 2026-11-20).
+-- El cajero nunca ve costo por hoja, costo promedio, valor del stock, costo de una venta ni margen.
+--
+-- Los privilegios por columna son por ROL y admin y cajero son ambos `authenticated`, así que:
+--   - lo que lee cualquier usuario (tablas y vistas) queda SIN columnas de costo;
+--   - el admin lee los costos solo por RPC `security definer` que exigen admin.
+-- Columnas nuevas en certificados/ventas no quedan legibles hasta que se las agregue al grant.
+
+-- 1) Tablas: lectura por columna, sin costos.
+revoke select on public.certificados, public.ventas from authenticated;
+
+grant select (id, nombre, unidad_compra, hojas_por_unidad, alcance, categoria_id, servicio_id,
+              stock_minimo, stock_hojas, activo, creado_en, actualizado_en)
+  on public.certificados to authenticated;
+
+grant select (id, turno_id, caja_id, usuario_id, servicio_id, servicio_nombre, categoria_id, precio,
+              medio_pago, patente, certificado_id, sin_stock, anulada, anulada_motivo, anulada_por,
+              anulada_en, creado_en)
+  on public.ventas to authenticated;
+-- movimientos_certificado, compras_certificado y movimientos_efectivo ya son solo admin (RLS).
+
+-- 2) Stock para todos: sin costo ni valuación.
+drop view public.v_stock_certificados;
+create view public.v_stock_certificados
+with (security_invoker = true) as
+select
+  c.id,
+  c.nombre,
+  c.unidad_compra,
+  c.hojas_por_unidad,
+  c.alcance,
+  c.categoria_id,
+  c.servicio_id,
+  case c.alcance
+    when 'global'    then 'Todos los servicios'
+    when 'categoria' then cs.nombre
+    else s.nombre
+  end                                                as aplica_a,
+  c.stock_minimo,
+  c.stock_hojas,
+  case
+    when c.stock_hojas = 0               then 'sin_stock'
+    when c.stock_hojas <= c.stock_minimo then 'bajo'
+    else 'ok'
+  end                                                as semaforo,
+  c.activo
+from public.certificados c
+left join public.categorias_servicio cs on cs.id = c.categoria_id
+left join public.servicios s on s.id = c.servicio_id;
+
+grant select on public.v_stock_certificados to authenticated;
+
+-- 3) Stock valorizado: solo admin.
+create function public.stock_certificados_valorizado()
+returns table (
+  id               bigint,
+  nombre           text,
+  unidad_compra    public.unidad_compra,
+  hojas_por_unidad integer,
+  alcance          public.alcance_certificado,
+  categoria_id     bigint,
+  servicio_id      bigint,
+  aplica_a         text,
+  stock_minimo     integer,
+  stock_hojas      integer,
+  costo_promedio   numeric(14,2),
+  valor_stock      numeric(14,2),
+  semaforo         text,
+  activo           boolean
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  perform public._exigir_admin();
+
+  return query
+  select
+    v.id, v.nombre, v.unidad_compra, v.hojas_por_unidad, v.alcance, v.categoria_id,
+    v.servicio_id, v.aplica_a, v.stock_minimo, v.stock_hojas,
+    round(c.costo_promedio, 2)::numeric(14,2),
+    round(c.stock_hojas * c.costo_promedio, 2)::numeric(14,2),
+    v.semaforo, v.activo
+  from public.v_stock_certificados v
+  join public.certificados c on c.id = v.id
+  order by v.activo desc, v.nombre;
+end;
+$$;
+
+-- 4) Resumen diario con costo y margen: solo admin (reemplaza a la vista v_resumen_diario).
+drop view public.v_resumen_diario;
+
+create function public.resumen_diario(p_desde date default null, p_hasta date default null)
+returns table (
+  fecha               date,
+  cantidad_ventas     bigint,
+  total_ventas        numeric(14,2),
+  total_efectivo      numeric(14,2),
+  total_transferencia numeric(14,2),
+  total_tarjeta       numeric(14,2),
+  total_gastos        numeric(14,2),
+  flujo_neto          numeric(14,2),
+  costo_certificados  numeric(14,2),
+  margen_bruto        numeric(14,2),
+  ventas_sin_stock    bigint
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  perform public._exigir_admin();
+  if p_desde is not null and p_hasta is not null and p_desde > p_hasta then
+    raise exception 'La fecha "desde" no puede ser posterior a "hasta"' using errcode = '22023';
+  end if;
+
+  return query
+  with mov as (
+    select public.fecha_local(v.creado_en) as dia, v.precio as venta, v.medio_pago,
+           v.costo_certificado as costo, v.sin_stock, 0::numeric as gasto
+    from public.ventas v where not v.anulada
+    union all
+    select public.fecha_local(g.creado_en), 0, null, 0, false, g.monto
+    from public.gastos g where not g.anulado
+  )
+  select
+    m.dia,
+    count(*) filter (where m.medio_pago is not null),
+    coalesce(sum(m.venta), 0)::numeric(14,2),
+    coalesce(sum(m.venta) filter (where m.medio_pago = 'efectivo'), 0)::numeric(14,2),
+    coalesce(sum(m.venta) filter (where m.medio_pago = 'transferencia'), 0)::numeric(14,2),
+    coalesce(sum(m.venta) filter (where m.medio_pago = 'tarjeta'), 0)::numeric(14,2),
+    coalesce(sum(m.gasto), 0)::numeric(14,2),
+    (coalesce(sum(m.venta), 0) - coalesce(sum(m.gasto), 0))::numeric(14,2),
+    round(coalesce(sum(m.costo), 0), 2)::numeric(14,2),
+    round(coalesce(sum(m.venta), 0) - coalesce(sum(m.costo), 0), 2)::numeric(14,2),
+    count(*) filter (where m.sin_stock)
+  from mov m
+  where (p_desde is null or m.dia >= p_desde)
+    and (p_hasta is null or m.dia <= p_hasta)
+  group by m.dia
+  order by m.dia;
+end;
+$$;
+
+-- PUBLIC ya no recibe EXECUTE por defecto (migración 016): solo `authenticated`.
+grant execute on function public.stock_certificados_valorizado() to authenticated;
+grant execute on function public.resumen_diario(date, date) to authenticated;
 
 commit;

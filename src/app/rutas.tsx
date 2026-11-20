@@ -31,8 +31,18 @@ export const rutas: RouteObject[] = [
           Component: (await import("@/modulos/usuarios/paginas/Usuarios")).Usuarios,
         }),
       },
-      { path: "cajas", element: <EnConstruccion titulo="Cajas" fase={2} /> },
-      { path: "servicios", element: <EnConstruccion titulo="Servicios y categorías" fase={2} /> },
+      {
+        path: "cajas",
+        lazy: async () => ({
+          Component: (await import("@/modulos/cajas/paginas/Cajas")).Cajas,
+        }),
+      },
+      {
+        path: "servicios",
+        lazy: async () => ({
+          Component: (await import("@/modulos/servicios/paginas/Servicios")).Servicios,
+        }),
+      },
       { path: "certificados", element: <EnConstruccion titulo="Certificados" fase={3} /> },
       { path: "gastos", element: <EnConstruccion titulo="Gastos" fase={5} /> },
       { path: "efectivo", element: <EnConstruccion titulo="Caja de efectivo" fase={5} /> },

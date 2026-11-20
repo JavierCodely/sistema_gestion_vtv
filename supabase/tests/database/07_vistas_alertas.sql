@@ -1,6 +1,6 @@
 begin;
 \ir _helpers.psql
-select plan(13);
+select plan(14);
 
 select * from pg_temp.escenario() \gset
 select id as comida from categorias_gasto where nombre = 'Comida' \gset
@@ -45,20 +45,30 @@ select is(
   'v_turnos calcula los totales en vivo');
 reset role;
 
--- v_resumen_diario (incluye el gasto automático de la compra: $50.000)
+-- resumen_diario() (solo admin; incluye el gasto automático de la compra: $50.000)
+select pg_temp.como(:'admin');
 select is(
   (select row(cantidad_ventas, total_ventas, total_efectivo, total_tarjeta, total_gastos,
               flujo_neto, costo_certificados, margen_bruto, ventas_sin_stock)::text
-   from v_resumen_diario where fecha = fecha_local(now())),
+   from resumen_diario() where fecha = fecha_local(now())),
   row(2, 40000.00, 20000.00, 20000.00, 51500.00, -11500.00, 4000.00, 36000.00, 0)::text,
   'resumen diario: ventas, medios, gastos, flujo neto y margen bruto');
 
--- v_stock_certificados
+-- stock_certificados_valorizado() (solo admin)
 select is(
   (select row(stock_hojas, costo_promedio, valor_stock, semaforo, aplica_a)::text
-   from v_stock_certificados where id = :cert),
+   from stock_certificados_valorizado() where id = :cert),
   row(22, 2000.00, 44000.00, 'bajo', 'Todos los servicios')::text,
-  'stock, costo, valor y semáforo del certificado');
+  'stock, costo, valor y semáforo del certificado (admin)');
+reset role;
+
+-- v_stock_certificados (todos, sin costos)
+select pg_temp.como(:'cajero');
+select is(
+  (select row(stock_hojas, semaforo, aplica_a)::text from v_stock_certificados where id = :cert),
+  row(22, 'bajo', 'Todos los servicios')::text,
+  'el cajero ve stock y semáforo');
+reset role;
 
 -- v_gastos_por_categoria
 select is(

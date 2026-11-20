@@ -40,3 +40,61 @@ export function validarNombre(nombre: string): string | undefined {
 export function hayErrores(errores: Record<string, string | undefined>): boolean {
   return Object.values(errores).some(Boolean);
 }
+
+/** Igual que _validar_monto en la BD: numeric(12,2). */
+export const MONTO_MAXIMO = 9_999_999_999.99;
+
+export type ResultadoMonto =
+  { valor: number; error?: undefined } | { valor?: undefined; error: string };
+
+const MILES_CON_PUNTO = /^\d{1,3}(\.\d{3})+$/;
+const NUMERO = /^\d+(\.\d+)?$/;
+
+/**
+ * Convierte lo que escribe el usuario en un monto, aceptando el formato argentino:
+ * "20000", "20.000", "20000,50", "20.000,50" y también "20000.50".
+ * Solo valida y convierte: los cálculos de dinero los hace la BD.
+ */
+export function parsearMonto(
+  texto: string,
+  {
+    permitirCero = false,
+    nombre = "monto",
+  }: {
+    permitirCero?: boolean;
+    /** Sustantivo masculino para los mensajes: "monto", "precio", "costo"… */
+    nombre?: string;
+  } = {},
+): ResultadoMonto {
+  const invalido = { error: `El ${nombre} no es válido.` };
+  let limpio = texto
+    .trim()
+    .replace(/^\$\s*/, "")
+    .replace(/\s/g, "");
+  if (!limpio) return { error: `Ingresá un ${nombre}.` };
+
+  if (limpio.includes(",")) {
+    // Coma decimal: los puntos solo pueden ser separadores de miles.
+    const [entero = "", decimales, ...resto] = limpio.split(",");
+    if (resto.length > 0 || (entero.includes(".") && !MILES_CON_PUNTO.test(entero))) {
+      return invalido;
+    }
+    limpio = `${entero.replace(/\./g, "")}.${decimales ?? ""}`;
+  } else if (MILES_CON_PUNTO.test(limpio)) {
+    limpio = limpio.replace(/\./g, "");
+  }
+
+  if (!NUMERO.test(limpio)) return invalido;
+  if ((limpio.split(".")[1] ?? "").length > 2) {
+    return { error: `El ${nombre} no puede tener más de 2 decimales.` };
+  }
+  const valor = Number(limpio);
+  if (valor === 0 && !permitirCero) return { error: `El ${nombre} debe ser mayor a cero.` };
+  if (valor > MONTO_MAXIMO) return { error: `El ${nombre} es demasiado grande.` };
+  return { valor };
+}
+
+/** Monto para precargar un input: 20000 → "20000", 1500.5 → "1500,50". */
+export function montoComoTexto(valor: number): string {
+  return Number.isInteger(valor) ? String(valor) : valor.toFixed(2).replace(".", ",");
+}

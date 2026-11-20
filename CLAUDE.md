@@ -27,7 +27,7 @@ Primera vez: `npm install` → `npx playwright install chromium` → `npm run db
 | `npm run dev:remoto` | Vite contra el proyecto Supabase en la nube (lee `.env.remoto.local`, no commiteado; solo clave publicable) |
 | `npm run typecheck` / `lint` / `format:check` | `tsc -b` · ESLint con `--max-warnings 0` · Prettier (`npm run format` corrige) |
 | `npm run test` | Unit (Vitest + Testing Library, `tests/unit/**/*.test.{ts,tsx}`) |
-| `npm run test:e2e` | Playwright (`tests/e2e/`), levanta `npm run dev` solo; usa Supabase local + seed |
+| `npm run test:e2e` | Playwright (`tests/e2e/`): servidor propio en :5174 con URL/clave de `supabase status` (nunca la nube) + seed |
 | `npm run db:start` / `db:stop` | Supabase local (API `127.0.0.1:54321`, DB `:54322`) |
 | `npm run db:reset` | Recrea la BD: migraciones + `supabase/seed.sql` |
 | `npm run sql:produccion` | Regenera `supabase/produccion/01_esquema_completo.sql` (todas las migraciones en una transacción, para el SQL Editor). Ver `supabase/produccion/LEEME.md` |
@@ -84,6 +84,11 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
   costos ni stock: llama RPC y lee vistas.
 - **Lecturas**: el cliente lee tablas/vistas con RLS. Todas las vistas son
   `security_invoker = true` (el cajero ve lo suyo, el admin todo).
+- **Costos de certificados (costo por hoja, costo promedio, valor de stock, costo de venta, margen)**:
+  nadie los lee de tablas ni vistas (`certificados` y `ventas` tienen `grant select` por columna, sin
+  costos). El admin los obtiene solo por RPC: `stock_certificados_valorizado()`, `resumen_diario()` y
+  el kardex `movimientos_certificado` (RLS admin). Por eso en `certificados`/`ventas` **nunca `select *`**:
+  pedir columnas explícitas. Una columna nueva en esas tablas no es legible hasta sumarla al grant.
 - **Escrituras con reglas de negocio** (ventas, turnos, gastos, compras, ajustes, efectivo,
   alertas): solo vía RPC `security definer` con `set search_path = ''`. No hay grants de
   INSERT/UPDATE para esas tablas.
@@ -106,6 +111,13 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
 - **Textos libres**: CHECK `char_length(col) <= N` (nombres 100, notas/motivos 500, patente 10, proveedor 200);
   la UI usa los mismos límites (`LARGO_MAXIMO_*` en `compartido/lib/validaciones.ts`).
 - RPC que escriben sobre un turno lo leen con `for share` (serializa con `cerrar_turno`).
+- **Errores en la UI**: siempre `mensajeDeError(e, mensajes?)` (`compartido/lib/errores.ts`). Las RPC ya
+  responden en español; los errores crudos de Postgres del CRUD directo (23505 repetido, 23503 en uso,
+  23514 inválido, permisos) se traducen por código, con mensajes específicos por pantalla
+  (ej. `MENSAJES_ERROR_CAJA`).
+- **Montos tipeados**: `parsearMonto` (`compartido/lib/validaciones.ts`) acepta formato argentino
+  (`20.000,50`) y aplica las mismas reglas que `_validar_monto`.
+- Nombres de catálogo: la BD los normaliza (trim + espacios simples) y son únicos sin distinguir mayúsculas.
 - Catálogo con historial (servicios, cajas, certificados, categorías): en la UI se **desactiva**
   (`activo/activa = false`); borrar falla por FK si ya se usó en ventas, turnos o gastos.
 
@@ -127,6 +139,9 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
 | 12 | `vistas` | Vistas de reportes (§6) |
 | 13 | `rls` | Revoke total, RLS, grants, default privileges, Realtime de `alertas` |
 | 14 | `endurecimiento_seguridad` | `_validar_monto`, CHECK anti-NaN, largos máximos, locks (último admin, turno) — auditoría 2026-11-20 |
+| 15 | `catalogo_nombres` | Nombres de cajas/categorías/servicios normalizados y únicos sin mayúsculas; `registrar_venta` rechaza servicios de categoría desactivada |
+| 16 | `privilegios_funciones` | Quita EXECUTE de PUBLIC por defecto a nivel global (la 13 lo hacía por esquema, que no alcanza) y en todas las funciones existentes |
+| 17 | `costos_solo_admin` | Grants por columna sin costos en `certificados`/`ventas`; `v_stock_certificados` sin costos; `v_resumen_diario` pasa a RPC admin `resumen_diario()`; `stock_certificados_valorizado()` |
 
 Reglas que no son obvias leyendo una sola tabla:
 - **Certificado a usar**: el activo más específico (servicio > categoría > global).
@@ -137,6 +152,10 @@ Reglas que no son obvias leyendo una sola tabla:
   y crea automáticamente un gasto en la categoría con `sistema = 'compra_certificados'`
   (Insumos › Compra de certificados), que no se carga a mano ni se anula.
 - **Ajuste de stock**: valuado al costo promedio vigente, no lo modifica, no genera gasto.
+- **Categoría desactivada**: sus servicios no se pueden vender (lo controla `registrar_venta`).
+- **Gastos sin tope**: el cajero puede cargar gastos de cualquier monto (decisión del negocio); la
+  garantía es que todo queda registrado (usuario, turno, caja, nota) y solo el admin anula.
+- **Costos de certificados solo para el admin** (decisión del negocio): ver §3 "Costos" y la migración 17.
 - **Anular venta** (solo admin): la hoja NO vuelve al stock; si fue en efectivo, el monto
   sale de la caja de cambio (si no alcanza, se rechaza).
 - **Gastos**: siempre a una subcategoría; `habilitada_caja` solo existe en subcategorías.
@@ -162,6 +181,8 @@ Todas requieren usuario autenticado y **activo**. Devuelven la fila afectada.
 | `movimiento_efectivo(p_tipo tipo_mov_efectivo, p_monto numeric, p_nota text) → movimientos_efectivo` | admin | Solo `fondo_inicial`, `ingreso`, `retiro`; monto positivo |
 | `marcar_alertas_leidas(p_ids bigint[] = null) → int` | admin | `null` = todas; devuelve cuántas marcó |
 | `certificado_para_servicio(p_servicio_id bigint) → bigint` | todos | Para mostrar en Ventas qué hoja se usará |
+| `stock_certificados_valorizado() → setof (… columnas de v_stock_certificados, costo_promedio, valor_stock)` | admin | Stock con valuación |
+| `resumen_diario(p_desde date = null, p_hasta date = null) → setof (fecha, cantidad_ventas, total_*, total_gastos, flujo_neto, costo_certificados, margen_bruto, ventas_sin_stock)` | admin | Reporte por día (hora AR), sin anulados; rango opcional |
 | `rol_actual() → rol_usuario`, `es_admin() → boolean` | todos | `null`/`false` si el usuario está desactivado |
 
 Enums: `medio_pago` = efectivo | transferencia | tarjeta · `fuente_fondos` = efectivo | transferencia ·
@@ -179,8 +200,7 @@ El admin no puede desactivarse ni quitarse el rol a sí mismo.
 |---|---|
 | `v_movimientos_caja` | Ventas + gastos juntos. `tipo` = venta/gasto; **gastos con `monto` negativo** (fila roja); `anulada` para tacharlas (excluirlas de totales). Filtrar por `turno_id`, `caja_id`, `fecha_local`, etc. |
 | `v_turnos` | Turnos con caja, cajero, `abierto` y totales en vivo por medio, gastos y neto |
-| `v_resumen_diario` | Por `fecha`: ventas, por medio, gastos, `flujo_neto`, `costo_certificados`, `margen_bruto`, `ventas_sin_stock` |
-| `v_stock_certificados` | Stock, costo promedio, `valor_stock`, `semaforo` (ok/bajo/sin_stock), `aplica_a` |
+| `v_stock_certificados` | Stock en hojas, `semaforo` (ok/bajo/sin_stock), `aplica_a`. **Sin costos** (el admin usa `stock_certificados_valorizado()`) |
 | `v_gastos_por_categoria` | Totales por fecha, rubro, subcategoría y fuente |
 
 Saldo de efectivo: `select saldo from caja_efectivo` (visible para todos).
@@ -189,9 +209,11 @@ Alertas en tiempo real: Realtime `postgres_changes` sobre `public.alertas` (RLS:
 ## 7. Cambiar la base de datos
 
 - **Nunca editar una migración ya commiteada**: crear una nueva (`npx supabase migration new <nombre>`).
-- La migración 13 revoca los privilegios por defecto: **toda tabla, vista o función nueva
+- Las migraciones 13 y 16 revocan los privilegios por defecto: **toda tabla, vista o función nueva
   necesita `grant` explícito** a `authenticated`, RLS habilitada (las vistas con
-  `security_invoker = true`). `08_seguridad.sql` falla si una tabla queda sin RLS o una vista sin invoker.
+  `security_invoker = true`). `08_seguridad.sql` falla si una tabla queda sin RLS o una vista sin invoker;
+  `12_privilegios_funciones.sql` falla si `anon` puede ejecutar alguna función o `authenticated` una
+  interna (`_*`) o de trigger.
 - RPC nuevas: `security definer`, `set search_path = ''`, nombres calificados (`public.x`),
   empezar con `perform public._exigir_usuario()` o `_exigir_admin()`.
 - Revisión de seguridad: agente `ciberseguridad` (auditoría completa o de un diff).
@@ -212,7 +234,7 @@ No se pasa de fase con tests en rojo.
 | −1 | BD completa, Edge Function, tests pgTAP y de función (**hecha**) |
 | 0 | (**hecha**) Scaffold: Vite + React + TS strict, Tailwind, shadcn, router, TanStack Query, cliente Supabase, ESLint + Prettier, Vitest, Playwright, scripts `dev`/`build`/`typecheck`/`lint`/`test`/`test:e2e`; tipos generados (`supabase gen types`); sumar todo a `verificar` |
 | 1 | (**hecha**) Auth, layout por rol, guardas de rutas, pantalla de usuarios |
-| 2 | Admin: cajas, categorías de servicio, servicios |
+| 2 | (**hecha**) Admin: cajas, categorías de servicio, servicios |
 | 3 | Admin: certificados, compras, ajustes, kardex, stock |
 | 4 | Caja: abrir turno, ventas, historial, cerrar turno |
 | 5 | Gastos (admin y caja) + caja de efectivo |
