@@ -17,18 +17,38 @@ Idioma: código de dominio, mensajes de error y UI en **español rioplatense** (
 
 Requieren Docker corriendo. La CLI de Supabase va como devDependency (`npx supabase ...`).
 
+Primera vez: `npm install` → `npx playwright install chromium` → `npm run db:start` → `npm run env:local` (genera `.env.local`).
+
 | Comando | Qué hace |
 |---|---|
-| `npm run db:start` / `db:stop` | Levanta / baja Supabase local (API en `127.0.0.1:54321`, DB en `:54322`) |
-| `npm run db:reset` | Recrea la BD: aplica todas las migraciones + `supabase/seed.sql` |
+| `npm run dev` | Vite en `http://localhost:5173` |
+| `npm run typecheck` / `lint` / `format:check` | `tsc -b` · ESLint con `--max-warnings 0` · Prettier (`npm run format` corrige) |
+| `npm run test` | Unit (Vitest + Testing Library, `src/**/*.test.{ts,tsx}`) |
+| `npm run test:e2e` | Playwright (`e2e/`), levanta `npm run dev` solo; usa Supabase local + seed |
+| `npm run db:start` / `db:stop` | Supabase local (API `127.0.0.1:54321`, DB `:54322`) |
+| `npm run db:reset` | Recrea la BD: migraciones + `supabase/seed.sql` |
+| `npm run db:types` | Regenera `src/types/database.ts`. **Correrlo tras cada migración** |
 | `npm run test:db` | Tests pgTAP (`supabase/tests/database/*.sql`) |
-| `npm run test:functions` | Tests de integración de Edge Functions (node:test, contra Supabase local) |
-| `npm run verificar` (= `verify`) | `db:reset` + `test:db` + `test:functions`. **Debe pasar antes de entregar cualquier cambio** |
+| `npm run test:functions` | Tests de integración de Edge Functions (node:test) |
+| `npm run verificar` (= `verify`) | typecheck + lint + format + unit + build + db:reset + pgTAP + funciones + E2E. **Debe pasar antes de entregar cualquier cambio** |
 
-- Un solo archivo pgTAP: `npx supabase test db supabase/tests/database/05_ventas.sql`
-- Un solo test de función: `node --test --test-name-pattern "ciclo completo" supabase/tests/functions/admin-usuarios.test.mjs`
+- Un test unitario: `npx vitest run src/lib/formato.test.ts` (o `-t "nombre"`).
+- Un E2E: `npx playwright test e2e/inicio.spec.ts` (o `-g "nombre"`).
+- Un archivo pgTAP: `npx supabase test db supabase/tests/database/05_ventas.sql`
+- Un test de función: `node --test --test-name-pattern "ciclo completo" supabase/tests/functions/admin-usuarios.test.mjs`
 - **Edge Functions nuevas**: el runtime local solo las detecta al arrancar → `npm run db:stop && npm run db:start`.
 - Usuarios del seed (solo local): `admin@vtv.local / admin1234`, `cajero@vtv.local / cajero1234`.
+
+## Frontend (`src/`)
+
+- `main.tsx` → `App.tsx` (QueryClientProvider + RouterProvider + Toaster de sonner) → `rutas.tsx`
+  (array `RouteObject[]` de React Router 8, reutilizado por los tests con `createMemoryRouter`).
+- `paginas/` pantallas · `components/ui/` componentes shadcn (`npx shadcn@latest add <x>`;
+  después verificar que importen `cn` de `@/lib/utils` — el CLI a veces lo cambia a un paquete `cn` externo, que no se usa).
+- `lib/supabase.ts` cliente tipado con `Database` · `lib/formato.ts` moneda ARS y fechas en hora
+  argentina · `lib/query-client.ts` defaults de TanStack Query.
+- `test/render.tsx`: `renderRuta("/ruta")` para tests de páginas. Mockear `@/lib/...` con `vi.mock`.
+- Alias `@/` → `src/`. Versiones: React 19, React Router 8, Vite 8, TS 6, Tailwind 4, ESLint 10 (flat config), Vitest 5.
 
 ## 3. Principios de arquitectura
 
@@ -154,7 +174,7 @@ No se pasa de fase con tests en rojo.
 | Fase | Contenido |
 |---|---|
 | −1 | BD completa, Edge Function, tests pgTAP y de función (**hecha**) |
-| 0 | Scaffold: Vite + React + TS strict, Tailwind, shadcn, router, TanStack Query, cliente Supabase, ESLint + Prettier, Vitest, Playwright, scripts `dev`/`build`/`typecheck`/`lint`/`test`/`test:e2e`; tipos generados (`supabase gen types`); sumar todo a `verificar` |
+| 0 | (**hecha**) Scaffold: Vite + React + TS strict, Tailwind, shadcn, router, TanStack Query, cliente Supabase, ESLint + Prettier, Vitest, Playwright, scripts `dev`/`build`/`typecheck`/`lint`/`test`/`test:e2e`; tipos generados (`supabase gen types`); sumar todo a `verificar` |
 | 1 | Auth, layout por rol, guardas de rutas, pantalla de usuarios |
 | 2 | Admin: cajas, categorías de servicio, servicios |
 | 3 | Admin: certificados, compras, ajustes, kardex, stock |

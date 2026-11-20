@@ -20,7 +20,10 @@ const cors = {
 };
 
 class ErrorHttp extends Error {
-  constructor(public status: number, message: string) {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
     super(message);
   }
 }
@@ -73,7 +76,11 @@ async function perfil(admin: SupabaseClient, id: string) {
   return data;
 }
 
-async function actualizarPerfil(admin: SupabaseClient, id: string, cambios: Record<string, unknown>) {
+async function actualizarPerfil(
+  admin: SupabaseClient,
+  id: string,
+  cambios: Record<string, unknown>,
+) {
   const { error } = await admin.from("perfiles").update(cambios).eq("id", id);
   // Los errores de la BD (ej. último admin) ya vienen en español.
   if (error) throw new ErrorHttp(400, error.message);
@@ -126,7 +133,8 @@ async function manejar(req: Request): Promise<Response> {
       const cambios: Record<string, unknown> = {};
       if (body.nombre !== undefined) cambios.nombre = texto(body.nombre, "El nombre");
       if (body.rol !== undefined) cambios.rol = rol(body.rol);
-      if (Object.keys(cambios).length === 0) throw new ErrorHttp(400, "No hay cambios para guardar");
+      if (Object.keys(cambios).length === 0)
+        throw new ErrorHttp(400, "No hay cambios para guardar");
       if (id === yo && cambios.rol && cambios.rol !== "admin") {
         throw new ErrorHttp(400, "No podés quitarte el rol de administrador a vos mismo");
       }
@@ -141,7 +149,8 @@ async function manejar(req: Request): Promise<Response> {
 
     case "activar": {
       const id = texto(body.id, "El id");
-      if (typeof body.activo !== "boolean") throw new ErrorHttp(400, "Indicá si el usuario queda activo");
+      if (typeof body.activo !== "boolean")
+        throw new ErrorHttp(400, "Indicá si el usuario queda activo");
       if (id === yo && !body.activo) throw new ErrorHttp(400, "No podés desactivarte a vos mismo");
       await perfil(admin, id);
       await actualizarPerfil(admin, id, { activo: body.activo });
@@ -156,7 +165,9 @@ async function manejar(req: Request): Promise<Response> {
     case "cambiar_password": {
       const id = texto(body.id, "El id");
       await perfil(admin, id);
-      const { error } = await admin.auth.admin.updateUserById(id, { password: password(body.password) });
+      const { error } = await admin.auth.admin.updateUserById(id, {
+        password: password(body.password),
+      });
       if (error) throw new ErrorHttp(400, traducirError(error.message));
       return json(200, { usuario: await perfil(admin, id) });
     }
