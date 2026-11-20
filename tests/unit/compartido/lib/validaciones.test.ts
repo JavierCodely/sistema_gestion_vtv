@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   montoComoTexto,
+  parsearEntero,
+  validarNota,
   parsearMonto,
   validarEmail,
   validarNombre,
@@ -70,5 +72,37 @@ describe("parsearMonto", () => {
     expect(montoComoTexto(20000)).toBe("20000");
     expect(montoComoTexto(1500.5)).toBe("1500,50");
     expect(parsearMonto(montoComoTexto(1500.5))).toEqual({ valor: 1500.5 });
+  });
+});
+
+describe("parsearEntero", () => {
+  const opciones = { minimo: 1, maximo: 100000, nombre: "la cantidad" };
+  it.each([
+    ["5", 5],
+    [" 1.000 ", 1000],
+    ["100.000", 100000],
+    ["100000", 100000],
+  ])("acepta %j", (texto, valor) => {
+    expect(parsearEntero(texto, opciones)).toEqual({ valor });
+  });
+  it.each([
+    ["", "Ingresá la cantidad."],
+    ["2,5", "Ingresá un número entero en la cantidad."],
+    ["-1", "Ingresá un número entero en la cantidad."],
+    ["2.5", "Ingresá un número entero en la cantidad."],
+    ["1.0.0", "Ingresá un número entero en la cantidad."],
+    ["10.00", "Ingresá un número entero en la cantidad."],
+    ["0", "Ingresá un valor entre 1 y 100.000 en la cantidad."],
+    ["100001", "Ingresá un valor entre 1 y 100.000 en la cantidad."],
+  ])("rechaza %j", (texto, error) => {
+    expect(parsearEntero(texto, opciones)).toEqual({ error });
+  });
+});
+
+describe("validarNota", () => {
+  it("es obligatoria y con el largo de la BD", () => {
+    expect(validarNota("  ")).toBe("Escribí una nota.");
+    expect(validarNota("x".repeat(501))).toMatch(/500 caracteres/);
+    expect(validarNota("Rotura")).toBeUndefined();
   });
 });

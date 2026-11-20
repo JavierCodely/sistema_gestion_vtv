@@ -4,12 +4,13 @@ import { vi } from "vitest";
  * Doble de `supabase` para tests de componentes: `from(tabla)` devuelve una cadena que acepta
  * cualquier método (select, eq, order, insert, update, single…) y, al esperarla, resuelve con la
  * respuesta configurada para esa tabla y operación. La operación es el primer método de la cadena.
+ * `rpc(nombre, args)` funciona igual con la "tabla" `rpc:<nombre>` y la operación "rpc".
  *
  *   vi.mock("@/compartido/lib/supabase", async () => ({
  *     supabase: (await import("@tests/soporte/supabase-falso")).supabaseFalso,
  *   }));
  */
-type Operacion = "select" | "insert" | "update" | "delete";
+type Operacion = "select" | "insert" | "update" | "delete" | "rpc";
 
 interface Respuesta {
   data: unknown;
@@ -34,8 +35,12 @@ export function reiniciarSupabaseFalso() {
   llamadas.length = 0;
 }
 
-function cadenaPara(tabla: string): unknown {
-  const llamada: Llamada = { tabla, operacion: "", cadena: [] };
+function cadenaPara(tabla: string, inicial?: Llamada["cadena"][number]): unknown {
+  const llamada: Llamada = {
+    tabla,
+    operacion: inicial ? "rpc" : "",
+    cadena: inicial ? [inicial] : [],
+  };
   llamadas.push(llamada);
   const cadena: unknown = new Proxy(
     {},
@@ -61,7 +66,22 @@ function cadenaPara(tabla: string): unknown {
   return cadena;
 }
 
-export const supabaseFalso = { from: vi.fn(cadenaPara) };
+export const supabaseFalso = {
+  from: vi.fn((tabla: string) => cadenaPara(tabla)),
+  rpc: vi.fn((nombre: string, argumentos?: unknown) =>
+    cadenaPara(`rpc:${nombre}`, { metodo: "rpc", argumentos: [argumentos] }),
+  ),
+};
+
+/** Respuesta de `supabase.rpc(nombre)`. */
+export function responderRpc(nombre: string, respuesta: { data?: unknown; error?: unknown }) {
+  responder(`rpc:${nombre}`, "rpc", respuesta);
+}
+
+/** Argumentos con los que se llamó por última vez a `supabase.rpc(nombre)`. */
+export function argumentosRpc(nombre: string): unknown {
+  return argumentosDe(`rpc:${nombre}`, "rpc")?.[0];
+}
 
 /** Argumentos de `metodo` en la última llamada a `tabla` con esa operación (undefined si no hubo). */
 export function argumentosDe(tabla: string, operacion: Operacion, metodo: string = operacion) {

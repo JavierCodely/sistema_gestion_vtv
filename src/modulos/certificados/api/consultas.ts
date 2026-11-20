@@ -1,0 +1,236 @@
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/compartido/lib/supabase";
+import type { Enums, Tablas } from "@/compartido/tipos";
+import { claveEfectivo } from "@/modulos/efectivo/api/consultas";
+import type { Database } from "@/types/database";
+import type { DatosAjuste, DatosCertificado, DatosCompra } from "../lib/validaciones";
+
+type FilaValorizada =
+  Database["public"]["Functions"]["stock_certificados_valorizado"]["Returns"][number];
+
+/** Stock con costos (solo admin). El RPC no conserva la nulabilidad de las columnas. */
+export type CertificadoConStock = Omit<
+  FilaValorizada,
+  "categoria_id" | "servicio_id" | "semaforo"
+> & {
+  categoria_id: number | null;
+  servicio_id: number | null;
+  semaforo: "ok" | "bajo" | "sin_stock";
+};
+
+export type Compra = Pick<
+  Tablas["compras_certificado"]["Row"],
+  | "id"
+  | "creado_en"
+  | "unidades"
+  | "costo_unidad"
+  | "hojas"
+  | "costo_total"
+  | "costo_hoja"
+  | "fuente"
+  | "proveedor"
+> & { certificados: { nombre: string } | null; perfiles: { nombre: string } | null };
+
+export type Movimiento = Pick<
+  Tablas["movimientos_certificado"]["Row"],
+  | "id"
+  | "creado_en"
+  | "tipo"
+  | "hojas"
+  | "costo_unitario"
+  | "costo_total"
+  | "stock_resultante"
+  | "costo_promedio_resultante"
+  | "nota"
+  | "venta_id"
+> & { perfiles: { nombre: string } | null };
+
+export type FuenteFondos = Enums["fuente_fondos"];
+
+export const TAMANO_PAGINA = 50;
+
+export const claves = {
+  stock: ["certificados", "stock"] as const,
+  compras: ["certificados", "compras"] as const,
+  movimientos: (id: number) => ["certificados", "movimientos", id] as const,
+};
+
+/** Columnas que se leen de `certificados` (nunca `*`: los costos no son legibles por columna). */
+const COLUMNAS_CERTIFICADO =
+  "id, nombre, unidad_compra, hojas_por_unidad, alcance, categoria_id, servicio_id, stock_minimo, stock_hojas, activo";
+
+export const MENSAJES_ERROR_CERTIFICADO = {
+  repetido: "Ya existe un certificado con ese nombre.",
+  restricciones: {
+    certificados_un_global_activo:
+      "Ya hay un certificado activo para todos los servicios. Desactivalo antes de activar otro.",
+    certificados_uno_por_categoria:
+      "Esa categoría ya tiene un certificado activo. Desactivalo antes de activar otro.",
+    certificados_uno_por_servicio:
+      "Ese servicio ya tiene un certificado activo. Desactivalo antes de activar otro.",
+  },
+};
+
+function convertirFila(fila: FilaValorizada): CertificadoConStock {
+  const semaforo = fila.semaforo === "bajo" || fila.semaforo === "sin_stock" ? fila.semaforo : "ok";
+  return { ...fila, semaforo };
+}
+
+export function useStockCertificados() {
+  return useQuery({
+    queryKey: claves.stock,
+    queryFn: async (): Promise<CertificadoConStock[]> => {
+      const { data, error } = await supabase.rpc("stock_certificados_valorizado");
+      if (error) throw error;
+      return data.map(convertirFila);
+    },
+  });
+}
+
+async function paginaCompras(desde: number): Promise<Compra[]> {
+  const { data, error } = await supabase
+    .from("compras_certificado")
+    .select(
+      "id, creado_en, unidades, costo_unidad, hojas, costo_total, costo_hoja, fuente, proveedor, certificados(nombre), perfiles(nombre)",
+    )
+    .order("creado_en", { ascending: false })
+    .order("id", { ascending: false })
+    .range(desde, desde + TAMANO_PAGINA - 1);
+  if (error) throw error;
+  return data;
+}
+
+export function useCompras() {
+  return useInfiniteQuery({
+    queryKey: claves.compras,
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => paginaCompras(pageParam),
+    getNextPageParam: (ultima, paginas) =>
+      ultima.length === TAMANO_PAGINA ? paginas.length * TAMANO_PAGINA : undefined,
+  });
+}
+
+/** `id` inválido (≤ 0): la consulta no se ejecuta. */
+export function useCertificado(id: number) {
+  return useQuery({
+    queryKey: [...claves.stock, id],
+    enabled: id > 0,
+    queryFn: async (): Promise<CertificadoConStock | null> => {
+      const { data, error } = await supabase
+        .rpc("stock_certificados_valorizado")
+        .eq("id", id)
+        .maybeSingle();
+      if (error) throw error;
+      return data ? convertirFila(data) : null;
+    },
+  });
+}
+
+async function paginaMovimientos(id: number, desde: number): Promise<Movimiento[]> {
+  const { data, error } = await supabase
+    .from("movimientos_certificado")
+    .select(
+      "id, creado_en, tipo, hojas, costo_unitario, costo_total, stock_resultante, costo_promedio_resultante, nota, venta_id, perfiles(nombre)",
+    )
+    .eq("certificado_id", id)
+    .order("creado_en", { ascending: false })
+    .order("id", { ascending: false })
+    .range(desde, desde + TAMANO_PAGINA - 1);
+  if (error) throw error;
+  return data;
+}
+
+/** `id` inválido (≤ 0): la consulta no se ejecuta. */
+export function useMovimientos(id: number) {
+  return useInfiniteQuery({
+    queryKey: claves.movimientos(id),
+    enabled: id > 0,
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => paginaMovimientos(id, pageParam),
+    getNextPageParam: (ultima, paginas) =>
+      ultima.length === TAMANO_PAGINA ? paginas.length * TAMANO_PAGINA : undefined,
+  });
+}
+
+/** Compras y ajustes cambian stock, kardex, compras y (si fue en efectivo) el saldo. */
+function useInvalidarCertificados() {
+  const queryClient = useQueryClient();
+  return () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["certificados"] }),
+      queryClient.invalidateQueries({ queryKey: claveEfectivo }),
+    ]);
+}
+
+export function useCrearCertificado() {
+  const invalidar = useInvalidarCertificados();
+  return useMutation({
+    mutationFn: async (datos: DatosCertificado) => {
+      const { data, error } = await supabase
+        .from("certificados")
+        .insert(datos)
+        .select(COLUMNAS_CERTIFICADO)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: invalidar,
+  });
+}
+
+export function useActualizarCertificado() {
+  const invalidar = useInvalidarCertificados();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      cambios,
+    }: {
+      id: number;
+      cambios: Partial<DatosCertificado> & Pick<Tablas["certificados"]["Update"], "activo">;
+    }) => {
+      const { data, error } = await supabase
+        .from("certificados")
+        .update(cambios)
+        .eq("id", id)
+        .select(COLUMNAS_CERTIFICADO)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: invalidar,
+  });
+}
+
+export function useRegistrarCompra() {
+  const invalidar = useInvalidarCertificados();
+  return useMutation({
+    mutationFn: async ({ certificadoId, datos }: { certificadoId: number; datos: DatosCompra }) => {
+      const { data, error } = await supabase.rpc("registrar_compra_certificado", {
+        p_certificado_id: certificadoId,
+        p_unidades: datos.unidades,
+        p_costo_unidad: datos.costoUnidad,
+        p_fuente: datos.fuente,
+        ...(datos.proveedor && { p_proveedor: datos.proveedor }),
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: invalidar,
+  });
+}
+
+export function useAjustarStock() {
+  const invalidar = useInvalidarCertificados();
+  return useMutation({
+    mutationFn: async ({ certificadoId, datos }: { certificadoId: number; datos: DatosAjuste }) => {
+      const { data, error } = await supabase.rpc("ajustar_stock_certificado", {
+        p_certificado_id: certificadoId,
+        p_hojas: datos.hojas,
+        p_nota: datos.nota,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: invalidar,
+  });
+}

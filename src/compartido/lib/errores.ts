@@ -11,6 +11,11 @@ export interface MensajesPorCodigo {
   repetido?: string;
   /** 23503: relacionado con otro registro (FK). */
   enUso?: string;
+  /**
+   * Mensaje por nombre de restricción de la BD (índice único, CHECK o FK), para distinguir
+   * errores con el mismo código. Ej.: { certificados_uno_por_servicio: "Ese servicio ya…" }.
+   */
+  restricciones?: Record<string, string>;
 }
 
 export const MENSAJES_ERROR = {
@@ -67,10 +72,28 @@ function porCodigo(codigo: string, mensaje: string | undefined, mensajes: Mensaj
   return MENSAJES_ERROR.inesperado;
 }
 
+/** Postgres nombra la restricción entre comillas: violates unique constraint "x". */
+function porRestriccion(
+  mensaje: string | undefined,
+  detalles: string | undefined,
+  restricciones: Record<string, string> | undefined,
+) {
+  if (!restricciones) return undefined;
+  const textoCompleto = `${mensaje ?? ""} ${detalles ?? ""}`;
+  const nombre = Object.keys(restricciones).find((r) => textoCompleto.includes(`"${r}"`));
+  return nombre === undefined ? undefined : restricciones[nombre];
+}
+
 export function mensajeDeError(error: unknown, mensajes: MensajesPorCodigo = {}): string {
   if (typeof error !== "object" || error === null) return MENSAJES_ERROR.inesperado;
   const codigo = "code" in error ? texto(error.code) : undefined;
   const mensaje = "message" in error ? texto(error.message) : undefined;
+  const detalles = "details" in error ? texto(error.details) : undefined;
+
+  if (codigo?.startsWith("23")) {
+    const especifico = porRestriccion(mensaje, detalles, mensajes.restricciones);
+    if (especifico) return especifico;
+  }
 
   if (codigo) return porCodigo(codigo, mensaje, mensajes);
   if (mensaje && ERROR_DE_RED.test(mensaje)) return MENSAJES_ERROR.conexion;

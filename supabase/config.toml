@@ -378,7 +378,10 @@ enabled = true
 # Supported request policies: `oneshot`, `per_worker`.
 # `per_worker` (default) — enables hot reload during local development.
 # `oneshot` — fallback mode if hot reload causes issues (e.g. in large repos or with symlinks).
-policy = "per_worker"
+# Local: oneshot (un worker nuevo por petición). Con per_worker el worker acumula CPU entre peticiones
+# y, tras los tests de funciones, el runtime lo termina en medio de una petición del E2E.
+# Solo afecta al Supabase local; en la nube no aplica.
+policy = "oneshot"
 # Port to attach the Chrome inspector for debugging edge functions.
 inspector_port = 8083
 # The Deno major version to use.

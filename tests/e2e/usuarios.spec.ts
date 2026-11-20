@@ -1,10 +1,14 @@
 import { expect, test } from "@playwright/test";
-import { ADMIN, ingresar, salir, unico } from "./utilidades";
+import { ADMIN, conFuncion, ingresar, salir, unico } from "./utilidades";
+
+const F = "admin-usuarios";
 
 test("ciclo completo de un usuario: crear, editar, contraseña, desactivar y reactivar", async ({
   page,
   browser,
 }) => {
+  // Seis llamadas a la Edge Function (cada una puede arrancar en frío) más dos sesiones.
+  test.setTimeout(90_000);
   const email = `ana${unico()}@vtv.local`;
   await ingresar(page, ADMIN);
   await page.getByRole("link", { name: "Usuarios" }).click();
@@ -21,7 +25,7 @@ test("ciclo completo de un usuario: crear, editar, contraseña, desactivar y rea
   await nuevo.getByLabel("Nombre").fill("Ana Pérez");
   await nuevo.getByLabel("Email").fill(email);
   await nuevo.getByLabel("Contraseña").fill("clave1234");
-  await nuevo.getByRole("button", { name: "Crear usuario" }).click();
+  await conFuncion(page, F, () => nuevo.getByRole("button", { name: "Crear usuario" }).click());
   await expect(page.getByText("Usuario Ana Pérez creado")).toBeVisible();
   const fila = page.getByTestId(`usuario-${email}`);
   await expect(fila).toContainText("Ana Pérez");
@@ -32,7 +36,7 @@ test("ciclo completo de un usuario: crear, editar, contraseña, desactivar y rea
   await nuevo.getByLabel("Nombre").fill("Otra");
   await nuevo.getByLabel("Email").fill(email);
   await nuevo.getByLabel("Contraseña").fill("clave1234");
-  await nuevo.getByRole("button", { name: "Crear usuario" }).click();
+  await conFuncion(page, F, () => nuevo.getByRole("button", { name: "Crear usuario" }).click());
   await expect(nuevo.getByRole("alert")).toHaveText("Ya existe un usuario con ese email");
   await page.keyboard.press("Escape");
 
@@ -42,7 +46,7 @@ test("ciclo completo de un usuario: crear, editar, contraseña, desactivar y rea
   await editar.getByLabel("Nombre").fill("Ana P.");
   await editar.getByLabel("Rol").click();
   await page.getByRole("option", { name: "Administrador" }).click();
-  await editar.getByRole("button", { name: "Guardar" }).click();
+  await conFuncion(page, F, () => editar.getByRole("button", { name: "Guardar" }).click());
   await expect(fila).toContainText("Ana P.");
   await expect(fila).toContainText("Administrador");
 
@@ -54,11 +58,15 @@ test("ciclo completo de un usuario: crear, editar, contraseña, desactivar y rea
   await clave.getByRole("button", { name: "Cambiar contraseña" }).click();
   await expect(clave.getByText("Las contraseñas no coinciden.")).toBeVisible();
   await clave.getByLabel("Repetir contraseña").fill("nueva12345");
-  await clave.getByRole("button", { name: "Cambiar contraseña" }).click();
+  await conFuncion(page, F, () =>
+    clave.getByRole("button", { name: "Cambiar contraseña" }).click(),
+  );
   await expect(page.getByText("Contraseña de Ana P. actualizada")).toBeVisible();
 
   // Desactivar: no puede ingresar y ve un mensaje claro
-  await fila.getByRole("switch", { name: "Usuario Ana P. activo" }).click();
+  await conFuncion(page, F, () =>
+    fila.getByRole("switch", { name: "Usuario Ana P. activo" }).click(),
+  );
   await expect(page.getByText("Ana P. desactivado")).toBeVisible();
   await expect(fila.getByRole("switch")).not.toBeChecked();
 
@@ -70,7 +78,9 @@ test("ciclo completo de un usuario: crear, editar, contraseña, desactivar y rea
   ).toBeVisible();
 
   // Reactivar: ahora sí ingresa (como admin, por el cambio de rol)
-  await fila.getByRole("switch", { name: "Usuario Ana P. activo" }).click();
+  await conFuncion(page, F, () =>
+    fila.getByRole("switch", { name: "Usuario Ana P. activo" }).click(),
+  );
   await expect(fila.getByRole("switch")).toBeChecked();
   await ingresar(paginaAna, { email, password: "nueva12345" });
   await expect(paginaAna).toHaveURL("/admin");

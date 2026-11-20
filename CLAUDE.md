@@ -115,8 +115,12 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
   responden en español; los errores crudos de Postgres del CRUD directo (23505 repetido, 23503 en uso,
   23514 inválido, permisos) se traducen por código, con mensajes específicos por pantalla
   (ej. `MENSAJES_ERROR_CAJA`).
-- **Montos tipeados**: `parsearMonto` (`compartido/lib/validaciones.ts`) acepta formato argentino
-  (`20.000,50`) y aplica las mismas reglas que `_validar_monto`.
+- **Validaciones genéricas** en `compartido/lib/validaciones.ts`: las primitivas que espejan reglas de
+  la BD y usan varios módulos — `parsearMonto` (formato argentino `20.000,50`, mismas reglas que
+  `_validar_monto`), `parsearEntero` (`1.000` sí, `2.5` no), `validarNombre`, `validarNota` y los
+  `LARGO_MAXIMO_*` de los CHECK. Las reglas propias de un módulo van en `modulos/<m>/lib/`.
+- **Caja de efectivo**: el saldo se lee solo con `useSaldoEfectivo` (`modulos/efectivo/api`); toda
+  mutación que mueva efectivo invalida `claveEfectivo`.
 - Nombres de catálogo: la BD los normaliza (trim + espacios simples) y son únicos sin distinguir mayúsculas.
 - Catálogo con historial (servicios, cajas, certificados, categorías): en la UI se **desactiva**
   (`activo/activa = false`); borrar falla por FK si ya se usó en ventas, turnos o gastos.
@@ -142,6 +146,9 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
 | 15 | `catalogo_nombres` | Nombres de cajas/categorías/servicios normalizados y únicos sin mayúsculas; `registrar_venta` rechaza servicios de categoría desactivada |
 | 16 | `privilegios_funciones` | Quita EXECUTE de PUBLIC por defecto a nivel global (la 13 lo hacía por esquema, que no alcanza) y en todas las funciones existentes |
 | 17 | `costos_solo_admin` | Grants por columna sin costos en `certificados`/`ventas`; `v_stock_certificados` sin costos; `v_resumen_diario` pasa a RPC admin `resumen_diario()`; `stock_certificados_valorizado()` |
+| 18 | `certificados_admin` | Nombres de certificado normalizados y únicos sin mayúsculas; topes (hojas/unidad ≤ 10.000, stock mínimo ≤ 1.000.000); `registrar_compra_certificado` rechaza certificados desactivados y valida el total antes de guardarlo |
+| 19 | `ajuste_stock_tope` | `ajustar_stock_certificado`: máximo 100.000 hojas por movimiento |
+| 20 | `stock_tope` | Tope del stock acumulado por certificado (1.000.000.000 hojas): CHECK + mensaje claro en compra y ajuste |
 
 Reglas que no son obvias leyendo una sola tabla:
 - **Certificado a usar**: el activo más específico (servicio > categoría > global).
@@ -152,6 +159,7 @@ Reglas que no son obvias leyendo una sola tabla:
   y crea automáticamente un gasto en la categoría con `sistema = 'compra_certificados'`
   (Insumos › Compra de certificados), que no se carga a mano ni se anula.
 - **Ajuste de stock**: valuado al costo promedio vigente, no lo modifica, no genera gasto.
+- **Compra de un certificado desactivado**: se rechaza (hay que activarlo antes). El ajuste sí se permite.
 - **Categoría desactivada**: sus servicios no se pueden vender (lo controla `registrar_venta`).
 - **Gastos sin tope**: el cajero puede cargar gastos de cualquier monto (decisión del negocio); la
   garantía es que todo queda registrado (usuario, turno, caja, nota) y solo el admin anula.
@@ -236,7 +244,7 @@ No se pasa de fase con tests en rojo.
 | 0 | (**hecha**) Scaffold: Vite + React + TS strict, Tailwind, shadcn, router, TanStack Query, cliente Supabase, ESLint + Prettier, Vitest, Playwright, scripts `dev`/`build`/`typecheck`/`lint`/`test`/`test:e2e`; tipos generados (`supabase gen types`); sumar todo a `verificar` |
 | 1 | (**hecha**) Auth, layout por rol, guardas de rutas, pantalla de usuarios |
 | 2 | (**hecha**) Admin: cajas, categorías de servicio, servicios |
-| 3 | Admin: certificados, compras, ajustes, kardex, stock |
+| 3 | (**hecha**) Admin: certificados, compras, ajustes, kardex, stock |
 | 4 | Caja: abrir turno, ventas, historial, cerrar turno |
 | 4b | Facturación electrónica ARCA (agente `arca`): configuración en admin, facturar desde el historial, notas de crédito, log avanzado. Ver §9 |
 | 5 | Gastos (admin y caja) + caja de efectivo |

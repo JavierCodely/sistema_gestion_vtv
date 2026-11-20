@@ -62,4 +62,38 @@ describe("mensajeDeError", () => {
     );
     expect(mensajeDeError({ code: "23503", message: "fk" }, opciones)).toBe("La caja ya se usó");
   });
+
+  it("distingue restricciones con el mismo código por su nombre", () => {
+    const opciones = {
+      repetido: "Ya existe un certificado con ese nombre.",
+      restricciones: {
+        certificados_uno_por_servicio: "Ese servicio ya tiene un certificado activo.",
+      },
+    };
+    expect(
+      mensajeDeError(
+        {
+          code: "23505",
+          message: 'duplicate key value violates unique constraint "certificados_uno_por_servicio"',
+        },
+        opciones,
+      ),
+    ).toBe("Ese servicio ya tiene un certificado activo.");
+    expect(
+      mensajeDeError(
+        {
+          code: "23505",
+          message: 'duplicate key value violates unique constraint "certificados_nombre_unico"',
+        },
+        opciones,
+      ),
+    ).toBe("Ya existe un certificado con ese nombre.");
+    // Un nombre que solo es prefijo de otra restricción no coincide.
+    expect(
+      mensajeDeError(
+        { code: "23505", message: 'violates unique constraint "certificados_uno_por_servicio_x"' },
+        opciones,
+      ),
+    ).toBe("Ya existe un certificado con ese nombre.");
+  });
 });

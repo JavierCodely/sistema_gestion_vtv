@@ -43,7 +43,19 @@ export const rutas: RouteObject[] = [
           Component: (await import("@/modulos/servicios/paginas/Servicios")).Servicios,
         }),
       },
-      { path: "certificados", element: <EnConstruccion titulo="Certificados" fase={3} /> },
+      {
+        path: "certificados",
+        lazy: async () => ({
+          Component: (await import("@/modulos/certificados/paginas/Certificados")).Certificados,
+        }),
+      },
+      {
+        path: "certificados/:id",
+        lazy: async () => ({
+          Component: (await import("@/modulos/certificados/paginas/MovimientosCertificado"))
+            .MovimientosCertificado,
+        }),
+      },
       { path: "gastos", element: <EnConstruccion titulo="Gastos" fase={5} /> },
       { path: "efectivo", element: <EnConstruccion titulo="Caja de efectivo" fase={5} /> },
     ],

@@ -41,3 +41,10 @@ export function formatearFechaHora(iso: string | Date): string {
 export function formatearFecha(iso: string | Date): string {
   return soloFecha.format(typeof iso === "string" ? new Date(iso) : iso);
 }
+
+const entero = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
+
+/** 1.250 — cantidades enteras (hojas, unidades). */
+export function formatearNumero(valor: number): string {
+  return entero.format(valor);
+}

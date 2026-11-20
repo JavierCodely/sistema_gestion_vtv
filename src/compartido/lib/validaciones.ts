@@ -1,3 +1,5 @@
+import { formatearNumero } from "@/compartido/lib/formato";
+
 export type Errores<K extends string> = Partial<Record<K, string>>;
 
 export const LARGO_MINIMO_PASSWORD = 8;
@@ -97,4 +99,43 @@ export function parsearMonto(
 /** Monto para precargar un input: 20000 → "20000", 1500.5 → "1500,50". */
 export function montoComoTexto(valor: number): string {
   return Number.isInteger(valor) ? String(valor) : valor.toFixed(2).replace(".", ",");
+}
+
+/** Mismos límites que los CHECK de la BD (migración 014). */
+export const LARGO_MAXIMO_NOTA = 500;
+export const LARGO_MAXIMO_PROVEEDOR = 200;
+
+export type ResultadoEntero =
+  { valor: number; error?: undefined } | { valor?: undefined; error: string };
+
+/**
+ * Entero escrito por el usuario dentro de [minimo, maximo]. Acepta "1000" y "1.000" (miles con
+ * punto bien agrupados); rechaza "2.5" o "1.0.0" en vez de convertirlos en otro número.
+ * `nombre` es lo que se pide, con artículo: "la cantidad", "las hojas por unidad".
+ */
+export function parsearEntero(
+  texto: string,
+  { minimo, maximo, nombre }: { minimo: number; maximo: number; nombre: string },
+): ResultadoEntero {
+  const limpio = texto.trim();
+  if (!limpio) return { error: `Ingresá ${nombre}.` };
+  if (!/^\d+$/.test(limpio) && !MILES_CON_PUNTO.test(limpio)) {
+    return { error: `Ingresá un número entero en ${nombre}.` };
+  }
+  const valor = Number(limpio.replace(/\./g, ""));
+  if (valor < minimo || valor > maximo) {
+    return {
+      error: `Ingresá un valor entre ${formatearNumero(minimo)} y ${formatearNumero(maximo)} en ${nombre}.`,
+    };
+  }
+  return { valor };
+}
+
+/** Nota o motivo obligatorio (mismo límite que la BD). */
+export function validarNota(nota: string): string | undefined {
+  if (!nota.trim()) return "Escribí una nota.";
+  if (nota.trim().length > LARGO_MAXIMO_NOTA) {
+    return `La nota no puede superar los ${LARGO_MAXIMO_NOTA} caracteres.`;
+  }
+  return undefined;
 }

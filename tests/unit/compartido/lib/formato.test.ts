@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { formatearFecha, formatearFechaHora, formatearMoneda } from "@/compartido/lib/formato";
+import {
+  formatearFecha,
+  formatearFechaHora,
+  formatearMoneda,
+  formatearNumero,
+} from "@/compartido/lib/formato";
 
 // Intl usa espacios no separables; normalizamos para comparar.
 const n = (s: string) => s.replace(/\s/g, " ");
@@ -26,5 +31,13 @@ describe("fechas en hora argentina", () => {
   it("convierte UTC a hora de Buenos Aires (UTC-3)", () => {
     expect(n(formatearFechaHora("2026-11-19T02:30:00Z"))).toBe("18/11/2026, 23:30");
     expect(formatearFecha("2026-11-19T02:30:00Z")).toBe("18/11/2026");
+  });
+});
+
+describe("formatearNumero", () => {
+  it("usa punto de miles y no muestra decimales", () => {
+    expect(formatearNumero(1250)).toBe("1.250");
+    expect(formatearNumero(-3)).toBe("-3");
+    expect(formatearNumero(0)).toBe("0");
   });
 });
