@@ -41,6 +41,11 @@ Primera vez: `npm install` → `npx playwright install chromium` → `npm run db
 - Un archivo pgTAP: `npx supabase test db supabase/tests/database/05_ventas.sql`
 - Un test de función: `node --test --test-name-pattern "ciclo completo" supabase/tests/functions/admin-usuarios.test.mjs`
 - **Edge Functions nuevas**: el runtime local solo las detecta al arrancar → `npm run db:stop && npm run db:start`.
+- **Edge runtime local en `oneshot`** (`supabase/config.toml`): un worker por petición. Con `per_worker` el
+  worker acumulaba CPU y el runtime lo cortaba en medio de una petición (E2E de usuarios colgado).
+  Cada llamada puede tardar unos segundos en frío: en los E2E, toda acción que llama a una Edge Function
+  va envuelta en `conFuncion(page, "<función>", accion)` (`tests/e2e/utilidades.ts`), que espera la
+  respuesta antes de las aserciones; los flujos largos llevan `test.setTimeout(90_000)`.
 - Usuarios del seed (solo local): `admin@vtv.local / admin1234`, `cajero@vtv.local / cajero1234`.
 
 ## Arquitectura del frontend
@@ -252,7 +257,7 @@ No se pasa de fase con tests en rojo.
 | 0 | (**hecha**) Scaffold: Vite + React + TS strict, Tailwind, shadcn, router, TanStack Query, cliente Supabase, ESLint + Prettier, Vitest, Playwright, scripts `dev`/`build`/`typecheck`/`lint`/`test`/`test:e2e`; tipos generados (`supabase gen types`); sumar todo a `verificar` |
 | 1 | (**hecha**) Auth, layout por rol, guardas de rutas, pantalla de usuarios |
 | 2 | (**hecha**) Admin: cajas, categorías de servicio, servicios |
-| 3 | (**hecha**) Admin: certificados, compras, ajustes, kardex, stock |
+| 3 | (**hecha**) Admin: certificados, compras (con edición/corrección), ajustes, kardex, stock |
 | 4 | Caja: abrir turno, ventas, historial, cerrar turno |
 | 4b | Facturación electrónica ARCA (agente `arca`): configuración en admin, facturar desde el historial, notas de crédito, log avanzado. Ver §9 |
 | 5 | Gastos (admin y caja) + caja de efectivo |

@@ -12,6 +12,10 @@ fase cumple las reglas de negocio de `CLAUDE.md`.
 2. Listá los comportamientos nuevos o cambiados y buscá su test. Si falta, escribilo:
    - Reglas de BD/RPC/RLS → pgTAP en `supabase/tests/database/` (ver helpers en `_helpers.psql`).
    - Edge Functions → `supabase/tests/functions/*.test.mjs`.
+   - E2E que disparan una Edge Function: envolver la acción en `conFuncion(page, "<función>", …)`
+     (`tests/e2e/utilidades.ts`) en vez de confiar en el timeout de `expect`; flujos largos con
+     `test.setTimeout(90_000)`. Nunca reintentos ni esperas fijas para tapar un fallo intermitente:
+     investigar la causa (trace de Playwright, `docker logs supabase_edge_runtime_vtv`).
    - Lógica de UI → Vitest en `tests/unit/`. Flujos de usuario → Playwright en `tests/e2e/`.
    - Nunca dejes tests dentro de `src/`.
 3. Priorizá: dinero (efectivo, totales, costos), stock de certificados, permisos por rol,

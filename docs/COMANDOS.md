@@ -59,6 +59,11 @@ Si agregás una **Edge Function nueva**, el runtime local solo la detecta al rei
 npm run db:stop && npm run db:start
 ```
 
+El runtime local de Edge Functions corre en modo `oneshot` (`supabase/config.toml`): cada llamada
+arranca un worker nuevo, así que la primera respuesta puede tardar unos segundos. Es solo local; en
+la nube no aplica. Si después de muchas horas encendido las funciones dejan de responder, reiniciá
+con el mismo `db:stop && db:start`.
+
 ## Parte C — Tests y calidad
 
 ```bash
@@ -88,6 +93,10 @@ npx playwright test tests/e2e/auth.spec.ts
 npx supabase test db supabase/tests/database/05_ventas.sql
 node --test --test-name-pattern "ciclo completo" supabase/tests/functions/admin-usuarios.test.mjs
 ```
+
+> En los E2E, las acciones que llaman a una Edge Function se envuelven en `conFuncion(...)`
+> (`tests/e2e/utilidades.ts`): espera la respuesta de la función antes de seguir, en vez de
+> depender de un tiempo fijo.
 
 > Los E2E levantan su propio servidor en el puerto **5174** y toman la URL y la clave de
 > `supabase status`, sin importar los `.env`: aunque tengas `npm run dev:remoto` abierto, nunca
@@ -160,6 +169,16 @@ npx supabase functions deploy admin-usuarios
 ```
 
 > En una base ya instalada **nunca** se vuelve a correr `01_esquema_completo.sql`.
+
+**Estado de la nube (`gestion_vtv`) al 2026-11-20:** tiene aplicadas hasta la migración `014`.
+Faltan `015` a `021` (nombres de catálogo, privilegios de funciones, costos solo admin,
+certificados, topes de stock y edición de compras) y volver a publicar `admin-usuarios`:
+
+```bash
+npx supabase migration list --linked     # confirmar que faltan 20261120000015 … 20261120000021
+npx supabase db push                     # aplicarlas
+npx supabase functions deploy admin-usuarios
+```
 
 ## Parte F — Volver a probar la instalación desde cero (solo proyecto de prueba)
 
