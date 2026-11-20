@@ -225,7 +225,8 @@ Alertas en tiempo real: Realtime `postgres_changes` sobre `public.alertas` (RLS:
 ## 8. Agentes (`.claude/agents/`)
 
 `db-supabase` (migraciones, RPC, pgTAP), `frontend-react` (UI), `qa-tester` (escribe y corre
-tests, reporta), `revisor-codigo` (revisión antes de commitear), `ciberseguridad` (auditoría de seguridad). Flujo por fase:
+tests, reporta), `revisor-codigo` (revisión antes de commitear), `ciberseguridad` (auditoría de seguridad),
+`arca` (facturación electrónica ARCA: WSAA/WSFEv1, configuración fiscal, notas de crédito). Flujo por fase:
 agente de implementación → `qa-tester` → `revisor-codigo` → commit con todo en verde.
 No se pasa de fase con tests en rojo.
 
@@ -237,9 +238,37 @@ No se pasa de fase con tests en rojo.
 | 2 | (**hecha**) Admin: cajas, categorías de servicio, servicios |
 | 3 | Admin: certificados, compras, ajustes, kardex, stock |
 | 4 | Caja: abrir turno, ventas, historial, cerrar turno |
+| 4b | Facturación electrónica ARCA (agente `arca`): configuración en admin, facturar desde el historial, notas de crédito, log avanzado. Ver §9 |
 | 5 | Gastos (admin y caja) + caja de efectivo |
 | 6 | Dashboard, reportes, alertas en tiempo real |
 | 7 | Pulido: responsive, accesibilidad, estados vacíos/errores, rendimiento; E2E completo |
 
 Calidad exigida: TypeScript strict sin `any`, ESLint sin warnings, tests nuevos (unit + E2E del
 flujo) en cada fase, ejecutados y en verde. Si un requisito es ambiguo, preguntar antes de inventar.
+
+## 9. Facturación electrónica ARCA (decisiones del negocio, 2026-11-20)
+
+Se implementa en la fase 4b, después de la caja (necesita el historial de ventas real).
+
+- **Emisor Responsable Inscripto**: Factura **B** a consumidor final / exento / monotributista y
+  Factura **A** a responsable inscripto (tipos y condiciones confirmados contra el WS de ARCA).
+- **Precios con IVA 21% incluido**: la BD calcula neto = precio / 1,21 e IVA discriminado; el total
+  facturado es el precio de la venta. Nada de esto se calcula en el frontend.
+- **Se factura después, desde el historial** (no al vender). Pueden facturar el **cajero** (ventas de
+  su turno) y el **admin** (cualquier venta). Reintentos y log avanzado: admin.
+- **Cliente**: Consumidor Final por defecto; opcionalmente CUIT o DNI + nombre/razón social y
+  condición frente al IVA (obligatorio para Factura A y para montos sobre el tope vigente de ARCA).
+- Al autorizarse, **la venta queda vinculada a su comprobante** con todos los datos: tipo, punto de
+  venta, número, CAE y vencimiento, fecha, cliente, neto, IVA, total, QR.
+- **Errores**: la factura queda **pendiente** (o rechazada, con el motivo de ARCA) y se puede reintentar.
+  Un **log avanzado** (solo admin) guarda cada intento: request/response SOAP saneados (sin token ni
+  clave), códigos `Errors`/`Observaciones`, tiempos y quién lo hizo. Nunca dos CAE para una venta:
+  ante error de red se reconcilia con `FECompConsultar` antes de reintentar.
+- **Anular una venta facturada** emite **nota de crédito automática** asociada a la factura (A o B
+  según el original). Si ARCA falla, la NC queda pendiente con el mismo esquema de reintento y log.
+- **Configuración ARCA (solo admin)**: CUIT, razón social, domicilio, inicio de actividades, IIBB,
+  punto de venta, ambiente (homologación/producción) y **certificado .crt + clave .key subidos desde la
+  pantalla**, guardados cifrados en Supabase Vault y nunca devueltos al navegador (solo CUIT del
+  certificado y vencimiento). Botón "Probar conexión".
+- Representación impresa del comprobante con **QR** (RG 4892).
+
