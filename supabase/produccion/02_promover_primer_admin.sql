@@ -13,7 +13,7 @@
 
 do $$
 declare
-  v_email  text := 'CAMBIAR@tu-dominio.com';   -- <<< email del primer admin
+  v_email  text := 'admin@test.com';   -- <<< email del primer admin
   v_nombre text := 'Administrador';             -- <<< nombre que se mostrará en la app
   v_id     uuid;
 begin
