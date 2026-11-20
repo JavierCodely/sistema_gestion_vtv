@@ -160,6 +160,7 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
 | 20 | `stock_tope` | Tope del stock acumulado por certificado (1.000.000.000 hojas): CHECK + mensaje claro en compra y ajuste |
 | 21 | `corregir_compra` | Editar compras: `corregir_compra_certificado()` (anula la original revirtiendo hojas, costo promedio, gasto y efectivo, y registra la corregida), columnas `anulada*`/`reemplazada_por`, tipo de kardex `anulacion_compra`, vista `v_compras_certificado` (con `editable`) |
 | 22 | `cajas_para_turno` | `cajas_para_turno()`: cajas activas con `ocupada`/`ocupada_por` (la RLS de `turnos` no deja ver los ajenos) |
+| 23 | `facturacion_arca` | Configuración ARCA (fila única; certificado y clave en Vault), `arca_condiciones_iva` (de `FEParamGetCondicionIvaReceptor`), `comprobantes` (factura/NC, estados, numeración serializada), log `arca_intentos`, tickets WSAA, `preparar_factura()`, `puede_emitir_comprobante()`, internas `_arca_*` (solo service role), `anular_venta` genera la NC, vista `v_comprobantes` (con `qr_url`) |
 
 Reglas que no son obvias leyendo una sola tabla:
 - **Certificado a usar**: el activo más específico (servicio > categoría > global).

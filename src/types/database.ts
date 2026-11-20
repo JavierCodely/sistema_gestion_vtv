@@ -61,6 +61,86 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"arca_condiciones_iva": {
+                  Row: {
+                    "actualizado_en": string,"clases": (string)[],"descripcion": string,"id": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "actualizado_en"?: string,"clases": (string)[],"descripcion": string,"id": number
+                  }
+                  Update: {
+                    "actualizado_en"?: string,"clases"?: (string)[],"descripcion"?: string,"id"?: number
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"arca_configuracion": {
+                  Row: {
+                    "actualizado_en": string,"actualizado_por": string | null,"ambiente": Database["public"]['Enums']["ambiente_arca"],"certificado_cargado_en": string | null,"certificado_cuit": string | null,"certificado_secreto_id": string | null,"certificado_sujeto": string | null,"certificado_vence": string | null,"clave_secreto_id": string | null,"condiciones_actualizadas_en": string | null,"cuit": string | null,"domicilio": string | null,"id": boolean,"iibb": string | null,"inicio_actividades": string | null,"punto_venta": number | null,"razon_social": string | null,"tope_identificacion": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "actualizado_en"?: string,"actualizado_por"?: string | null,"ambiente"?: Database["public"]['Enums']["ambiente_arca"],"certificado_cargado_en"?: string | null,"certificado_cuit"?: string | null,"certificado_secreto_id"?: string | null,"certificado_sujeto"?: string | null,"certificado_vence"?: string | null,"clave_secreto_id"?: string | null,"condiciones_actualizadas_en"?: string | null,"cuit"?: string | null,"domicilio"?: string | null,"id"?: boolean,"iibb"?: string | null,"inicio_actividades"?: string | null,"punto_venta"?: number | null,"razon_social"?: string | null,"tope_identificacion"?: number
+                  }
+                  Update: {
+                    "actualizado_en"?: string,"actualizado_por"?: string | null,"ambiente"?: Database["public"]['Enums']["ambiente_arca"],"certificado_cargado_en"?: string | null,"certificado_cuit"?: string | null,"certificado_secreto_id"?: string | null,"certificado_sujeto"?: string | null,"certificado_vence"?: string | null,"clave_secreto_id"?: string | null,"condiciones_actualizadas_en"?: string | null,"cuit"?: string | null,"domicilio"?: string | null,"id"?: boolean,"iibb"?: string | null,"inicio_actividades"?: string | null,"punto_venta"?: number | null,"razon_social"?: string | null,"tope_identificacion"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "arca_configuracion_actualizado_por_fkey"
+      columns: ["actualizado_por"]
+isOneToOne: false
+      referencedRelation: "perfiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"arca_intentos": {
+                  Row: {
+                    "ambiente": Database["public"]['Enums']["ambiente_arca"],"comprobante_id": number | null,"creado_en": string,"duracion_ms": number,"errores": NonNullable<Json>,"exito": boolean,"id": number,"mensaje": string | null,"observaciones": NonNullable<Json>,"operacion": string,"respuesta": string | null,"solicitud": string | null,"usuario_id": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "ambiente": Database["public"]['Enums']["ambiente_arca"],"comprobante_id"?: number | null,"creado_en"?: string,"duracion_ms": number,"errores"?: NonNullable<Json>,"exito": boolean,"id"?: never,"mensaje"?: string | null,"observaciones"?: NonNullable<Json>,"operacion": string,"respuesta"?: string | null,"solicitud"?: string | null,"usuario_id"?: string | null
+                  }
+                  Update: {
+                    "ambiente"?: Database["public"]['Enums']["ambiente_arca"],"comprobante_id"?: number | null,"creado_en"?: string,"duracion_ms"?: number,"errores"?: NonNullable<Json>,"exito"?: boolean,"id"?: never,"mensaje"?: string | null,"observaciones"?: NonNullable<Json>,"operacion"?: string,"respuesta"?: string | null,"solicitud"?: string | null,"usuario_id"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "arca_intentos_comprobante_id_fkey"
+      columns: ["comprobante_id"]
+isOneToOne: false
+      referencedRelation: "comprobantes"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "arca_intentos_comprobante_id_fkey"
+      columns: ["comprobante_id"]
+isOneToOne: false
+      referencedRelation: "v_comprobantes"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "arca_intentos_usuario_id_fkey"
+      columns: ["usuario_id"]
+isOneToOne: false
+      referencedRelation: "perfiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"arca_tokens": {
+                  Row: {
+                    "ambiente": Database["public"]['Enums']["ambiente_arca"],"cuit": string,"expira": string,"firma": string,"token": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "ambiente": Database["public"]['Enums']["ambiente_arca"],"cuit": string,"expira": string,"firma": string,"token": string
+                  }
+                  Update: {
+                    "ambiente"?: Database["public"]['Enums']["ambiente_arca"],"cuit"?: string,"expira"?: string,"firma"?: string,"token"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"caja_efectivo": {
                   Row: {
                     "actualizado_en": string,"id": number,"saldo": number
@@ -214,6 +294,50 @@ isOneToOne: false
       columns: ["usuario_id"]
 isOneToOne: false
       referencedRelation: "perfiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"comprobantes": {
+                  Row: {
+                    "actualizado_en": string,"ambiente": Database["public"]['Enums']["ambiente_arca"],"asociado_id": number | null,"autorizado_en": string | null,"cae": string | null,"cae_vencimiento": string | null,"cbte_tipo": number,"clase": string,"condicion_iva_receptor_id": number,"creado_en": string,"creado_por": string,"cuit_emisor": string,"doc_nro": number,"doc_tipo": number,"estado": Database["public"]['Enums']["estado_comprobante"],"fecha": string | null,"fecha_servicio": string,"id": number,"intentos": number,"iva": number,"mensaje": string | null,"neto": number,"numero": number | null,"numero_intentado": number | null,"procesando_desde": string | null,"punto_venta": number,"receptor_nombre": string | null,"tipo": Database["public"]['Enums']["tipo_comprobante"],"total": number,"venta_id": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "actualizado_en"?: string,"ambiente": Database["public"]['Enums']["ambiente_arca"],"asociado_id"?: number | null,"autorizado_en"?: string | null,"cae"?: string | null,"cae_vencimiento"?: string | null,"cbte_tipo": number,"clase": string,"condicion_iva_receptor_id": number,"creado_en"?: string,"creado_por": string,"cuit_emisor": string,"doc_nro": number,"doc_tipo": number,"estado"?: Database["public"]['Enums']["estado_comprobante"],"fecha"?: string | null,"fecha_servicio": string,"id"?: never,"intentos"?: number,"iva": number,"mensaje"?: string | null,"neto": number,"numero"?: number | null,"numero_intentado"?: number | null,"procesando_desde"?: string | null,"punto_venta": number,"receptor_nombre"?: string | null,"tipo": Database["public"]['Enums']["tipo_comprobante"],"total": number,"venta_id": number
+                  }
+                  Update: {
+                    "actualizado_en"?: string,"ambiente"?: Database["public"]['Enums']["ambiente_arca"],"asociado_id"?: number | null,"autorizado_en"?: string | null,"cae"?: string | null,"cae_vencimiento"?: string | null,"cbte_tipo"?: number,"clase"?: string,"condicion_iva_receptor_id"?: number,"creado_en"?: string,"creado_por"?: string,"cuit_emisor"?: string,"doc_nro"?: number,"doc_tipo"?: number,"estado"?: Database["public"]['Enums']["estado_comprobante"],"fecha"?: string | null,"fecha_servicio"?: string,"id"?: never,"intentos"?: number,"iva"?: number,"mensaje"?: string | null,"neto"?: number,"numero"?: number | null,"numero_intentado"?: number | null,"procesando_desde"?: string | null,"punto_venta"?: number,"receptor_nombre"?: string | null,"tipo"?: Database["public"]['Enums']["tipo_comprobante"],"total"?: number,"venta_id"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "comprobantes_asociado_id_fkey"
+      columns: ["asociado_id"]
+isOneToOne: false
+      referencedRelation: "comprobantes"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "comprobantes_asociado_id_fkey"
+      columns: ["asociado_id"]
+isOneToOne: false
+      referencedRelation: "v_comprobantes"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "comprobantes_condicion_iva_receptor_id_fkey"
+      columns: ["condicion_iva_receptor_id"]
+isOneToOne: false
+      referencedRelation: "arca_condiciones_iva"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "comprobantes_creado_por_fkey"
+      columns: ["creado_por"]
+isOneToOne: false
+      referencedRelation: "perfiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "comprobantes_venta_id_fkey"
+      columns: ["venta_id"]
+isOneToOne: false
+      referencedRelation: "ventas"
       referencedColumns: ["id"]
     }
                   ]
@@ -536,6 +660,50 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"v_comprobantes": {
+                  Row: {
+                    "a_reconciliar": boolean | null,"ambiente": Database["public"]['Enums']["ambiente_arca"],"asociado_cbte_tipo": number | null,"asociado_fecha": string | null,"asociado_id": number | null,"asociado_numero": number | null,"asociado_punto_venta": number | null,"autorizado_en": string | null,"cae": string | null,"cae_vencimiento": string | null,"cbte_tipo": number,"clase": string,"condicion_iva_receptor": string,"condicion_iva_receptor_id": number,"creado_en": string,"cuit_emisor": string,"doc_nro": number,"doc_tipo": number,"estado": Database["public"]['Enums']["estado_comprobante"],"fecha": string | null,"fecha_servicio": string,"id": number,"intentos": number,"iva": number,"mensaje": string | null,"neto": number,"numero": number | null,"patente": string | null,"punto_venta": number,"qr_url": string | null,"receptor_nombre": string | null,"servicio_nombre": string,"tipo": Database["public"]['Enums']["tipo_comprobante"],"total": number,"turno_id": number,"venta_id": number
+                  }
+                  ComputedFields: never
+                  Relationships: [
+                    {
+      foreignKeyName: "comprobantes_asociado_id_fkey"
+      columns: ["asociado_id"]
+isOneToOne: false
+      referencedRelation: "comprobantes"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "comprobantes_asociado_id_fkey"
+      columns: ["asociado_id"]
+isOneToOne: false
+      referencedRelation: "v_comprobantes"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "comprobantes_condicion_iva_receptor_id_fkey"
+      columns: ["condicion_iva_receptor_id"]
+isOneToOne: false
+      referencedRelation: "arca_condiciones_iva"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "comprobantes_venta_id_fkey"
+      columns: ["venta_id"]
+isOneToOne: false
+      referencedRelation: "ventas"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "ventas_turno_id_fkey"
+      columns: ["turno_id"]
+isOneToOne: false
+      referencedRelation: "turnos"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "ventas_turno_id_fkey"
+      columns: ["turno_id"]
+isOneToOne: false
+      referencedRelation: "v_turnos"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"v_gastos_por_categoria": {
                   Row: {
                     "cantidad": number | null,"categoria": string,"categoria_id": number,"fecha": string | null,"fuente": Database["public"]['Enums']["fuente_fondos"],"rubro": string,"rubro_id": number,"total": number | null
@@ -595,7 +763,321 @@ isOneToOne: false
                 }
           }
           Functions: {
-            "_exigir_admin":
+            "_arca_actualizar_condiciones":
+{ Args: { "p_condiciones": Json }; Returns: number
+                           },
+"_arca_autorizar":
+{ Args: { "p_cae": string,"p_cae_vencimiento": string,"p_comprobante_id": number,"p_fecha": string,"p_mensaje"?: string,"p_numero": number }; Returns: {
+              "actualizado_en": string,
+"ambiente": Database["public"]['Enums']["ambiente_arca"],
+"asociado_id": number | null,
+"autorizado_en": string | null,
+"cae": string | null,
+"cae_vencimiento": string | null,
+"cbte_tipo": number,
+"clase": string,
+"condicion_iva_receptor_id": number,
+"creado_en": string,
+"creado_por": string,
+"cuit_emisor": string,
+"doc_nro": number,
+"doc_tipo": number,
+"estado": Database["public"]['Enums']["estado_comprobante"],
+"fecha": string | null,
+"fecha_servicio": string,
+"id": number,
+"intentos": number,
+"iva": number,
+"mensaje": string | null,
+"neto": number,
+"numero": number | null,
+"numero_intentado": number | null,
+"procesando_desde": string | null,
+"punto_venta": number,
+"receptor_nombre": string | null,
+"tipo": Database["public"]['Enums']["tipo_comprobante"],
+"total": number,
+"venta_id": number
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "comprobantes"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"_arca_config_lista":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "actualizado_en": string,
+"actualizado_por": string | null,
+"ambiente": Database["public"]['Enums']["ambiente_arca"],
+"certificado_cargado_en": string | null,
+"certificado_cuit": string | null,
+"certificado_secreto_id": string | null,
+"certificado_sujeto": string | null,
+"certificado_vence": string | null,
+"clave_secreto_id": string | null,
+"condiciones_actualizadas_en": string | null,
+"cuit": string | null,
+"domicilio": string | null,
+"id": boolean,
+"iibb": string | null,
+"inicio_actividades": string | null,
+"punto_venta": number | null,
+"razon_social": string | null,
+"tope_identificacion": number
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "arca_configuracion"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"_arca_credenciales":
+{ Args: Record<PropertyKey, never>; Returns: Record<string, unknown>
+                           },
+"_arca_descartar_numero":
+{ Args: { "p_comprobante_id": number }; Returns: {
+              "actualizado_en": string,
+"ambiente": Database["public"]['Enums']["ambiente_arca"],
+"asociado_id": number | null,
+"autorizado_en": string | null,
+"cae": string | null,
+"cae_vencimiento": string | null,
+"cbte_tipo": number,
+"clase": string,
+"condicion_iva_receptor_id": number,
+"creado_en": string,
+"creado_por": string,
+"cuit_emisor": string,
+"doc_nro": number,
+"doc_tipo": number,
+"estado": Database["public"]['Enums']["estado_comprobante"],
+"fecha": string | null,
+"fecha_servicio": string,
+"id": number,
+"intentos": number,
+"iva": number,
+"mensaje": string | null,
+"neto": number,
+"numero": number | null,
+"numero_intentado": number | null,
+"procesando_desde": string | null,
+"punto_venta": number,
+"receptor_nombre": string | null,
+"tipo": Database["public"]['Enums']["tipo_comprobante"],
+"total": number,
+"venta_id": number
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "comprobantes"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"_arca_guardar_credenciales":
+{ Args: { "p_certificado": string,"p_clave": string,"p_cuit": string,"p_sujeto": string,"p_usuario_id": string,"p_vence": string }; Returns: {
+              "actualizado_en": string,
+"actualizado_por": string | null,
+"ambiente": Database["public"]['Enums']["ambiente_arca"],
+"certificado_cargado_en": string | null,
+"certificado_cuit": string | null,
+"certificado_secreto_id": string | null,
+"certificado_sujeto": string | null,
+"certificado_vence": string | null,
+"clave_secreto_id": string | null,
+"condiciones_actualizadas_en": string | null,
+"cuit": string | null,
+"domicilio": string | null,
+"id": boolean,
+"iibb": string | null,
+"inicio_actividades": string | null,
+"punto_venta": number | null,
+"razon_social": string | null,
+"tope_identificacion": number
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "arca_configuracion"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"_arca_guardar_token":
+{ Args: { "p_ambiente": Database["public"]['Enums']["ambiente_arca"],"p_cuit": string,"p_expira": string,"p_firma": string,"p_token": string }; Returns: undefined
+                           },
+"_arca_liberar":
+{ Args: { "p_comprobante_id": number,"p_mensaje": string }; Returns: {
+              "actualizado_en": string,
+"ambiente": Database["public"]['Enums']["ambiente_arca"],
+"asociado_id": number | null,
+"autorizado_en": string | null,
+"cae": string | null,
+"cae_vencimiento": string | null,
+"cbte_tipo": number,
+"clase": string,
+"condicion_iva_receptor_id": number,
+"creado_en": string,
+"creado_por": string,
+"cuit_emisor": string,
+"doc_nro": number,
+"doc_tipo": number,
+"estado": Database["public"]['Enums']["estado_comprobante"],
+"fecha": string | null,
+"fecha_servicio": string,
+"id": number,
+"intentos": number,
+"iva": number,
+"mensaje": string | null,
+"neto": number,
+"numero": number | null,
+"numero_intentado": number | null,
+"procesando_desde": string | null,
+"punto_venta": number,
+"receptor_nombre": string | null,
+"tipo": Database["public"]['Enums']["tipo_comprobante"],
+"total": number,
+"venta_id": number
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "comprobantes"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"_arca_rechazar":
+{ Args: { "p_comprobante_id": number,"p_mensaje": string }; Returns: {
+              "actualizado_en": string,
+"ambiente": Database["public"]['Enums']["ambiente_arca"],
+"asociado_id": number | null,
+"autorizado_en": string | null,
+"cae": string | null,
+"cae_vencimiento": string | null,
+"cbte_tipo": number,
+"clase": string,
+"condicion_iva_receptor_id": number,
+"creado_en": string,
+"creado_por": string,
+"cuit_emisor": string,
+"doc_nro": number,
+"doc_tipo": number,
+"estado": Database["public"]['Enums']["estado_comprobante"],
+"fecha": string | null,
+"fecha_servicio": string,
+"id": number,
+"intentos": number,
+"iva": number,
+"mensaje": string | null,
+"neto": number,
+"numero": number | null,
+"numero_intentado": number | null,
+"procesando_desde": string | null,
+"punto_venta": number,
+"receptor_nombre": string | null,
+"tipo": Database["public"]['Enums']["tipo_comprobante"],
+"total": number,
+"venta_id": number
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "comprobantes"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"_arca_registrar_intento":
+{ Args: { "p_ambiente": Database["public"]['Enums']["ambiente_arca"],"p_comprobante_id": number,"p_duracion_ms": number,"p_errores": Json,"p_exito": boolean,"p_mensaje": string,"p_observaciones": Json,"p_operacion": string,"p_respuesta": string,"p_solicitud": string,"p_usuario_id": string }; Returns: undefined
+                           },
+"_arca_registrar_numero":
+{ Args: { "p_comprobante_id": number,"p_fecha": string,"p_numero": number }; Returns: {
+              "actualizado_en": string,
+"ambiente": Database["public"]['Enums']["ambiente_arca"],
+"asociado_id": number | null,
+"autorizado_en": string | null,
+"cae": string | null,
+"cae_vencimiento": string | null,
+"cbte_tipo": number,
+"clase": string,
+"condicion_iva_receptor_id": number,
+"creado_en": string,
+"creado_por": string,
+"cuit_emisor": string,
+"doc_nro": number,
+"doc_tipo": number,
+"estado": Database["public"]['Enums']["estado_comprobante"],
+"fecha": string | null,
+"fecha_servicio": string,
+"id": number,
+"intentos": number,
+"iva": number,
+"mensaje": string | null,
+"neto": number,
+"numero": number | null,
+"numero_intentado": number | null,
+"procesando_desde": string | null,
+"punto_venta": number,
+"receptor_nombre": string | null,
+"tipo": Database["public"]['Enums']["tipo_comprobante"],
+"total": number,
+"venta_id": number
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "comprobantes"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"_arca_token":
+{ Args: { "p_ambiente": Database["public"]['Enums']["ambiente_arca"],"p_cuit": string }; Returns: {
+              "ambiente": Database["public"]['Enums']["ambiente_arca"],
+"cuit": string,
+"expira": string,
+"firma": string,
+"token": string
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "arca_tokens"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"_arca_tomar":
+{ Args: { "p_comprobante_id": number }; Returns: {
+              "actualizado_en": string,
+"ambiente": Database["public"]['Enums']["ambiente_arca"],
+"asociado_id": number | null,
+"autorizado_en": string | null,
+"cae": string | null,
+"cae_vencimiento": string | null,
+"cbte_tipo": number,
+"clase": string,
+"condicion_iva_receptor_id": number,
+"creado_en": string,
+"creado_por": string,
+"cuit_emisor": string,
+"doc_nro": number,
+"doc_tipo": number,
+"estado": Database["public"]['Enums']["estado_comprobante"],
+"fecha": string | null,
+"fecha_servicio": string,
+"id": number,
+"intentos": number,
+"iva": number,
+"mensaje": string | null,
+"neto": number,
+"numero": number | null,
+"numero_intentado": number | null,
+"procesando_desde": string | null,
+"punto_venta": number,
+"receptor_nombre": string | null,
+"tipo": Database["public"]['Enums']["tipo_comprobante"],
+"total": number,
+"venta_id": number
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "comprobantes"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"_exigir_admin":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
 "_exigir_usuario":
@@ -625,6 +1107,9 @@ isOneToOne: false
       } },
 "_mover_efectivo":
 { Args: { "p_gasto_id"?: number,"p_monto": number,"p_nota"?: string,"p_tipo": Database["public"]['Enums']["tipo_mov_efectivo"],"p_turno_id"?: number,"p_venta_id"?: number }; Returns: number
+                           },
+"_neto_iva":
+{ Args: { "p_total": number }; Returns: Record<string, unknown>
                            },
 "_registrar_compra":
 { Args: { "p_cert": Omit<Database["public"]['Tables']["certificados"]['Row'], Database["public"]['Tables']["certificados"]['ComputedFields']>,"p_costo_unidad": number,"p_fuente": Database["public"]['Enums']["fuente_fondos"],"p_hojas_por_unidad": number,"p_proveedor": string,"p_unidades": number }; Returns: {
@@ -803,6 +1288,9 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"cuit_valido":
+{ Args: { "p_cuit": string }; Returns: boolean
+                           },
 "es_admin":
 { Args: Record<PropertyKey, never>; Returns: boolean
                            },
@@ -828,6 +1316,84 @@ isOneToOne: false
                           SetofOptions: {
         from: "*"
         to: "movimientos_efectivo"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"preparar_factura":
+{ Args: { "p_condicion_iva_id": number,"p_doc_nro": number,"p_doc_tipo": number,"p_receptor_nombre"?: string,"p_venta_id": number }; Returns: {
+              "actualizado_en": string,
+"ambiente": Database["public"]['Enums']["ambiente_arca"],
+"asociado_id": number | null,
+"autorizado_en": string | null,
+"cae": string | null,
+"cae_vencimiento": string | null,
+"cbte_tipo": number,
+"clase": string,
+"condicion_iva_receptor_id": number,
+"creado_en": string,
+"creado_por": string,
+"cuit_emisor": string,
+"doc_nro": number,
+"doc_tipo": number,
+"estado": Database["public"]['Enums']["estado_comprobante"],
+"fecha": string | null,
+"fecha_servicio": string,
+"id": number,
+"intentos": number,
+"iva": number,
+"mensaje": string | null,
+"neto": number,
+"numero": number | null,
+"numero_intentado": number | null,
+"procesando_desde": string | null,
+"punto_venta": number,
+"receptor_nombre": string | null,
+"tipo": Database["public"]['Enums']["tipo_comprobante"],
+"total": number,
+"venta_id": number
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "comprobantes"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"puede_emitir_comprobante":
+{ Args: { "p_comprobante_id": number }; Returns: {
+              "actualizado_en": string,
+"ambiente": Database["public"]['Enums']["ambiente_arca"],
+"asociado_id": number | null,
+"autorizado_en": string | null,
+"cae": string | null,
+"cae_vencimiento": string | null,
+"cbte_tipo": number,
+"clase": string,
+"condicion_iva_receptor_id": number,
+"creado_en": string,
+"creado_por": string,
+"cuit_emisor": string,
+"doc_nro": number,
+"doc_tipo": number,
+"estado": Database["public"]['Enums']["estado_comprobante"],
+"fecha": string | null,
+"fecha_servicio": string,
+"id": number,
+"intentos": number,
+"iva": number,
+"mensaje": string | null,
+"neto": number,
+"numero": number | null,
+"numero_intentado": number | null,
+"procesando_desde": string | null,
+"punto_venta": number,
+"receptor_nombre": string | null,
+"tipo": Database["public"]['Enums']["tipo_comprobante"],
+"total": number,
+"venta_id": number
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "comprobantes"
         isOneToOne: true
         isSetofReturn: false
       } },
@@ -921,7 +1487,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "alcance_certificado": "global"|"categoria"|"servicio","fuente_fondos": "efectivo"|"transferencia","medio_pago": "efectivo"|"transferencia"|"tarjeta","rol_usuario": "admin"|"cajero","tipo_alerta": "venta_sin_stock"|"stock_bajo","tipo_mov_certificado": "compra"|"venta"|"ajuste"|"anulacion_compra","tipo_mov_efectivo": "fondo_inicial"|"ingreso"|"retiro"|"venta"|"anulacion_venta"|"gasto"|"anulacion_gasto","unidad_compra": "caja"|"libreta"|"unidad"
+            "alcance_certificado": "global"|"categoria"|"servicio","ambiente_arca": "homologacion"|"produccion","estado_comprobante": "pendiente"|"procesando"|"autorizado"|"rechazado"|"cancelado","fuente_fondos": "efectivo"|"transferencia","medio_pago": "efectivo"|"transferencia"|"tarjeta","rol_usuario": "admin"|"cajero","tipo_alerta": "venta_sin_stock"|"stock_bajo","tipo_comprobante": "factura"|"nota_credito","tipo_mov_certificado": "compra"|"venta"|"ajuste"|"anulacion_compra","tipo_mov_efectivo": "fondo_inicial"|"ingreso"|"retiro"|"venta"|"anulacion_venta"|"gasto"|"anulacion_gasto","unidad_compra": "caja"|"libreta"|"unidad"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -1041,7 +1607,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "alcance_certificado": ["global", "categoria", "servicio"],"fuente_fondos": ["efectivo", "transferencia"],"medio_pago": ["efectivo", "transferencia", "tarjeta"],"rol_usuario": ["admin", "cajero"],"tipo_alerta": ["venta_sin_stock", "stock_bajo"],"tipo_mov_certificado": ["compra", "venta", "ajuste", "anulacion_compra"],"tipo_mov_efectivo": ["fondo_inicial", "ingreso", "retiro", "venta", "anulacion_venta", "gasto", "anulacion_gasto"],"unidad_compra": ["caja", "libreta", "unidad"]
+            "alcance_certificado": ["global", "categoria", "servicio"],"ambiente_arca": ["homologacion", "produccion"],"estado_comprobante": ["pendiente", "procesando", "autorizado", "rechazado", "cancelado"],"fuente_fondos": ["efectivo", "transferencia"],"medio_pago": ["efectivo", "transferencia", "tarjeta"],"rol_usuario": ["admin", "cajero"],"tipo_alerta": ["venta_sin_stock", "stock_bajo"],"tipo_comprobante": ["factura", "nota_credito"],"tipo_mov_certificado": ["compra", "venta", "ajuste", "anulacion_compra"],"tipo_mov_efectivo": ["fondo_inicial", "ingreso", "retiro", "venta", "anulacion_venta", "gasto", "anulacion_gasto"],"unidad_compra": ["caja", "libreta", "unidad"]
           }
         }
 } as const
