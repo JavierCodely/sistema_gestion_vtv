@@ -22,6 +22,7 @@ Primera vez: `npm install` → `npx playwright install chromium` → `npm run db
 | Comando | Qué hace |
 |---|---|
 | `npm run dev` | Vite en `http://localhost:5173` |
+| `npm run dev:remoto` | Vite contra el proyecto Supabase en la nube (lee `.env.remoto.local`, no commiteado; solo clave publicable) |
 | `npm run typecheck` / `lint` / `format:check` | `tsc -b` · ESLint con `--max-warnings 0` · Prettier (`npm run format` corrige) |
 | `npm run test` | Unit (Vitest + Testing Library, `tests/unit/**/*.test.{ts,tsx}`) |
 | `npm run test:e2e` | Playwright (`tests/e2e/`), levanta `npm run dev` solo; usa Supabase local + seed |
