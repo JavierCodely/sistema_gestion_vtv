@@ -18,18 +18,13 @@ export type CertificadoConStock = Omit<
   semaforo: "ok" | "bajo" | "sin_stock";
 };
 
-export type Compra = Pick<
-  Tablas["compras_certificado"]["Row"],
-  | "id"
-  | "creado_en"
-  | "unidades"
-  | "costo_unidad"
-  | "hojas"
-  | "costo_total"
-  | "costo_hoja"
-  | "fuente"
-  | "proveedor"
-> & { certificados: { nombre: string } | null; perfiles: { nombre: string } | null };
+type FilaCompra = Database["public"]["Views"]["v_compras_certificado"]["Row"];
+
+/** Compra tal como la devuelve `v_compras_certificado` (`editable` lo decide la BD). */
+export type Compra = Omit<FilaCompra, "editable" | "hojas_por_unidad"> & {
+  editable: boolean;
+  hojas_por_unidad: number;
+};
 
 export type Movimiento = Pick<
   Tablas["movimientos_certificado"]["Row"],
@@ -43,6 +38,7 @@ export type Movimiento = Pick<
   | "costo_promedio_resultante"
   | "nota"
   | "venta_id"
+  | "compra_id"
 > & { perfiles: { nombre: string } | null };
 
 export type FuenteFondos = Enums["fuente_fondos"];
@@ -87,17 +83,26 @@ export function useStockCertificados() {
   });
 }
 
+const COLUMNAS_COMPRA =
+  "id, creado_en, certificado_id, certificado, unidad_compra, hojas_por_unidad, unidades, costo_unidad, hojas, costo_total, fuente, proveedor, usuario, anulada, anulada_motivo, anulada_en, anulada_por, reemplazada_por, editable";
+
+function convertirCompra(fila: FilaCompra): Compra {
+  // La vista siempre los calcula; el esquema generado los marca opcionales por ser expresiones.
+  if (fila.hojas_por_unidad === null) {
+    throw new Error(`La compra ${String(fila.id)} llegó incompleta`);
+  }
+  return { ...fila, hojas_por_unidad: fila.hojas_por_unidad, editable: fila.editable === true };
+}
+
 async function paginaCompras(desde: number): Promise<Compra[]> {
   const { data, error } = await supabase
-    .from("compras_certificado")
-    .select(
-      "id, creado_en, unidades, costo_unidad, hojas, costo_total, costo_hoja, fuente, proveedor, certificados(nombre), perfiles(nombre)",
-    )
+    .from("v_compras_certificado")
+    .select(COLUMNAS_COMPRA)
     .order("creado_en", { ascending: false })
     .order("id", { ascending: false })
     .range(desde, desde + TAMANO_PAGINA - 1);
   if (error) throw error;
-  return data;
+  return data.map(convertirCompra);
 }
 
 export function useCompras() {
@@ -130,7 +135,7 @@ async function paginaMovimientos(id: number, desde: number): Promise<Movimiento[
   const { data, error } = await supabase
     .from("movimientos_certificado")
     .select(
-      "id, creado_en, tipo, hojas, costo_unitario, costo_total, stock_resultante, costo_promedio_resultante, nota, venta_id, perfiles(nombre)",
+      "id, creado_en, tipo, hojas, costo_unitario, costo_total, stock_resultante, costo_promedio_resultante, nota, venta_id, compra_id, perfiles(nombre)",
     )
     .eq("certificado_id", id)
     .order("creado_en", { ascending: false })
@@ -211,6 +216,34 @@ export function useRegistrarCompra() {
         p_costo_unidad: datos.costoUnidad,
         p_fuente: datos.fuente,
         ...(datos.proveedor && { p_proveedor: datos.proveedor }),
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: invalidar,
+  });
+}
+
+/** Corrige una compra: la BD anula la original (revierte todo) y registra la corregida. */
+export function useCorregirCompra() {
+  const invalidar = useInvalidarCertificados();
+  return useMutation({
+    mutationFn: async ({
+      compraId,
+      datos,
+      motivo,
+    }: {
+      compraId: number;
+      datos: DatosCompra;
+      motivo: string;
+    }) => {
+      const { data, error } = await supabase.rpc("corregir_compra_certificado", {
+        p_compra_id: compraId,
+        p_unidades: datos.unidades,
+        p_costo_unidad: datos.costoUnidad,
+        p_fuente: datos.fuente,
+        p_proveedor: datos.proveedor ?? "",
+        p_motivo: motivo,
       });
       if (error) throw error;
       return data;

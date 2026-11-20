@@ -149,6 +149,7 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
 | 18 | `certificados_admin` | Nombres de certificado normalizados y únicos sin mayúsculas; topes (hojas/unidad ≤ 10.000, stock mínimo ≤ 1.000.000); `registrar_compra_certificado` rechaza certificados desactivados y valida el total antes de guardarlo |
 | 19 | `ajuste_stock_tope` | `ajustar_stock_certificado`: máximo 100.000 hojas por movimiento |
 | 20 | `stock_tope` | Tope del stock acumulado por certificado (1.000.000.000 hojas): CHECK + mensaje claro en compra y ajuste |
+| 21 | `corregir_compra` | Editar compras: `corregir_compra_certificado()` (anula la original revirtiendo hojas, costo promedio, gasto y efectivo, y registra la corregida), columnas `anulada*`/`reemplazada_por`, tipo de kardex `anulacion_compra`, vista `v_compras_certificado` (con `editable`) |
 
 Reglas que no son obvias leyendo una sola tabla:
 - **Certificado a usar**: el activo más específico (servicio > categoría > global).
@@ -160,6 +161,11 @@ Reglas que no son obvias leyendo una sola tabla:
   (Insumos › Compra de certificados), que no se carga a mano ni se anula.
 - **Ajuste de stock**: valuado al costo promedio vigente, no lo modifica, no genera gasto.
 - **Compra de un certificado desactivado**: se rechaza (hay que activarlo antes). El ajuste sí se permite.
+- **Editar una compra** (solo admin, motivo obligatorio): solo la **última** del certificado, sin ventas,
+  ajustes ni compras posteriores (así el costo de ventas ya hechas nunca cambia). Se anula la original
+  (vuelven sus hojas, el costo promedio anterior, se anula su gasto y, si fue en efectivo, vuelve el
+  dinero) y se registra la corregida con la misma presentación, todo en una transacción. La original
+  queda tachada con motivo y enlazada (`reemplazada_por`). Si ya hubo movimientos: ajuste de stock.
 - **Categoría desactivada**: sus servicios no se pueden vender (lo controla `registrar_venta`).
 - **Gastos sin tope**: el cajero puede cargar gastos de cualquier monto (decisión del negocio); la
   garantía es que todo queda registrado (usuario, turno, caja, nota) y solo el admin anula.
@@ -185,6 +191,7 @@ Todas requieren usuario autenticado y **activo**. Devuelven la fila afectada.
 | `registrar_gasto(p_categoria_id bigint, p_monto numeric, p_fuente fuente_fondos, p_nota text) → gastos` | todos | Nota obligatoria. Cajero: turno abierto + categoría habilitada |
 | `anular_gasto(p_gasto_id bigint, p_motivo text) → gastos` | admin | No aplica a gastos de compra de certificados |
 | `registrar_compra_certificado(p_certificado_id bigint, p_unidades int, p_costo_unidad numeric, p_fuente fuente_fondos, p_proveedor text = null) → compras_certificado` | admin | Para la UI: hojas = `unidades × hojas_por_unidad`, costo/hoja = `costo_unidad / hojas_por_unidad` |
+| `corregir_compra_certificado(p_compra_id bigint, p_unidades int, p_costo_unidad numeric, p_fuente fuente_fondos, p_proveedor text, p_motivo text) → compras_certificado` | admin | Devuelve la compra corregida. Rechaza si no es el último movimiento del certificado o ya fue corregida |
 | `ajustar_stock_certificado(p_certificado_id bigint, p_hojas int, p_nota text) → movimientos_certificado` | admin | `p_hojas` con signo, ≠ 0 |
 | `movimiento_efectivo(p_tipo tipo_mov_efectivo, p_monto numeric, p_nota text) → movimientos_efectivo` | admin | Solo `fondo_inicial`, `ingreso`, `retiro`; monto positivo |
 | `marcar_alertas_leidas(p_ids bigint[] = null) → int` | admin | `null` = todas; devuelve cuántas marcó |
@@ -209,6 +216,7 @@ El admin no puede desactivarse ni quitarse el rol a sí mismo.
 | `v_movimientos_caja` | Ventas + gastos juntos. `tipo` = venta/gasto; **gastos con `monto` negativo** (fila roja); `anulada` para tacharlas (excluirlas de totales). Filtrar por `turno_id`, `caja_id`, `fecha_local`, etc. |
 | `v_turnos` | Turnos con caja, cajero, `abierto` y totales en vivo por medio, gastos y neto |
 | `v_stock_certificados` | Stock en hojas, `semaforo` (ok/bajo/sin_stock), `aplica_a`. **Sin costos** (el admin usa `stock_certificados_valorizado()`) |
+| `v_compras_certificado` | Compras con certificado, usuario, estado de anulación y `editable` (regla de §4). Solo admin (RLS) |
 | `v_gastos_por_categoria` | Totales por fecha, rubro, subcategoría y fuente |
 
 Saldo de efectivo: `select saldo from caja_efectivo` (visible para todos).

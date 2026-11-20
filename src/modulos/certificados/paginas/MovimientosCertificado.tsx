@@ -22,7 +22,16 @@ const TIPOS: Record<Movimiento["tipo"], string> = {
   compra: "Compra",
   venta: "Venta",
   ajuste: "Ajuste",
+  anulacion_compra: "Compra corregida",
 };
+
+function detalle(m: Movimiento): string {
+  if (m.tipo === "venta" && m.venta_id !== null) return `Venta N° ${String(m.venta_id)}`;
+  if (m.tipo === "anulacion_compra" && m.compra_id !== null) {
+    return `Anula la compra #${String(m.compra_id)}: ${m.nota ?? ""}`;
+  }
+  return m.nota ?? "—";
+}
 
 function Volver() {
   return (
@@ -110,7 +119,15 @@ export function MovimientosCertificado() {
                         {formatearFechaHora(m.creado_en)}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={m.tipo === "ajuste" ? "outline" : "secondary"}>
+                        <Badge
+                          variant={
+                            m.tipo === "anulacion_compra"
+                              ? "destructive"
+                              : m.tipo === "ajuste"
+                                ? "outline"
+                                : "secondary"
+                          }
+                        >
                           {TIPOS[m.tipo]}
                         </Badge>
                       </TableCell>
@@ -132,11 +149,7 @@ export function MovimientosCertificado() {
                       <TableCell className="text-right tabular-nums">
                         {formatearMoneda(m.costo_promedio_resultante)}
                       </TableCell>
-                      <TableCell>
-                        {m.tipo === "venta" && m.venta_id !== null
-                          ? `Venta N° ${String(m.venta_id)}`
-                          : (m.nota ?? "—")}
-                      </TableCell>
+                      <TableCell>{detalle(m)}</TableCell>
                       <TableCell>{m.perfiles?.nombre ?? "—"}</TableCell>
                     </TableRow>
                   ))}

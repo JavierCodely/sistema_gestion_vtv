@@ -133,6 +133,101 @@ test("el admin gestiona certificados: alta, compra, ajuste, movimientos, edició
   await expect(fila).toContainText("Desactivado: activalo para registrar compras.");
 });
 
+test("el admin edita la última compra: se revierte la original y se registra la corregida", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const sufijo = unico();
+  const categoria = `Cat compra ${sufijo}`;
+  const nombre = `Hoja compra ${sufijo}`;
+  const proveedor = `Imprenta ${sufijo}`;
+  await ingresar(page, ADMIN);
+  await expect(page).toHaveURL("/admin");
+
+  await page.goto("/admin/servicios");
+  await page.getByRole("button", { name: "Nueva categoría" }).click();
+  const dialogoCategoria = page.getByRole("dialog", { name: "Nueva categoría" });
+  await dialogoCategoria.getByLabel("Nombre").fill(categoria);
+  await dialogoCategoria.getByRole("button", { name: "Crear categoría" }).click();
+  await expect(page.getByText(`Categoría “${categoria}” creada`)).toBeVisible();
+
+  await page.goto("/admin/certificados");
+  await page.getByRole("button", { name: "Nuevo certificado" }).click();
+  const nuevo = page.getByRole("dialog", { name: "Nuevo certificado" });
+  await nuevo.getByLabel("Nombre").fill(nombre);
+  await nuevo.getByLabel("Hojas por unidad").fill("25");
+  await elegir(page, nuevo, "Se usa en", "Una categoría");
+  await elegir(page, nuevo, "Categoría", categoria);
+  await nuevo.getByRole("button", { name: "Crear certificado" }).click();
+  await expect(page.getByText(`Certificado “${nombre}” creado`)).toBeVisible();
+  const fila = page.getByTestId(`certificado-${nombre}`);
+
+  // Compra con un error de carga: 2 cajas × $50.000
+  await fila.getByRole("button", { name: `Registrar compra de ${nombre}` }).click();
+  const compra = page.getByRole("dialog", { name: "Registrar compra" });
+  await compra.getByLabel("Cantidad de cajas").fill("2");
+  await compra.getByLabel("Costo por caja ($)").fill("50.000");
+  await elegir(page, compra, "Se pagó con", "Transferencia");
+  await compra.getByLabel("Proveedor (opcional)").fill(proveedor);
+  await compra.getByRole("button", { name: "Registrar compra" }).click();
+  await expect(fila.locator('[data-columna="stock"]')).toHaveText("50");
+
+  // Editar: eran 3 cajas × $40.000
+  const original = page.getByRole("row").filter({ hasText: proveedor });
+  await original.getByRole("button", { name: /^Editar compra #/ }).click();
+  const edicion = page.getByRole("dialog", { name: /^Editar compra #/ });
+  await expect(edicion.getByLabel("Cantidad de cajas")).toHaveValue("2");
+  await edicion.getByRole("button", { name: "Guardar corrección" }).click();
+  await expect(edicion.getByText("Escribí el motivo de la corrección.")).toBeVisible();
+  await edicion.getByLabel("Cantidad de cajas").fill("3");
+  await expect(edicion.getByTestId("hojas-que-entran")).toHaveText("Entran 75 hojas al stock.");
+  await edicion.getByLabel("Costo por caja ($)").fill("40.000");
+  await edicion.getByLabel("Motivo de la corrección").fill("Se cargó mal la cantidad");
+  await edicion.getByRole("button", { name: "Guardar corrección" }).click();
+  await expect(
+    page.getByText(`Compra corregida: 75 hojas de “${nombre}” por $ 120.000,00`),
+  ).toBeVisible();
+
+  // Stock y costo como si la original nunca hubiera existido
+  await expect(fila.locator('[data-columna="stock"]')).toHaveText("75");
+  await expect(fila.locator('[data-columna="costo"]')).toHaveText("$ 1.600,00");
+  await expect(fila.locator('[data-columna="valor"]')).toHaveText("$ 120.000,00");
+
+  // La original queda tachada y la corregida es la editable
+  const filasCompra = page
+    .getByRole("region", { name: "Últimas compras" })
+    .getByRole("row")
+    .filter({ hasText: nombre });
+  await expect(filasCompra).toHaveCount(2);
+  await expect(filasCompra.filter({ hasText: "Corregida" })).toContainText(
+    "Se cargó mal la cantidad",
+  );
+  await expect(filasCompra.filter({ hasText: "Corregida" }).getByRole("button")).toHaveCount(0);
+  const corregida = filasCompra.filter({ hasNotText: "Corregida" });
+  await expect(corregida).toContainText("$ 120.000,00");
+  await expect(corregida.getByRole("button", { name: /^Editar compra #/ })).toBeVisible();
+
+  // Después de un ajuste ya no se puede editar
+  await fila.getByRole("button", { name: `Ajuste de stock de ${nombre}` }).click();
+  const ajuste = page.getByRole("dialog", { name: "Ajustar stock" });
+  await ajuste.getByLabel("Cantidad de hojas").fill("1");
+  await ajuste.getByLabel("Motivo").fill("Rotura");
+  await ajuste.getByRole("button", { name: "Ajustar stock" }).click();
+  await expect(fila.locator('[data-columna="stock"]')).toHaveText("74");
+  await expect(corregida.getByRole("button", { name: /^Editar compra #/ })).toHaveCount(0);
+
+  // Kardex: compra, reversión, compra corregida y ajuste
+  await fila.getByRole("link", { name: `Movimientos de ${nombre}` }).click();
+  const movimientos = page.locator('[data-testid^="movimiento-"]');
+  await expect(movimientos).toHaveCount(4);
+  await expect(movimientos.nth(0)).toContainText("Ajuste");
+  await expect(movimientos.nth(1)).toContainText("+75");
+  await expect(movimientos.nth(2)).toContainText("Compra corregida");
+  await expect(movimientos.nth(2)).toContainText("-50");
+  await expect(movimientos.nth(2)).toContainText("Se cargó mal la cantidad");
+  await expect(movimientos.nth(3)).toContainText("+50");
+});
+
 test("un id de certificado inexistente muestra un aviso", async ({ page }) => {
   await ingresar(page, ADMIN);
   await expect(page).toHaveURL("/admin");

@@ -1,4 +1,5 @@
 import {
+  LARGO_MAXIMO_NOTA,
   LARGO_MAXIMO_PROVEEDOR,
   parsearEntero,
   parsearMonto,
@@ -172,6 +173,32 @@ export function validarCompra(
       proveedor: proveedor || null,
     },
   };
+}
+
+// ---------------------------------------------------------------- Corrección de compra
+
+export interface FormularioCorreccion extends FormularioCompra {
+  motivo: string;
+}
+
+export type ErroresCorreccion = ErroresCompra & Errores<"motivo">;
+
+/** Misma validación que una compra nueva, más el motivo obligatorio. */
+export function validarCorreccion(
+  formulario: FormularioCorreccion,
+  unidad: UnidadCompra,
+):
+  | { errores: ErroresCorreccion; datos?: undefined }
+  | { errores?: undefined; datos: DatosCompra; motivo: string } {
+  const compra = validarCompra(formulario, unidad);
+  const motivo = formulario.motivo.trim();
+  const errores: ErroresCorreccion = { ...compra.errores };
+  if (!motivo) errores.motivo = "Escribí el motivo de la corrección.";
+  else if (motivo.length > LARGO_MAXIMO_NOTA) {
+    errores.motivo = `El motivo no puede superar los ${String(LARGO_MAXIMO_NOTA)} caracteres.`;
+  }
+  if (!compra.datos || errores.motivo) return { errores };
+  return { datos: compra.datos, motivo };
 }
 
 // ---------------------------------------------------------------- Ajuste

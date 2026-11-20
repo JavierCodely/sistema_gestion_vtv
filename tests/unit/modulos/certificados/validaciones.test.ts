@@ -4,6 +4,7 @@ import {
   validarAjuste,
   validarCertificado,
   validarCompra,
+  validarCorreccion,
   type FormularioCertificado,
 } from "@/modulos/certificados/lib/validaciones";
 
@@ -82,6 +83,27 @@ describe("validarCompra", () => {
       unidades: "Ingresá la cantidad de libretas.",
       costoUnidad: "El costo debe ser mayor a cero.",
       fuente: "Elegí con qué se pagó.",
+    });
+  });
+});
+
+describe("validarCorreccion", () => {
+  const base = { unidades: "3", costoUnidad: "1.500", fuente: "efectivo" as const, proveedor: "" };
+
+  it("valida como una compra y exige el motivo", () => {
+    expect(validarCorreccion({ ...base, unidades: "", motivo: " " }, "caja").errores).toEqual({
+      unidades: "Ingresá la cantidad de cajas.",
+      motivo: "Escribí el motivo de la corrección.",
+    });
+    expect(validarCorreccion({ ...base, motivo: "x".repeat(501) }, "caja").errores).toEqual({
+      motivo: "El motivo no puede superar los 500 caracteres.",
+    });
+  });
+
+  it("devuelve los datos de la compra y el motivo sin espacios", () => {
+    expect(validarCorreccion({ ...base, motivo: " Error de carga " }, "caja")).toEqual({
+      datos: { unidades: 3, costoUnidad: 1500, fuente: "efectivo", proveedor: null },
+      motivo: "Error de carga",
     });
   });
 });

@@ -5,7 +5,7 @@ import { mensajeDeError } from "@/compartido/lib/errores";
 import { Alert, AlertDescription } from "@/compartido/ui/alert";
 import { Button } from "@/compartido/ui/button";
 import { useCategorias, useServicios } from "@/modulos/servicios/api/consultas";
-import { useStockCertificados, type CertificadoConStock } from "../api/consultas";
+import { useStockCertificados, type CertificadoConStock, type Compra } from "../api/consultas";
 import { DialogoAjuste } from "../componentes/DialogoAjuste";
 import { DialogoCertificado } from "../componentes/DialogoCertificado";
 import { DialogoCompra } from "../componentes/DialogoCompra";
@@ -13,7 +13,10 @@ import { TablaCompras } from "../componentes/TablaCompras";
 import { TablaStock, type AccionCertificado } from "../componentes/TablaStock";
 
 type Dialogo =
-  { tipo: "nuevo" } | { tipo: AccionCertificado; certificado: CertificadoConStock } | null;
+  | { tipo: "nuevo" }
+  | { tipo: AccionCertificado; certificado: CertificadoConStock }
+  | { tipo: "editarCompra"; compra: Compra }
+  | null;
 
 export function Certificados() {
   const stock = useStockCertificados();
@@ -67,7 +70,11 @@ export function Certificados() {
         <h2 id="titulo-compras" className="text-lg font-semibold">
           Últimas compras
         </h2>
-        <TablaCompras />
+        <TablaCompras
+          onEditar={(compra) => {
+            setDialogo({ tipo: "editarCompra", compra });
+          }}
+        />
       </section>
 
       {dialogo?.tipo === "nuevo" && categorias.data && servicios.data && (
@@ -87,6 +94,9 @@ export function Certificados() {
       )}
       {dialogo?.tipo === "comprar" && (
         <DialogoCompra certificado={dialogo.certificado} onCerrar={cerrar} />
+      )}
+      {dialogo?.tipo === "editarCompra" && (
+        <DialogoCompra original={dialogo.compra} onCerrar={cerrar} />
       )}
       {dialogo?.tipo === "ajustar" && (
         <DialogoAjuste certificado={dialogo.certificado} onCerrar={cerrar} />
