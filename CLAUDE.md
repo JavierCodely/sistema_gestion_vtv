@@ -27,6 +27,7 @@ Primera vez: `npm install` → `npx playwright install chromium` → `npm run db
 | `npm run test:e2e` | Playwright (`tests/e2e/`), levanta `npm run dev` solo; usa Supabase local + seed |
 | `npm run db:start` / `db:stop` | Supabase local (API `127.0.0.1:54321`, DB `:54322`) |
 | `npm run db:reset` | Recrea la BD: migraciones + `supabase/seed.sql` |
+| `npm run sql:produccion` | Regenera `supabase/produccion/01_esquema_completo.sql` (todas las migraciones en una transacción, para el SQL Editor). Ver `supabase/produccion/LEEME.md` |
 | `npm run db:types` | Regenera `src/types/database.ts`. **Correrlo tras cada migración** |
 | `npm run test:db` | Tests pgTAP (`supabase/tests/database/*.sql`) |
 | `npm run test:functions` | Tests de integración de Edge Functions (node:test) |
