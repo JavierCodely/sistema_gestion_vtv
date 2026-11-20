@@ -184,3 +184,44 @@ test("usuario inexistente", async () => {
   assert.equal(r.status, 404);
   assert.equal(r.body.error, "El usuario no existe");
 });
+
+test("valida el id, el largo de los textos y el máximo de la contraseña", async () => {
+  let r = await llamar(tokenAdmin, {
+    accion: "cambiar_password",
+    id: "no-es-uuid",
+    password: "12345678",
+  });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.error, "El id del usuario no es válido");
+
+  r = await llamar(tokenAdmin, {
+    accion: "crear",
+    nombre: "x".repeat(101),
+    email: "largo@t.local",
+    password: "12345678",
+    rol: "cajero",
+  });
+  assert.equal(r.body.error, "El nombre no puede superar los 100 caracteres");
+
+  r = await llamar(tokenAdmin, {
+    accion: "crear",
+    nombre: "Largo",
+    email: "largo@t.local",
+    password: "x".repeat(73),
+    rol: "cajero",
+  });
+  assert.equal(r.body.error, "La contraseña no puede superar los 72 caracteres");
+});
+
+test("un usuario no puede cambiarse la contraseña a una de menos de 8 caracteres", async () => {
+  const r = await fetch(`${API}/auth/v1/user`, {
+    method: "PUT",
+    headers: {
+      apikey: ANON,
+      Authorization: `Bearer ${tokenCajero}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ password: "123456" }),
+  });
+  assert.equal(r.status, 422);
+});

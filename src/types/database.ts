@@ -581,6 +581,9 @@ isOneToOne: false
 "_texto_obligatorio":
 { Args: { "p_mensaje": string,"p_valor": string }; Returns: string
                            },
+"_validar_monto":
+{ Args: { "p_campo": string,"p_monto": number }; Returns: undefined
+                           },
 "abrir_turno":
 { Args: { "p_caja_id": number }; Returns: {
               "abierto_en": string,

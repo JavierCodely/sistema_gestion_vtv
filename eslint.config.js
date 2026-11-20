@@ -38,8 +38,41 @@ export default tseslint.config(
     },
   },
   {
+    // Arquitectura en capas: app → modulos → compartido (nunca al revés).
+    files: ["src/compartido/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/modulos/*", "@/app/*", "@tests/*"],
+              message: "compartido/ no puede depender de módulos, de app/ ni de tests.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/modulos/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/app/*", "@tests/*"],
+              message: "Un módulo no puede depender de app/ ni de tests.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // Componentes generados por shadcn: exportan variantes junto al componente.
-    files: ["src/components/ui/**/*.tsx"],
+    files: ["src/compartido/ui/**/*.tsx"],
     rules: { "react-refresh/only-export-components": "off" },
   },
   {

@@ -1,0 +1,53 @@
+import { Suspense } from "react";
+import type { RouteObject } from "react-router";
+import { RedireccionInicial, RutaProtegida } from "@/modulos/auth/RutaProtegida";
+import { Cargando } from "@/compartido/componentes/Cargando";
+import { EnConstruccion } from "@/app/paginas/EnConstruccion";
+import { Login } from "@/modulos/auth/paginas/Login";
+import { LayoutAdmin, LayoutCaja } from "@/app/diferidas";
+import { NoEncontrada } from "@/app/paginas/NoEncontrada";
+
+// Las pantallas autenticadas se cargan bajo demanda (code splitting): el login queda liviano.
+
+export const rutas: RouteObject[] = [
+  { path: "/", element: <RedireccionInicial /> },
+  { path: "/login", element: <Login /> },
+  {
+    path: "/admin",
+    element: (
+      <RutaProtegida roles={["admin"]}>
+        <Suspense fallback={<Cargando />}>
+          <LayoutAdmin />
+        </Suspense>
+      </RutaProtegida>
+    ),
+    children: [
+      { index: true, element: <EnConstruccion titulo="Dashboard" fase={6} /> },
+      { path: "ventas", element: <EnConstruccion titulo="Ventas" fase={6} /> },
+      { path: "alertas", element: <EnConstruccion titulo="Alertas" fase={6} /> },
+      {
+        path: "usuarios",
+        lazy: async () => ({
+          Component: (await import("@/modulos/usuarios/paginas/Usuarios")).Usuarios,
+        }),
+      },
+      { path: "cajas", element: <EnConstruccion titulo="Cajas" fase={2} /> },
+      { path: "servicios", element: <EnConstruccion titulo="Servicios y categorías" fase={2} /> },
+      { path: "certificados", element: <EnConstruccion titulo="Certificados" fase={3} /> },
+      { path: "gastos", element: <EnConstruccion titulo="Gastos" fase={5} /> },
+      { path: "efectivo", element: <EnConstruccion titulo="Caja de efectivo" fase={5} /> },
+    ],
+  },
+  {
+    path: "/caja",
+    element: (
+      <RutaProtegida roles={["cajero", "admin"]}>
+        <Suspense fallback={<Cargando />}>
+          <LayoutCaja />
+        </Suspense>
+      </RutaProtegida>
+    ),
+    children: [{ index: true, element: <EnConstruccion titulo="Caja" fase={4} /> }],
+  },
+  { path: "*", element: <NoEncontrada /> },
+];

@@ -12,7 +12,8 @@ fase cumple las reglas de negocio de `CLAUDE.md`.
 2. Listá los comportamientos nuevos o cambiados y buscá su test. Si falta, escribilo:
    - Reglas de BD/RPC/RLS → pgTAP en `supabase/tests/database/` (ver helpers en `_helpers.psql`).
    - Edge Functions → `supabase/tests/functions/*.test.mjs`.
-   - Lógica de UI → Vitest. Flujos de usuario → Playwright E2E.
+   - Lógica de UI → Vitest en `tests/unit/`. Flujos de usuario → Playwright en `tests/e2e/`.
+   - Nunca dejes tests dentro de `src/`.
 3. Priorizá: dinero (efectivo, totales, costos), stock de certificados, permisos por rol,
    casos límite (sin stock, saldo insuficiente, turno ocupado, usuario desactivado, anulaciones).
 4. Corré `npm run verificar` completo. Si algo falla, investigá la causa: si es un bug del

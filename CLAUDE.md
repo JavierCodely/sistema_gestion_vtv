@@ -23,8 +23,8 @@ Primera vez: `npm install` → `npx playwright install chromium` → `npm run db
 |---|---|
 | `npm run dev` | Vite en `http://localhost:5173` |
 | `npm run typecheck` / `lint` / `format:check` | `tsc -b` · ESLint con `--max-warnings 0` · Prettier (`npm run format` corrige) |
-| `npm run test` | Unit (Vitest + Testing Library, `src/**/*.test.{ts,tsx}`) |
-| `npm run test:e2e` | Playwright (`e2e/`), levanta `npm run dev` solo; usa Supabase local + seed |
+| `npm run test` | Unit (Vitest + Testing Library, `tests/unit/**/*.test.{ts,tsx}`) |
+| `npm run test:e2e` | Playwright (`tests/e2e/`), levanta `npm run dev` solo; usa Supabase local + seed |
 | `npm run db:start` / `db:stop` | Supabase local (API `127.0.0.1:54321`, DB `:54322`) |
 | `npm run db:reset` | Recrea la BD: migraciones + `supabase/seed.sql` |
 | `npm run db:types` | Regenera `src/types/database.ts`. **Correrlo tras cada migración** |
@@ -32,23 +32,47 @@ Primera vez: `npm install` → `npx playwright install chromium` → `npm run db
 | `npm run test:functions` | Tests de integración de Edge Functions (node:test) |
 | `npm run verificar` (= `verify`) | typecheck + lint + format + unit + build + db:reset + pgTAP + funciones + E2E. **Debe pasar antes de entregar cualquier cambio** |
 
-- Un test unitario: `npx vitest run src/lib/formato.test.ts` (o `-t "nombre"`).
-- Un E2E: `npx playwright test e2e/inicio.spec.ts` (o `-g "nombre"`).
+- Un test unitario: `npx vitest run tests/unit/compartido/lib/formato.test.ts` (o `-t "nombre"`).
+- Un E2E: `npx playwright test tests/e2e/auth.spec.ts` (o `-g "nombre"`).
 - Un archivo pgTAP: `npx supabase test db supabase/tests/database/05_ventas.sql`
 - Un test de función: `node --test --test-name-pattern "ciclo completo" supabase/tests/functions/admin-usuarios.test.mjs`
 - **Edge Functions nuevas**: el runtime local solo las detecta al arrancar → `npm run db:stop && npm run db:start`.
 - Usuarios del seed (solo local): `admin@vtv.local / admin1234`, `cajero@vtv.local / cajero1234`.
 
-## Frontend (`src/`)
+## Arquitectura del frontend
 
-- `main.tsx` → `App.tsx` (QueryClientProvider + RouterProvider + Toaster de sonner) → `rutas.tsx`
-  (array `RouteObject[]` de React Router 8, reutilizado por los tests con `createMemoryRouter`).
-- `paginas/` pantallas · `components/ui/` componentes shadcn (`npx shadcn@latest add <x>`;
-  después verificar que importen `cn` de `@/lib/utils` — el CLI a veces lo cambia a un paquete `cn` externo, que no se usa).
-- `lib/supabase.ts` cliente tipado con `Database` · `lib/formato.ts` moneda ARS y fechas en hora
-  argentina · `lib/query-client.ts` defaults de TanStack Query.
-- `test/render.tsx`: `renderRuta("/ruta")` para tests de páginas. Mockear `@/lib/...` con `vi.mock`.
-- Alias `@/` → `src/`. Versiones: React 19, React Router 8, Vite 8, TS 6, Tailwind 4, ESLint 10 (flat config), Vitest 5.
+Capas (ESLint `no-restricted-imports` las hace cumplir): **`app/` → `modulos/` → `compartido/`**, nunca al revés.
+Un módulo no importa de `app/`; `compartido/` no importa de ningún módulo.
+
+```
+src/
+  main.tsx                 entrada (Vite)
+  app/                     composición: App (providers), rutas.tsx, diferidas.tsx (lazy), páginas genéricas, index.css
+  compartido/              sin lógica de negocio de un módulo concreto
+    ui/                    componentes shadcn (npx shadcn@latest add <x> los deja acá)
+    componentes/           Cargando, Campo, ErrorFormulario…
+    lib/                   supabase, formato (ARS / hora AR), errores, validaciones, query-client, salud
+    tipos.ts               Rol, Perfil, Tablas, Enums (derivados de types/database.ts)
+  modulos/<modulo>/        una carpeta por área de negocio: auth, usuarios, panel-admin, caja, (cajas, certificados, ventas, gastos…)
+    api/                   acceso a datos: llamadas RPC/Edge Functions + hooks TanStack Query
+    componentes/           un componente por archivo
+    lib/                   lógica pura del módulo (validaciones, mapeos)
+    paginas/               pantallas enrutables
+  types/database.ts        generado (npm run db:types), no editar
+tests/
+  unit/                    Vitest; espeja src/ (tests/unit/modulos/auth/Login.test.tsx ↔ src/modulos/auth/paginas/Login.tsx)
+  e2e/                     Playwright (utilidades.ts: ingresar, salir, credenciales del seed)
+  soporte/                 setup.ts y render.tsx (renderRuta con AuthContext falso, perfilDePrueba)
+supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase exige esa ubicación)
+```
+
+- **Nunca** tests dentro de `src/`. Alias: `@/` → `src/`, `@tests/` → `tests/`.
+- Pantallas nuevas: entrada en `app/rutas.tsx` con `lazy` (code splitting); el login queda liviano.
+- `RutaProtegida` es solo UX: la seguridad real es la RLS/RPC.
+- `compartido/` crece solo con cosas usadas por 2+ módulos; si algo es de un módulo, va en el módulo.
+- shadcn: tras `add`, verificar que importe `cn` de `@/compartido/lib/utils` (el CLI a veces mete un paquete `cn` externo).
+- Versiones: React 19, React Router 8, Vite 8, TS 6, Tailwind 4, ESLint 10 (flat config), Vitest 5.
+  En React 19.3 `FormEvent` está deprecado: usar `SubmitEvent<HTMLFormElement>`.
 
 ## 3. Principios de arquitectura
 
@@ -72,6 +96,12 @@ Primera vez: `npm install` → `npx playwright install chromium` → `npm run db
 - Errores: `raise exception` con mensaje en español listo para mostrar al cajero.
   SQLSTATE: `42501` permisos, `22023` dato inválido, `P0001` regla de negocio.
 - Funciones con prefijo `_` son internas: sin `EXECUTE` para `authenticated`.
+- **Montos de entrada**: toda RPC que reciba dinero llama `perform public._validar_monto(p, 'El monto')`
+  (rechaza NULL, `NaN` —Postgres lo acepta en numeric y lo ordena por encima de todo—, ≤ 0, > 2 decimales
+  y fuera de rango). Toda columna de dinero nueva lleva `check (col <> 'NaN'::numeric)`.
+- **Textos libres**: CHECK `char_length(col) <= N` (nombres 100, notas/motivos 500, patente 10, proveedor 200);
+  la UI usa los mismos límites (`LARGO_MAXIMO_*` en `compartido/lib/validaciones.ts`).
+- RPC que escriben sobre un turno lo leen con `for share` (serializa con `cerrar_turno`).
 - Catálogo con historial (servicios, cajas, certificados, categorías): en la UI se **desactiva**
   (`activo/activa = false`); borrar falla por FK si ya se usó en ventas, turnos o gastos.
 
@@ -92,6 +122,7 @@ Primera vez: `npm install` → `npx playwright install chromium` → `npm run db
 | 11 | `turnos` | `abrir_turno()`, `cerrar_turno()` |
 | 12 | `vistas` | Vistas de reportes (§6) |
 | 13 | `rls` | Revoke total, RLS, grants, default privileges, Realtime de `alertas` |
+| 14 | `endurecimiento_seguridad` | `_validar_monto`, CHECK anti-NaN, largos máximos, locks (último admin, turno) — auditoría 2026-11-20 |
 
 Reglas que no son obvias leyendo una sola tabla:
 - **Certificado a usar**: el activo más específico (servicio > categoría > global).
@@ -159,6 +190,7 @@ Alertas en tiempo real: Realtime `postgres_changes` sobre `public.alertas` (RLS:
   `security_invoker = true`). `08_seguridad.sql` falla si una tabla queda sin RLS o una vista sin invoker.
 - RPC nuevas: `security definer`, `set search_path = ''`, nombres calificados (`public.x`),
   empezar con `perform public._exigir_usuario()` o `_exigir_admin()`.
+- Revisión de seguridad: agente `ciberseguridad` (auditoría completa o de un diff).
 - Tests pgTAP: incluir `\ir _helpers.psql`; usar `pg_temp.escenario()` para datos base,
   `pg_temp.como(uid)` para actuar como un usuario y `reset role` para volver a postgres.
   Los tests no dependen del seed. Un UPDATE bloqueado por RLS no lanza error (afecta 0 filas):
@@ -167,7 +199,7 @@ Alertas en tiempo real: Realtime `postgres_changes` sobre `public.alertas` (RLS:
 ## 8. Agentes (`.claude/agents/`)
 
 `db-supabase` (migraciones, RPC, pgTAP), `frontend-react` (UI), `qa-tester` (escribe y corre
-tests, reporta), `revisor-codigo` (revisión antes de commitear). Flujo por fase:
+tests, reporta), `revisor-codigo` (revisión antes de commitear), `ciberseguridad` (auditoría de seguridad). Flujo por fase:
 agente de implementación → `qa-tester` → `revisor-codigo` → commit con todo en verde.
 No se pasa de fase con tests en rojo.
 

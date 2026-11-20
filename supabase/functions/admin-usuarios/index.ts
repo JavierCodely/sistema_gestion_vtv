@@ -35,11 +35,23 @@ function json(status: number, body: unknown): Response {
   });
 }
 
-function texto(valor: unknown, campo: string): string {
+function texto(valor: unknown, campo: string, largoMaximo: number): string {
   if (typeof valor !== "string" || valor.trim() === "") {
     throw new ErrorHttp(400, `${campo} es obligatorio`);
   }
+  if (valor.trim().length > largoMaximo) {
+    throw new ErrorHttp(400, `${campo} no puede superar los ${largoMaximo} caracteres`);
+  }
   return valor.trim();
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function idUsuario(valor: unknown): string {
+  if (typeof valor !== "string" || !UUID.test(valor)) {
+    throw new ErrorHttp(400, "El id del usuario no es válido");
+  }
+  return valor;
 }
 
 function rol(valor: unknown): Rol {
@@ -53,6 +65,10 @@ function password(valor: unknown): string {
   if (typeof valor !== "string" || valor.length < 8) {
     throw new ErrorHttp(400, "La contraseña debe tener al menos 8 caracteres");
   }
+  // bcrypt solo usa los primeros 72 bytes: más largo daría una falsa sensación de seguridad.
+  if (new TextEncoder().encode(valor).length > 72) {
+    throw new ErrorHttp(400, "La contraseña no puede superar los 72 caracteres");
+  }
   return valor;
 }
 
@@ -62,7 +78,9 @@ function traducirError(mensaje: string): string {
   }
   if (/invalid.*email|unable to validate email/i.test(mensaje)) return "El email no es válido";
   if (/password/i.test(mensaje)) return "La contraseña no cumple los requisitos";
-  return mensaje;
+  // No exponer mensajes internos de Auth al cliente.
+  console.error("admin-usuarios (auth):", mensaje);
+  return "No se pudo completar la operación";
 }
 
 async function perfil(admin: SupabaseClient, id: string) {
@@ -71,7 +89,10 @@ async function perfil(admin: SupabaseClient, id: string) {
     .select("id, nombre, email, rol, activo")
     .eq("id", id)
     .maybeSingle();
-  if (error) throw new ErrorHttp(500, error.message);
+  if (error) {
+    console.error("admin-usuarios (leer perfil):", error.message);
+    throw new ErrorHttp(500, "No se pudo leer el usuario");
+  }
   if (!data) throw new ErrorHttp(404, "El usuario no existe");
   return data;
 }
@@ -82,8 +103,12 @@ async function actualizarPerfil(
   cambios: Record<string, unknown>,
 ) {
   const { error } = await admin.from("perfiles").update(cambios).eq("id", id);
-  // Los errores de la BD (ej. último admin) ya vienen en español.
-  if (error) throw new ErrorHttp(400, error.message);
+  if (error) {
+    // Las reglas de negocio de la BD (P0001, ej. último admin) ya vienen en español.
+    if (error.code === "P0001") throw new ErrorHttp(400, error.message);
+    console.error("admin-usuarios (actualizar perfil):", error.message);
+    throw new ErrorHttp(500, "No se pudieron guardar los cambios");
+  }
 }
 
 async function manejar(req: Request): Promise<Response> {
@@ -113,8 +138,8 @@ async function manejar(req: Request): Promise<Response> {
 
   switch (body?.accion) {
     case "crear": {
-      const nombre = texto(body.nombre, "El nombre");
-      const email = texto(body.email, "El email").toLowerCase();
+      const nombre = texto(body.nombre, "El nombre", 100);
+      const email = texto(body.email, "El email", 254).toLowerCase();
       const r = rol(body.rol);
       const { data, error } = await admin.auth.admin.createUser({
         email,
@@ -128,10 +153,10 @@ async function manejar(req: Request): Promise<Response> {
     }
 
     case "actualizar": {
-      const id = texto(body.id, "El id");
+      const id = idUsuario(body.id);
       const actual = await perfil(admin, id);
       const cambios: Record<string, unknown> = {};
-      if (body.nombre !== undefined) cambios.nombre = texto(body.nombre, "El nombre");
+      if (body.nombre !== undefined) cambios.nombre = texto(body.nombre, "El nombre", 100);
       if (body.rol !== undefined) cambios.rol = rol(body.rol);
       if (Object.keys(cambios).length === 0)
         throw new ErrorHttp(400, "No hay cambios para guardar");
@@ -148,7 +173,7 @@ async function manejar(req: Request): Promise<Response> {
     }
 
     case "activar": {
-      const id = texto(body.id, "El id");
+      const id = idUsuario(body.id);
       if (typeof body.activo !== "boolean")
         throw new ErrorHttp(400, "Indicá si el usuario queda activo");
       if (id === yo && !body.activo) throw new ErrorHttp(400, "No podés desactivarte a vos mismo");
@@ -163,7 +188,7 @@ async function manejar(req: Request): Promise<Response> {
     }
 
     case "cambiar_password": {
-      const id = texto(body.id, "El id");
+      const id = idUsuario(body.id);
       await perfil(admin, id);
       const { error } = await admin.auth.admin.updateUserById(id, {
         password: password(body.password),
