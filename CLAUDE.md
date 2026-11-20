@@ -211,7 +211,7 @@ No se pasa de fase con tests en rojo.
 |---|---|
 | −1 | BD completa, Edge Function, tests pgTAP y de función (**hecha**) |
 | 0 | (**hecha**) Scaffold: Vite + React + TS strict, Tailwind, shadcn, router, TanStack Query, cliente Supabase, ESLint + Prettier, Vitest, Playwright, scripts `dev`/`build`/`typecheck`/`lint`/`test`/`test:e2e`; tipos generados (`supabase gen types`); sumar todo a `verificar` |
-| 1 | Auth, layout por rol, guardas de rutas, pantalla de usuarios |
+| 1 | (**hecha**) Auth, layout por rol, guardas de rutas, pantalla de usuarios |
 | 2 | Admin: cajas, categorías de servicio, servicios |
 | 3 | Admin: certificados, compras, ajustes, kardex, stock |
 | 4 | Caja: abrir turno, ventas, historial, cerrar turno |
