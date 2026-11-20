@@ -31,10 +31,11 @@
 --   21. 20261120000021_corregir_compra.sql
 --   22. 20261120000022_cajas_para_turno.sql
 --   23. 20261120000023_facturacion_arca.sql
+--   24. 20261120000024_arca_safeupdate.sql
 --
 -- Después de ejecutarlo, registrá las migraciones como aplicadas para que
 -- `supabase db push` no intente aplicarlas de nuevo:
---   npx supabase migration repair --status applied 20261119000001 20261119000002 20261119000003 20261119000004 20261119000005 20261119000006 20261119000007 20261119000008 20261119000009 20261119000010 20261119000011 20261119000012 20261119000013 20261120000014 20261120000015 20261120000016 20261120000017 20261120000018 20261120000019 20261120000020 20261120000021 20261120000022 20261120000023
+--   npx supabase migration repair --status applied 20261119000001 20261119000002 20261119000003 20261119000004 20261119000005 20261119000006 20261119000007 20261119000008 20261119000009 20261119000010 20261119000011 20261119000012 20261119000013 20261120000014 20261120000015 20261120000016 20261120000017 20261120000018 20261120000019 20261120000020 20261120000021 20261120000022 20261120000023 20261120000024
 -- =====================================================================
 
 begin;
@@ -3737,5 +3738,72 @@ to service_role;
 grant select on public.arca_configuracion, public.arca_condiciones_iva, public.comprobantes,
   public.v_comprobantes, public.ventas
 to service_role;
+
+-- ---------------------------------------------------------------------
+-- 20261120000024_arca_safeupdate.sql
+-- ---------------------------------------------------------------------
+-- Corrige dos funciones de la migración 023 que actualizaban la fila única de
+-- arca_configuracion con un UPDATE sin WHERE. En Supabase, las sesiones de la API cargan
+-- pg-safeupdate, que rechaza todo UPDATE/DELETE sin WHERE ("UPDATE requires a WHERE clause"):
+-- subir el certificado y actualizar las condiciones de IVA fallaban desde la Edge Function.
+
+create or replace function public._arca_actualizar_condiciones(p_condiciones jsonb)
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_cantidad integer;
+begin
+  if jsonb_typeof(p_condiciones) <> 'array' or jsonb_array_length(p_condiciones) = 0 then
+    raise exception 'ARCA no devolvió condiciones frente al IVA' using errcode = '22023';
+  end if;
+  insert into public.arca_condiciones_iva (id, descripcion, clases, actualizado_en)
+  select (c ->> 'id')::int, c ->> 'descripcion',
+         array(select jsonb_array_elements_text(c -> 'clases')), now()
+  from jsonb_array_elements(p_condiciones) c
+  on conflict (id) do update
+    set descripcion = excluded.descripcion, clases = excluded.clases, actualizado_en = now();
+  get diagnostics v_cantidad = row_count;
+  update public.arca_configuracion set condiciones_actualizadas_en = now() where id;
+  return v_cantidad;
+end;
+$$;
+
+create or replace function public._arca_guardar_credenciales(
+  p_certificado text, p_clave text, p_cuit text, p_sujeto text, p_vence timestamptz,
+  p_usuario_id uuid
+)
+returns public.arca_configuracion
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_config public.arca_configuracion;
+begin
+  select * into v_config from public.arca_configuracion where id for update;
+  if v_config.certificado_secreto_id is null then
+    v_config.certificado_secreto_id := vault.create_secret(p_certificado, 'arca_certificado',
+      'Certificado X.509 de ARCA (WSAA)');
+    v_config.clave_secreto_id := vault.create_secret(p_clave, 'arca_clave',
+      'Clave privada del certificado de ARCA');
+  else
+    perform vault.update_secret(v_config.certificado_secreto_id, p_certificado);
+    perform vault.update_secret(v_config.clave_secreto_id, p_clave);
+  end if;
+  update public.arca_configuracion set
+    certificado_secreto_id = v_config.certificado_secreto_id,
+    clave_secreto_id = v_config.clave_secreto_id,
+    certificado_cuit = p_cuit, certificado_sujeto = left(p_sujeto, 500),
+    certificado_vence = p_vence, certificado_cargado_en = now(), actualizado_por = p_usuario_id
+  where id
+  returning * into v_config;
+  -- Un certificado nuevo invalida los tickets de acceso anteriores.
+  delete from public.arca_tokens where true;
+  return v_config;
+end;
+$$;
 
 commit;

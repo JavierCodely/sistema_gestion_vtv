@@ -161,6 +161,7 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
 | 21 | `corregir_compra` | Editar compras: `corregir_compra_certificado()` (anula la original revirtiendo hojas, costo promedio, gasto y efectivo, y registra la corregida), columnas `anulada*`/`reemplazada_por`, tipo de kardex `anulacion_compra`, vista `v_compras_certificado` (con `editable`) |
 | 22 | `cajas_para_turno` | `cajas_para_turno()`: cajas activas con `ocupada`/`ocupada_por` (la RLS de `turnos` no deja ver los ajenos) |
 | 23 | `facturacion_arca` | Configuración ARCA (fila única; certificado y clave en Vault), `arca_condiciones_iva` (de `FEParamGetCondicionIvaReceptor`), `comprobantes` (factura/NC, estados, numeración serializada), log `arca_intentos`, tickets WSAA, `preparar_factura()`, `puede_emitir_comprobante()`, internas `_arca_*` (solo service role), `anular_venta` genera la NC, vista `v_comprobantes` (con `qr_url`) |
+| 24 | `arca_safeupdate` | `_arca_guardar_credenciales` y `_arca_actualizar_condiciones` con `WHERE` (pg-safeupdate rechazaba el UPDATE de la fila única) |
 
 Reglas que no son obvias leyendo una sola tabla:
 - **Certificado a usar**: el activo más específico (servicio > categoría > global).
@@ -249,6 +250,9 @@ Alertas en tiempo real: Realtime `postgres_changes` sobre `public.alertas` (RLS:
   `security_invoker = true`). `08_seguridad.sql` falla si una tabla queda sin RLS o una vista sin invoker;
   `12_privilegios_funciones.sql` falla si `anon` puede ejecutar alguna función o `authenticated` una
   interna (`_*`) o de trigger.
+- **Todo `UPDATE`/`DELETE` lleva `WHERE`**, aun sobre una tabla de fila única (`where id`): las sesiones de
+  la API cargan `pg-safeupdate` y rechazan el resto ("UPDATE requires a WHERE clause"). pgTAP no lo detecta
+  (no pasa por PostgREST); lo detectan los tests de Edge Functions.
 - RPC nuevas: `security definer`, `set search_path = ''`, nombres calificados (`public.x`),
   empezar con `perform public._exigir_usuario()` o `_exigir_admin()`.
 - Revisión de seguridad: agente `ciberseguridad` (auditoría completa o de un diff).

@@ -387,8 +387,12 @@ inspector_port = 8083
 # The Deno major version to use.
 deno_version = 2
 
-# [edge_runtime.secrets]
-# secret_key = "env(SECRET_VALUE)"
+# Solo local: la Edge Function `arca` habla con el simulador de ARCA (tests/arca/simulador.mjs,
+# `npm run arca:simulador`), nunca con ARCA real. En la nube estas variables no existen.
+# Para probar contra la homologación real en local, comentá ARCA_URL_SIMULADOR (docs/arca/LEEME.md).
+[edge_runtime.secrets]
+ARCA_URL_SIMULADOR = "http://host.docker.internal:54399"
+ARCA_TIMEOUT_MS = "5000"
 
 [analytics]
 enabled = true
