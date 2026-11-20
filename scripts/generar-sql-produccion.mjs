@@ -37,7 +37,9 @@ const partes = [
 ];
 
 for (const archivo of archivos) {
-  const sql = readFileSync(`${DIR_MIGRACIONES}/${archivo}`, "utf8").replace(/\r\n/g, "\n").trimEnd();
+  const sql = readFileSync(`${DIR_MIGRACIONES}/${archivo}`, "utf8")
+    .replace(/\r\n/g, "\n")
+    .trimEnd();
   partes.push(
     "-- ---------------------------------------------------------------------",
     `-- ${archivo}`,
