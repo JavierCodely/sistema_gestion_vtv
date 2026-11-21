@@ -182,21 +182,13 @@ npx supabase functions deploy arca
 
 > En una base ya instalada **nunca** se vuelve a correr `01_esquema_completo.sql`.
 
-**Estado de la nube (`gestion_vtv`), verificado el 2026-11-21:** la base **ya tiene las 25
-migraciones** (se aplicaron desde el SQL Editor; comprobado consultando objetos de la 021 a la 025),
-pero el **historial de migraciones está vacío** (`migration list --linked` no muestra ninguna como
-remota): faltó el `migration repair` de `supabase/produccion/LEEME.md`. Con el historial vacío,
-`db push` intentaría aplicar todo desde la 001 y fallaría. Pasos pendientes, en este orden:
+**Estado de la nube (`gestion_vtv`), verificado el 2026-11-21:** las 25 migraciones aplicadas y
+registradas en el historial (`migration list --linked`: local y remoto coinciden), Edge Functions
+`admin-usuarios` y `arca` publicadas. Desde la 026 en adelante alcanza con `npx supabase db push`.
 
-```bash
-# 1. Registrar las 25 migraciones como aplicadas (no ejecuta SQL; solo escribe el historial).
-#    El comando exacto está en el encabezado de supabase/produccion/01_esquema_completo.sql:
-npx supabase migration repair --status applied 20261119000001 20261119000002 20261119000003 20261119000004 20261119000005 20261119000006 20261119000007 20261119000008 20261119000009 20261119000010 20261119000011 20261119000012 20261119000013 20261120000014 20261120000015 20261120000016 20261120000017 20261120000018 20261120000019 20261120000020 20261120000021 20261120000022 20261120000023 20261120000024 20261120000025
-npx supabase migration list --linked     # ahora local y remoto deben coincidir (y db push no aplica nada)
-
-# 2. Publicar la Edge Function de facturación (la nube solo tiene admin-usuarios)
-npx supabase functions deploy arca
-```
+> Si alguna vez se aplica una migración desde el SQL Editor, hay que registrarla después con
+> `npx supabase migration repair --linked --status applied <versión>`: el SQL Editor no escribe el
+> historial y `db push` intentaría aplicarla de nuevo.
 
 ## Parte F — Volver a probar la instalación desde cero (solo proyecto de prueba)
 
