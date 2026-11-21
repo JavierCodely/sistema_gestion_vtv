@@ -302,6 +302,19 @@ async function emitir(req: Request, body: Record<string, unknown>) {
         });
         return await leerComprobante(servicio, id);
       }
+      // Antes de descartar se confirma con la numeración correlativa: con carga alta
+      // FECompConsultar puede contestar "sin resultados" para un comprobante ya autorizado. Si el
+      // último autorizado es menor que nuestro número, ese número nunca se emitió.
+      if (enArca === null) {
+        const { numero: ultimoEnArca } = await arca.paso("ultimo_autorizado", () =>
+          ultimoAutorizado(urlWsfe, ticket, comp.cuit_emisor, comp.punto_venta, comp.cbte_tipo),
+        );
+        if (ultimoEnArca >= comp.numero_intentado) {
+          throw new ErrorArca(
+            `ARCA ya tiene autorizado el número ${comp.numero_intentado} pero todavía no lo devuelve en la consulta. Reintentá en unos minutos: no se pide otro número para no emitir dos veces`,
+          );
+        }
+      }
       // No figura (o ese número lo usa otro comprobante): el nuestro nunca se emitió.
       await rpc("_arca_descartar_numero", {});
     }

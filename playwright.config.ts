@@ -43,10 +43,12 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: [["list"], ["html", { open: "never" }]],
-  // Supabase local corre en Docker (en Windows, sobre WSL): con la máquina cargada, una lectura de
-  // menos de 1 ms en Postgres llega a tardar 3–5 s de punta a punta (medido con trazas y logs de
-  // Kong). 10 s evita fallas intermitentes sin esconder errores reales: un dato que no aparece
-  // sigue fallando igual.
+  // 10 s para las aserciones: varias pantallas encadenan pedidos (preflight CORS + lectura) y una
+  // Edge Function local arranca en frío. Un dato que no aparece sigue fallando igual.
+  // Diagnóstico 2026-11-21 (net-log de Chromium): en Docker Desktop sobre WSL, el reenvío de puertos
+  // a veces cierra una conexión nueva sin entregar la respuesta que Kong sí envió
+  // (ERR_CONNECTION_RESET en el preflight). No es la base: Postgres y Kong responden en ms. Si un E2E
+  // falla con una pantalla en "Cargando…", correr con E2E_NETLOG=<carpeta> y revisar los preflight.
   expect: { timeout: 10_000 },
   use: {
     baseURL: `http://localhost:${PUERTO_E2E}`,
@@ -54,7 +56,25 @@ export default defineConfig({
     timezoneId: "America/Argentina/Buenos_Aires",
     trace: "retain-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    {
+      name: "chromium",
+      use: {
+        ...devices["Desktop Chrome"],
+        // Diagnóstico de red opcional: E2E_NETLOG=<carpeta> guarda el net-log de Chromium
+        // (sockets, colas, preflight CORS), uno por worker: tras una falla Playwright reinicia el
+        // worker y su navegador. Se abre en https://netlog-viewer.appspot.com.
+        launchOptions: process.env.E2E_NETLOG
+          ? {
+              args: [
+                `--log-net-log=${process.env.E2E_NETLOG}/netlog-${process.pid}.json`,
+                "--net-log-capture-mode=Default",
+              ],
+            }
+          : {},
+      },
+    },
+  ],
   webServer: [
     {
       command: `npx vite --port ${PUERTO_E2E} --strictPort`,

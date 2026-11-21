@@ -39,6 +39,9 @@ const PERMISO_DE_POSTGRES = /^(permission denied|new row violates row-level secu
 /** fetch caído: Chrome, Firefox, Safari y Node. supabase-js los envuelve sin código. */
 const ERROR_DE_RED = /failed to fetch|networkerror|load failed|fetch failed/i;
 
+/** Venció el límite de tiempo del pedido (`fetchConLimite`, compartido/lib/red.ts). */
+const ERROR_DE_DEMORA = /timeouterror|signal timed out|operation timed out|aborted due to timeout/i;
+
 function texto(valor: unknown): string | undefined {
   return typeof valor === "string" && valor ? valor : undefined;
 }
@@ -97,5 +100,6 @@ export function mensajeDeError(error: unknown, mensajes: MensajesPorCodigo = {})
 
   if (codigo) return porCodigo(codigo, mensaje, mensajes);
   if (mensaje && ERROR_DE_RED.test(mensaje)) return MENSAJES_ERROR.conexion;
+  if (mensaje && ERROR_DE_DEMORA.test(mensaje)) return MENSAJES_ERROR.demora;
   return mensaje ?? MENSAJES_ERROR.inesperado;
 }

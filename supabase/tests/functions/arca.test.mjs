@@ -49,7 +49,14 @@ async function funcion(token, payload) {
     headers: cabeceras(token),
     body: JSON.stringify(payload),
   });
-  return { status: r.status, body: await r.json() };
+  const texto = await r.text();
+  try {
+    return { status: r.status, body: JSON.parse(texto) };
+  } catch {
+    throw new Error(
+      `${payload.accion}: respuesta no JSON (HTTP ${r.status}): ${texto.slice(0, 300)}`,
+    );
+  }
 }
 
 async function rpc(token, nombre, args = {}) {
@@ -285,6 +292,30 @@ test("si la respuesta no llega, el reintento reconcilia con ARCA: nunca dos CAE"
   const liberada = await funcion(cajero, { accion: "emitir", comprobante_id: otra.id });
   assert.equal(liberada.body.comprobante.estado, "autorizado", liberada.body.comprobante.mensaje);
   assert.equal(liberada.body.comprobante.numero, ok.numero + 1);
+});
+
+test("si la consulta no encuentra un número ya autorizado, no se pide otro (nunca dos CAE)", async () => {
+  const comp = await facturarConsumidorFinal(cajero, await nuevaVenta());
+  await control.escenario("sin_respuesta");
+  const r = await funcion(admin, { accion: "emitir", comprobante_id: comp.id });
+  assert.equal(r.body.comprobante.a_reconciliar, true);
+  const emitidos = (await control.estado()).comprobantes.length;
+  const enArca = (await control.estado()).comprobantes.at(-1);
+
+  // ARCA con carga alta: FECompConsultar dice "sin resultados" aunque el número ya se autorizó
+  await control.escenario("consulta_vacia");
+  const dudoso = await funcion(admin, { accion: "emitir", comprobante_id: comp.id });
+  const c = dudoso.body.comprobante;
+  assert.equal(c.estado, "pendiente");
+  assert.equal(c.a_reconciliar, true, "conserva el número para reconciliar");
+  assert.match(c.mensaje, /ya tiene autorizado el número \d+ pero todavía no lo devuelve/);
+  assert.equal((await control.estado()).comprobantes.length, emitidos, "no se pidió otro CAE");
+
+  // Cuando la consulta responde, se reconcilia con el CAE original
+  const ok = (await funcion(admin, { accion: "emitir", comprobante_id: comp.id })).body.comprobante;
+  assert.equal(ok.estado, "autorizado", ok.mensaje);
+  assert.equal(ok.cae, enArca.cae);
+  assert.equal((await control.estado()).comprobantes.length, emitidos);
 });
 
 test("si WSAA no responde, la factura queda pendiente sin número", async () => {

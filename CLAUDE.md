@@ -33,12 +33,15 @@ Primera vez: `npm install` → `npx playwright install chromium` → `npm run db
 | `npm run sql:produccion` | Regenera `supabase/produccion/01_esquema_completo.sql` (todas las migraciones en una transacción, para el SQL Editor). Ver `supabase/produccion/LEEME.md` |
 | `npm run db:types` | Regenera `src/types/database.ts`. **Correrlo tras cada migración** |
 | `npm run test:db` | Tests pgTAP (`supabase/tests/database/*.sql`) |
-| `npm run test:functions` | Tests de integración de Edge Functions (node:test); `arca` corre contra el simulador |
+| `npm run test:functions` | Tests de integración de Edge Functions (node:test, un archivo a la vez); `arca` corre contra el simulador |
 | `npm run arca:simulador` | Simulador de ARCA (WSAA + WSFEv1) en `:54399` para probar la facturación en local. **Nunca ARCA real en tests** |
 | `npm run verificar` (= `verify`) | typecheck + lint + format + unit + build + db:reset + pgTAP + funciones + E2E. **Debe pasar antes de entregar cualquier cambio** |
 
 - Un test unitario: `npx vitest run tests/unit/compartido/lib/formato.test.ts` (o `-t "nombre"`).
 - Un E2E: `npx playwright test tests/e2e/auth.spec.ts` (o `-g "nombre"`).
+- E2E con pantalla trabada en "Cargando…": `E2E_NETLOG=<carpeta> npx playwright test` guarda el net-log
+  de Chromium por worker. En Docker Desktop/WSL el reenvío de puertos a veces corta el preflight CORS
+  aunque Kong respondió (diagnóstico 2026-11-21): no es la base.
 - Un archivo pgTAP: `npx supabase test db supabase/tests/database/05_ventas.sql`
 - Un test de función: `node --test --test-name-pattern "ciclo completo" supabase/tests/functions/admin-usuarios.test.mjs`
 - **Edge Functions nuevas**: el runtime local solo las detecta al arrancar → `npm run db:stop && npm run db:start`.
@@ -47,6 +50,10 @@ Primera vez: `npm install` → `npx playwright install chromium` → `npm run db
   Cada llamada puede tardar unos segundos en frío: en los E2E, toda acción que llama a una Edge Function
   va envuelta en `conFuncion(page, "<función>", accion)` (`tests/e2e/utilidades.ts`), que espera la
   respuesta antes de las aserciones; los flujos largos llevan `test.setTimeout(90_000)`.
+  En `oneshot`, con pedidos simultáneos el runtime a veces termina el worker antes de que salga la
+  respuesta (503 vacío, log `connection aborted`; la función sí se ejecutó). Por eso los tests de
+  funciones corren de a un archivo (`--test-concurrency=1`) y las E2E con `workers: 1`. No se
+  reintenta automáticamente: la llamada pudo tener efecto. Es solo del runtime local, no de la nube.
 - Usuarios del seed (solo local): `admin@vtv.local / admin1234`, `cajero@vtv.local / cajero1234`.
 
 ## Arquitectura del frontend
@@ -121,6 +128,9 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
 - **Textos libres**: CHECK `char_length(col) <= N` (nombres 100, notas/motivos 500, patente 10, proveedor 200);
   la UI usa los mismos límites (`LARGO_MAXIMO_*` en `compartido/lib/validaciones.ts`).
 - RPC que escriben sobre un turno lo leen con `for share` (serializa con `cerrar_turno`).
+- **Pedidos con límite de tiempo** (`compartido/lib/red.ts`, en el cliente de Supabase): 15 s REST/auth,
+  150 s Edge Functions. postgrest-js reintenta solo las lecturas; una escritura vencida muestra
+  "La operación tardó demasiado" y nunca se reintenta sola.
 - **Errores en la UI**: siempre `mensajeDeError(e, mensajes?)` (`compartido/lib/errores.ts`). Las RPC ya
   responden en español; los errores crudos de Postgres del CRUD directo (23505 repetido, 23503 en uso,
   23514 inválido, permisos) se traducen por código, con mensajes específicos por pantalla

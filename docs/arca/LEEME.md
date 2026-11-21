@@ -29,7 +29,11 @@ Las reglas de negocio están en `CLAUDE.md` §9; el contrato técnico de la Edge
   admin, cualquier venta (Ventas → turno).
 - Si ARCA rechaza, la factura queda **rechazada** con el motivo y se corrige/reintenta. Si ARCA no
   responde, queda **pendiente "a confirmar"**: el próximo intento primero consulta a ARCA si ese número
-  ya se emitió (`FECompConsultar`), así **nunca hay dos CAE para una venta**.
+  ya se emitió (`FECompConsultar`), así **nunca hay dos CAE para una venta**. Si la consulta dice "sin
+  resultados", el número solo se descarta cuando `FECompUltimoAutorizado` es menor: con carga alta ARCA
+  puede no devolver todavía un comprobante ya autorizado, y en ese caso queda a confirmar.
+- Mientras un número espera confirmación, ese punto de venta y tipo no emite otro comprobante (la
+  numeración es correlativa: el manual exige que cada número sea el último + 1, error 10016).
 - **Anular** una venta facturada emite la **nota de crédito** asociada (A o B como la factura). Si ARCA
   falla, queda pendiente y se reintenta desde el turno o desde **Facturación**.
 - **Facturación** (admin): comprobantes sin CAE con reintento, y el log de cada comunicación con ARCA

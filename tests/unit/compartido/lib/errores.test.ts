@@ -55,6 +55,14 @@ describe("mensajeDeError", () => {
     },
   );
 
+  it.each([
+    "TimeoutError: signal timed out",
+    "The operation timed out.",
+    "TimeoutError: The operation was aborted due to timeout",
+  ])("límite de tiempo vencido: %s", (message) => {
+    expect(mensajeDeError({ code: "", message })).toBe(MENSAJES_ERROR.demora);
+  });
+
   it("acepta mensajes específicos por pantalla", () => {
     const opciones = { repetido: "Ya existe esa caja", enUso: "La caja ya se usó" };
     expect(mensajeDeError({ code: "23505", message: "duplicate" }, opciones)).toBe(

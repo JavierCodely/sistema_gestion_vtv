@@ -6,7 +6,9 @@
 // La Edge Function lo usa cuando existe ARCA_URL_SIMULADOR (solo en supabase/config.toml local).
 // Control (para los tests):
 //   POST /_control/escenario { escenario, veces? }  escenarios: normal | rechazo | sin_respuesta |
-//        wsaa_caido   (sin_respuesta: emite el CAE pero no contesta; el cliente corta por timeout)
+//        wsaa_caido | consulta_vacia   (sin_respuesta: emite el CAE pero no contesta; el cliente
+//        corta por timeout. consulta_vacia: FECompConsultar contesta "sin resultados" aunque el
+//        comprobante exista, como ARCA con carga alta)
 //   POST /_control/reiniciar                        borra comprobantes, tickets y escenario
 //   POST /_control/vencer_tickets                   vence los tickets de WSAA (conserva la numeración)
 //   GET  /_control/estado                           comprobantes emitidos y tickets entregados
@@ -271,9 +273,12 @@ export function crearSimulador() {
       }
       case "FECompConsultar": {
         const r = op.FeCompConsReq;
-        const c = estado.comprobantes.get(
-          clave(cuit, Number(r.PtoVta), Number(r.CbteTipo), Number(r.CbteNro)),
-        );
+        const c =
+          consumirEscenario() === "consulta_vacia"
+            ? undefined
+            : estado.comprobantes.get(
+                clave(cuit, Number(r.PtoVta), Number(r.CbteTipo), Number(r.CbteNro)),
+              );
         if (!c) return res(errores([[602, "Sin Resultados: - en la condicion de busqueda."]]));
         return res(
           `<ResultGet><Concepto>2</Concepto><DocTipo>${c.docTipo}</DocTipo><DocNro>${c.docNro}</DocNro>` +

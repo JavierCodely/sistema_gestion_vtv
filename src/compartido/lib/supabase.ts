@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { fetchConLimite } from "@/compartido/lib/red";
 import type { Database } from "@/types/database";
 
 const url = import.meta.env.VITE_SUPABASE_URL;
@@ -13,4 +14,6 @@ if (!url || !anonKey) {
 export const supabaseUrl = url;
 export const supabaseAnonKey = anonKey;
 
-export const supabase = createClient<Database>(url, anonKey);
+export const supabase = createClient<Database>(url, anonKey, {
+  global: { fetch: fetchConLimite() },
+});
