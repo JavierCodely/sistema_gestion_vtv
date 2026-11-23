@@ -235,7 +235,7 @@ Se trabaja en la rama `desarrollo`; `main` queda para lo estable.
 |---|---|
 | `npm run dev` | App local contra Supabase local |
 | `npm run dev:remoto` | App local contra Supabase en la nube |
-| `npm run build` | Compila la app para publicar |
+| `npm run build` | Compila la app para publicar (en Vercel, `vercel.json` hace que cualquier ruta —ej. recargar `/admin/ventas`— devuelva `index.html`; sin eso, 404) |
 | `npm run db:start` / `db:stop` | Prender / apagar Supabase local |
 | `npm run db:reset` | Recrear base local (migraciones + seed) |
 | `npm run db:types` | Regenerar `src/types/database.ts` (tras cada migración) |
