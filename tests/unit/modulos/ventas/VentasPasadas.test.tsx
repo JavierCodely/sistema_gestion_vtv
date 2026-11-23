@@ -38,6 +38,8 @@ beforeEach(() => {
       { id: 2, nombre: "Caja vieja", activa: false },
     ],
   });
+  // Sin cajas abiertas: se propone la única caja activa
+  responder("v_turnos_abiertos", "select", { data: [] });
   responder("servicios", "select", {
     data: [
       {
@@ -105,8 +107,10 @@ describe("VentasPasadas (admin)", () => {
     await userEvent.click(within(dialogo).getByRole("button", { name: "Cargar venta" }));
 
     expect(within(dialogo).getByText("Elegí la fecha de la venta.")).toBeInTheDocument();
-    expect(within(dialogo).getByText("Elegí la hora de la venta.")).toBeInTheDocument();
-    expect(within(dialogo).getByText("Elegí una caja.")).toBeInTheDocument();
+    // La hora es opcional y la caja ya viene propuesta (la única activa)
+    expect(within(dialogo).getByText("Vacía: queda a las 00:00 de ese día.")).toBeInTheDocument();
+    expect(within(dialogo).queryByText("Elegí una caja.")).not.toBeInTheDocument();
+    expect(within(dialogo).getByLabelText("Caja")).toHaveTextContent("Caja 1");
     expect(within(dialogo).getByText("Elegí un servicio.")).toBeInTheDocument();
     expect(within(dialogo).getByText("Elegí el medio de pago.")).toBeInTheDocument();
     expect(within(dialogo).getByText("Ingresá un precio.")).toBeInTheDocument();
@@ -123,7 +127,9 @@ describe("VentasPasadas (admin)", () => {
     const dialogo = await screen.findByRole("dialog", { name: "Cargar venta con fecha pasada" });
 
     fireEvent.change(within(dialogo).getByLabelText("Fecha"), { target: { value: "2026-10-15" } });
-    fireEvent.change(within(dialogo).getByLabelText("Hora"), { target: { value: "18:45" } });
+    fireEvent.change(within(dialogo).getByLabelText("Hora (opcional)"), {
+      target: { value: "18:45" },
+    });
     await userEvent.click(within(dialogo).getByLabelText("Caja"));
     await userEvent.click(await screen.findByRole("option", { name: "Caja vieja (desactivada)" }));
     await userEvent.click(within(dialogo).getByLabelText("Servicio"));
@@ -153,6 +159,37 @@ describe("VentasPasadas (admin)", () => {
     });
   });
 
+  it("propone la caja con turno abierto y, sin hora, manda las 00:00", async () => {
+    responder("ventas", "select", { data: [] });
+    responder("v_turnos_abiertos", "select", {
+      data: [{ id: 40, caja_id: 2, caja_nombre: "Caja vieja", abierto_en: "2026-11-23T11:00:00Z" }],
+    });
+    responderRpc("registrar_venta_pasada", {
+      data: { id: 96, servicio_nombre: "VTV auto", precio: 20000 },
+    });
+    renderRuta("/admin/ventas/pasadas", admin());
+    await userEvent.click(await screen.findByRole("button", { name: "Cargar venta" }));
+    const dialogo = await screen.findByRole("dialog", { name: "Cargar venta con fecha pasada" });
+
+    await waitFor(() => {
+      expect(within(dialogo).getByLabelText("Caja")).toHaveTextContent("Caja vieja");
+    });
+    fireEvent.change(within(dialogo).getByLabelText("Fecha"), { target: { value: "2026-10-15" } });
+    await userEvent.click(within(dialogo).getByLabelText("Servicio"));
+    await userEvent.click(await screen.findByRole("option", { name: "VTV auto" }));
+    await userEvent.click(within(dialogo).getByLabelText("Medio de pago"));
+    await userEvent.click(await screen.findByRole("option", { name: "Tarjeta" }));
+    await userEvent.click(within(dialogo).getByRole("button", { name: "Cargar venta" }));
+
+    await waitFor(() => {
+      expect(argumentosRpc("registrar_venta_pasada")).toMatchObject({
+        p_fecha: "2026-10-15",
+        p_hora: "00:00",
+        p_caja_id: 2,
+      });
+    });
+  });
+
   it("muestra el error de la BD sin cerrar el formulario", async () => {
     responder("ventas", "select", { data: [] });
     responderRpc("registrar_venta_pasada", {
@@ -166,7 +203,9 @@ describe("VentasPasadas (admin)", () => {
     const dialogo = await screen.findByRole("dialog", { name: "Cargar venta con fecha pasada" });
 
     fireEvent.change(within(dialogo).getByLabelText("Fecha"), { target: { value: "2026-10-15" } });
-    fireEvent.change(within(dialogo).getByLabelText("Hora"), { target: { value: "18:45" } });
+    fireEvent.change(within(dialogo).getByLabelText("Hora (opcional)"), {
+      target: { value: "18:45" },
+    });
     await userEvent.click(within(dialogo).getByLabelText("Caja"));
     await userEvent.click(await screen.findByRole("option", { name: "Caja 1" }));
     await userEvent.click(within(dialogo).getByLabelText("Servicio"));

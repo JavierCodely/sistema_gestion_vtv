@@ -24,12 +24,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/compartido/ui/select";
-import { MEDIOS_PAGO, MENSAJES_ERROR_VENTA, type MedioPago } from "@/modulos/caja/api/consultas";
+import {
+  MEDIOS_PAGO,
+  MENSAJES_ERROR_VENTA,
+  type MedioPago,
+  useCajasAbiertas,
+} from "@/modulos/caja/api/consultas";
 import { useCajas } from "@/modulos/cajas/api/consultas";
 import { useServicios } from "@/modulos/servicios/api/consultas";
 import { useRegistrarVentaPasada } from "../api/consultas";
 import {
   FECHA_MINIMA_VENTA_PASADA,
+  HORA_SIN_ELEGIR,
   validarVentaPasada,
   type ErroresVentaPasada,
   type FormularioVentaPasada,
@@ -54,12 +60,27 @@ const VACIO: FormularioVentaPasada = {
  */
 export function DialogoVentaPasada({ onCerrar }: { onCerrar: () => void }) {
   const cajas = useCajas();
+  const cajasAbiertas = useCajasAbiertas();
   const servicios = useServicios();
   const registrar = useRegistrarVentaPasada();
   const [formulario, setFormulario] = useState<FormularioVentaPasada>(VACIO);
   const [errores, setErrores] = useState<ErroresVentaPasada>({});
   const [errorServidor, setErrorServidor] = useState<string | null>(null);
   const hoy = hoyEnArgentina();
+  const [cajaPropuesta, setCajaPropuesta] = useState(false);
+
+  // Caja propuesta (una sola vez, se puede cambiar): la que tiene turno abierto (la primera por
+  // nombre si hay varias); si no hay ninguna abierta y hay una sola caja activa, esa. Si no se
+  // pueden leer las cajas abiertas, no se propone nada y se elige a mano.
+  if (!cajaPropuesta && cajas.data && !cajasAbiertas.isPending) {
+    setCajaPropuesta(true);
+    const activas = cajas.data.filter((c) => c.activa);
+    const propuesta =
+      cajasAbiertas.data?.[0]?.caja_id ?? (activas.length === 1 ? activas[0]?.id : undefined);
+    if (propuesta !== undefined && formulario.cajaId === "") {
+      setFormulario((actual) => ({ ...actual, cajaId: String(propuesta) }));
+    }
+  }
 
   function cambiar<K extends keyof FormularioVentaPasada>(
     clave: K,
@@ -137,7 +158,7 @@ export function DialogoVentaPasada({ onCerrar }: { onCerrar: () => void }) {
                   {...propsError("pasada-fecha", errores.fecha)}
                 />
               </Campo>
-              <Campo id="pasada-hora" etiqueta="Hora" error={errores.hora}>
+              <Campo id="pasada-hora" etiqueta="Hora (opcional)" error={errores.hora}>
                 <Input
                   id="pasada-hora"
                   type="time"
@@ -145,8 +166,14 @@ export function DialogoVentaPasada({ onCerrar }: { onCerrar: () => void }) {
                   onChange={(e) => {
                     cambiar("hora", e.target.value);
                   }}
-                  {...propsError("pasada-hora", errores.hora)}
+                  aria-describedby={
+                    errores.hora ? "pasada-hora-error pasada-hora-ayuda" : "pasada-hora-ayuda"
+                  }
+                  aria-invalid={errores.hora ? true : undefined}
                 />
+                <p id="pasada-hora-ayuda" className="text-xs text-muted-foreground">
+                  Vacía: queda a las {HORA_SIN_ELEGIR} de ese día.
+                </p>
               </Campo>
             </div>
             <Campo id="pasada-caja" etiqueta="Caja" error={errores.cajaId}>

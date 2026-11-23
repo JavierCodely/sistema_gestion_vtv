@@ -334,7 +334,9 @@ Reglas que no son obvias leyendo una sola tabla:
   Después de abrir no se navega. Abrir y cerrar invalidan `["turnos"]` (`v_turnos`, turnos abiertos y
   cajas abiertas de `/caja`), `["caja"]` (cajas para turno, historial), `claveEfectivo` y `claveFondos`. Tema claro/oscuro propio (`compartido/lib/tema.ts` + `ProveedorTema`; clase `dark`, guardado en `localStorage` "vtv-tema", aplicado antes de pintar por el script de `index.html`). No usar `next-themes`: renderiza un `<script>` dentro de React y React 19 lo rechaza en una SPA.
 - **Ventas con fecha pasada** (decisión del negocio, 2026-11-21): carga histórica, solo el admin, en
-  `/admin/ventas/pasadas`. Elige fecha y hora (hora AR, anterior a este momento, desde 2000), caja,
+  `/admin/ventas/pasadas`. Elige fecha y hora (hora AR, anterior a este momento, desde 2000; la hora es
+  **opcional**: vacía = 00:00 de ese día, decisión 2026-11-23), caja (**propuesta**: la que tiene turno
+  abierto —la primera por nombre si hay varias— o, sin ninguna abierta, la única activa; se puede cambiar),
   servicio (también desactivados), medio de pago, precio (propone el actual; acepta $ 0) y patente.
   **Sin turno** (no tocan totales ni fotos de turnos), `creado_en` = fecha elegida (los reportes por
   día la cuentan ahí) y `cargada_en` = cuándo se cargó. **No descuentan hojas** ni generan alertas.
