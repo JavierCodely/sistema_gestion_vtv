@@ -119,7 +119,8 @@ test("descuentos: el admin crea uno y lo habilita para un servicio; el cajero ve
     .getByRole("listbox", { name: /^2\. Servicio/ })
     .getByRole("option", { name: new RegExp(`^${otroServicio}`) })
     .click();
-  await expect(pc.getByLabel("3. Patente (opcional)")).toBeFocused();
+  await expect(pc.getByLabel("3. Patente")).toBeFocused();
+  await pc.keyboard.type("AA111AA");
   await pc.keyboard.press("Enter");
   await expect(pc.getByRole("listbox", { name: "4. Medio de pago" })).toBeFocused();
 
@@ -141,7 +142,7 @@ test("descuentos: el admin crea uno y lo habilita para un servicio; el cajero ve
   await expect(pc.getByRole("alert")).toHaveText(
     /^El precio cambió: ahora es \$\s?25\.000,00\. Revisá la venta\.$/,
   );
-  await expect(pc.getByLabel("3. Patente (opcional)")).toBeFocused();
+  await expect(pc.getByLabel("3. Patente")).toBeFocused();
   await expect(pc.getByTestId("precio")).toHaveText(/\$\s?25\.000,00/);
   // (Que no se registró lo confirma el total del turno más abajo: solo la venta con descuento.)
   await pc.keyboard.press("Escape");
@@ -157,7 +158,10 @@ test("descuentos: el admin crea uno y lo habilita para un servicio; el cajero ve
   await expect(opcionDescuento).toContainText(/\$\s?18\.000,00/);
   await opcionDescuento.click();
   await expect(pc.getByTestId("precio")).toHaveText(/\$\s?18\.000,00/);
-  await expect(pc.getByLabel("3. Patente (opcional)")).toBeFocused();
+  await expect(pc.getByLabel("3. Patente")).toBeFocused();
+  // La patente de antes sigue escrita: se reemplaza
+  await expect(pc.getByLabel("3. Patente")).toHaveValue("AA111AA");
+  await pc.keyboard.press("Control+A");
   await pc.keyboard.type("ac 456 bd");
   await pc.keyboard.press("Enter");
   await expect(pc.getByRole("listbox", { name: "4. Medio de pago" })).toBeFocused();

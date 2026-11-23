@@ -46,9 +46,9 @@ reset role;
 -- Ventas del cajero: transferencia, tarjeta y mixta -------------------------------------------------
 select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja, 100) as turno \gset
 select (registrar_venta(:turno, :servicio, 'transferencia', 'aa111aa')).id as v_tr \gset
-select (registrar_venta(:turno, :servicio, 'tarjeta')).id as v_ta \gset
+select (registrar_venta(:turno, :servicio, 'tarjeta', p_patente => $p$AB123CD$p$)).id as v_ta \gset
 select (registrar_venta(:turno, :servicio, p_pagos =>
-  '[{"medio":"efectivo","monto":5000},{"medio":"transferencia","monto":7000},{"medio":"tarjeta","monto":8000}]')).id as v_mx \gset
+  '[{"medio":"efectivo","monto":5000},{"medio":"transferencia","monto":7000},{"medio":"tarjeta","monto":8000}]', p_patente => $p$AB123CD$p$)).id as v_mx \gset
 
 -- El cajero no ve nada de Fondos (aunque la RLS le deja leer las ventas del turno abierto)
 select is((select count(*)::int from v_movimientos_fondos), 0, 'el cajero no ve el libro de fondos');

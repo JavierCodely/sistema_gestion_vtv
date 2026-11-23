@@ -14,8 +14,8 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react";
-import { Suspense } from "react";
-import { NavLink, Outlet } from "react-router";
+import { Suspense, useEffect, useRef } from "react";
+import { NavLink, Outlet, useLocation } from "react-router";
 import { useAuth } from "@/modulos/auth/contexto";
 import { BotonSalir } from "@/modulos/auth/componentes/BotonSalir";
 import { BotonTema } from "@/compartido/componentes/BotonTema";
@@ -47,10 +47,20 @@ const MENU_ADMIN: ItemMenu[] = [
 
 export function LayoutAdmin() {
   const { perfil } = useAuth();
+  const contenido = useRef<HTMLElement>(null);
+  const { pathname } = useLocation();
+
+  // El contenido tiene su propio scroll: al cambiar de pantalla vuelve arriba (el navegador solo
+  // restaura el scroll de la ventana).
+  useEffect(() => {
+    if (contenido.current) contenido.current.scrollTop = 0;
+  }, [pathname]);
 
   return (
-    <div className="flex min-h-svh flex-col md:flex-row">
-      <aside className="border-b bg-muted/40 md:w-60 md:shrink-0 md:border-r md:border-b-0">
+    // En pantallas medianas o más grandes el panel ocupa la ventana: el menú y la barra quedan fijos
+    // y solo el contenido se desplaza, con su propia barra de scroll. En el celular, scroll normal.
+    <div className="flex min-h-svh flex-col md:h-svh md:flex-row md:overflow-hidden">
+      <aside className="border-b bg-muted/40 md:w-60 md:shrink-0 md:overflow-y-auto md:border-r md:border-b-0">
         <div className="px-4 py-3 font-semibold">Sistema VTV</div>
         <nav aria-label="Menú de administración">
           <ul className="flex gap-1 overflow-x-auto px-2 pb-2 md:flex-col md:overflow-visible">
@@ -74,7 +84,7 @@ export function LayoutAdmin() {
           </ul>
         </nav>
       </aside>
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col md:min-h-0">
         {/* Barra fija: las acciones de turno quedan siempre a mano al hacer scroll. */}
         <header className="sticky top-0 z-40 flex items-center gap-2 border-b bg-background px-4 py-2 md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
           <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
@@ -88,7 +98,11 @@ export function LayoutAdmin() {
             <BotonSalir />
           </div>
         </header>
-        <main className="flex-1 p-4 md:p-6">
+        <main
+          ref={contenido}
+          data-testid="contenido-admin"
+          className="flex-1 p-4 md:min-h-0 md:overflow-y-auto md:p-6"
+        >
           <Suspense fallback={<Cargando />}>
             <Outlet />
           </Suspense>

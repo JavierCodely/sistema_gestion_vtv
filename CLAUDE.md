@@ -99,7 +99,7 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
   `medio_pago` sin contemplar NULL.
 - **Venta en la caja** (`FormularioVenta`): categoría → servicio → descuento (solo si
   `descuentos_para_servicio` trae opciones; "Sin descuento" marcado; si no se pueden leer, se sigue sin
-  descuento y se avisa) → patente → medio (Efectivo, Transferencia, Tarjeta, **Mixto**) → en Mixto
+  descuento y se avisa) → patente (**obligatoria**, migración 38: vacía no avanza y avisa "Ingresá la patente del vehículo.") → medio (Efectivo, Transferencia, Tarjeta, **Mixto**) → en Mixto
   (decisión 2026-11-23) el cajero escribe **solo el efectivo** (campo grande; > 0 y menor que el precio)
   y el resto (precio final − efectivo, `revisarPagoMixto`, solo vista previa) se ve en grande; Enter →
   "¿Con qué paga el resto?": Transferencia / Débito / Crédito (1/2 o flechas + Enter, `PasoRestoMixto`;
@@ -246,6 +246,7 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
 | 35 | `ventas_tiempo_real` | `v_turnos.fecha_apertura` (día de negocio de la apertura, al final de la vista); `resumen_turnos(p_desde, p_hasta)` (totales sumados de los turnos abiertos en el rango, solo admin); Realtime de `ventas`, `venta_pagos`, `gastos`, `turnos` y `comprobantes` (la RLS y los grants por columna de cada suscriptor filtran lo que llega: los costos nunca viajan) — decisión 2026-11-23 |
 | 36 | `impuestos` | Sección **Impuestos** (solo admin, es un reporte): enum `tipo_impuesto` (porcentaje, monto_fijo por venta); `impuestos` (nombre, tipo, valor, `medios medio_pago[]` —al menos uno, sin repetidos—, `todos_servicios`, activo; CRUD admin por columna), `impuesto_servicios`; foto `venta_impuestos` (una fila por venta, impuesto y medio) calculada por el trigger de sentencia `venta_pagos_impuestos` (interna `_calcular_impuestos_venta`); `fijar_servicios_impuesto()`, `resumen_impuestos()` — decisiones 2026-11-23 |
 | 37 | `dashboard` | Dashboard del admin (solo lectura): `ventas_por_dia(desde, hasta)` (un día por fila hasta hoy, máx. 366 días), `resumen_dashboard(desde, hasta, turno)` (total, servicio, categoría, descuento) y `resumen_gastos(desde, hasta, turno)` (total, compra de certificados, otros gastos, rubro, subcategoría); interna `_validar_rango_reporte` — decisiones 2026-11-23 |
+| 38 | `patente_obligatoria` | Trigger `ventas_patente_obligatoria` (BEFORE INSERT): toda venta con turno lleva patente (22023 "Ingresá la patente del vehículo"); las ventas con fecha pasada siguen con patente opcional y las viejas sin patente no cambian — decisión 2026-11-23 |
 
 Reglas que no son obvias leyendo una sola tabla:
 - **Certificado a usar**: el activo más específico (servicio > categoría > global).
@@ -318,7 +319,9 @@ Reglas que no son obvias leyendo una sola tabla:
   (`p_turno_id`), y ve la lista de los gastos de ese turno, **sin totales ni saldo**. El admin carga en cualquier subcategoría (con o sin turno), anula
   y administra rubros/subcategorías (`habilitada_caja`, activar/desactivar) en `/admin/gastos`.
 - **Barra de turnos** (decisión 2026-11-22): la barra superior es **fija** (`sticky top-0`) en el panel
-  y en la caja. El admin ve siempre **"Abrir turno"** y **"Cerrar turno"** (en `/admin/*` y en `/caja`)
+  y en la caja. En el panel del admin (desde `md`) el contenido tiene **scroll propio** (`<main
+  data-testid="contenido-admin">` con `overflow-y-auto`; el layout ocupa la ventana con `h-svh`): el menú
+  y la barra quedan fijos y, al cambiar de pantalla, el contenido vuelve arriba. En el celular, scroll normal. El admin ve siempre **"Abrir turno"** y **"Cerrar turno"** (en `/admin/*` y en `/caja`)
   y, fuera de `/caja`, **"Ir a la caja"** si hay alguna caja abierta (solo con la consulta ya respondida).
   "Abrir turno" abre el modal **sin "Atiende"** (el turno es de la caja, migración 33): caja (la
   **primera libre ya elegida**, orden de `cajas_para_turno`, se puede cambiar) y efectivo inicial; sin
@@ -388,7 +391,8 @@ Reglas que no son obvias leyendo una sola tabla:
   (**Año** + **Mes**, "Todo el año" = el año entero, o **Turno**; siempre muestra "Del dd/mm/aaaa al
   dd/mm/aaaa" o el turno): ventas, total vendido y descuentos realizados; servicios y categorías más
   vendidos (por cantidad); descuentos (ventas, cobrado, descontado); gastos (total, compra de
-  certificados, otros gastos) y en qué se gastó más (por rubro y por subcategoría). Cada gráfico es de
+  certificados, otros gastos) y en qué se gastó más (por rubro y por subcategoría); impuestos con el mismo
+  filtro (`resumen_impuestos`: total, por medio de pago y por impuesto). Cada gráfico es de
   una serie, con tooltip y la tabla de los mismos números debajo. Las consultas se repiten cada vez que
   se entra (`staleTime: 0`, `refetchOnMount: "always"`): no hace falta invalidarlas desde otras pantallas.
   Ningún total se calcula en el frontend.
@@ -470,7 +474,7 @@ Todas requieren usuario autenticado y **activo**. Devuelven la fila afectada.
 |---|---|---|
 | `abrir_turno(p_caja_id bigint, p_efectivo_inicial numeric) → turnos` | admin | Turno de la caja, sin usuario (`usuario_id` NULL, `abierto_por` = admin). Caja activa y libre; el efectivo inicial (> 0) sale de la caja de cambio |
 | `cerrar_turno(p_turno_id bigint, p_observaciones text = null) → turnos` | admin | Cualquier turno abierto. El efectivo del cajón vuelve a la caja de cambio |
-| `registrar_venta(p_turno_id bigint, p_servicio_id bigint, p_medio_pago medio_pago = null, p_patente text = null, p_pagos jsonb = null, p_descuento_id bigint = null, p_precio_esperado numeric = null) → ventas` | todos | `p_turno_id` **obligatorio**: turno abierto de la caja donde se trabaja (NULL → 22023 "Elegí la caja en la que estás trabajando"; inexistente → 22023; cerrado → P0001 "El turno de la caja "X" ya se cerró: elegí una caja abierta"). `usuario_id` = quien vende. Un medio (`p_medio_pago`) **o** pago mixto (`p_pagos` = `[{"medio":"efectivo","monto":5000},{"medio":"tarjeta","monto":13000}]`, 2–3 medios distintos que suman el precio final), nunca los dos. `p_descuento_id` opcional (activo y habilitado para el servicio). `p_precio_esperado` opcional = precio final que vio el cajero: monto válido o `0` exacto (servicio de $ 0); si no coincide con el calculado, P0001 "El precio cambió: ahora es $ X. Revisá la venta." (sin el parámetro no se compara). Patente se normaliza (mayúsculas, sin espacios). `ventas.id` = número de venta |
+| `registrar_venta(p_turno_id bigint, p_servicio_id bigint, p_medio_pago medio_pago = null, p_patente text = null, p_pagos jsonb = null, p_descuento_id bigint = null, p_precio_esperado numeric = null) → ventas` | todos | `p_turno_id` **obligatorio**: turno abierto de la caja donde se trabaja (NULL → 22023 "Elegí la caja en la que estás trabajando"; inexistente → 22023; cerrado → P0001 "El turno de la caja "X" ya se cerró: elegí una caja abierta"). `usuario_id` = quien vende. Un medio (`p_medio_pago`) **o** pago mixto (`p_pagos` = `[{"medio":"efectivo","monto":5000},{"medio":"tarjeta","monto":13000}]`, 2–3 medios distintos que suman el precio final), nunca los dos. `p_descuento_id` opcional (activo y habilitado para el servicio). `p_precio_esperado` opcional = precio final que vio el cajero: monto válido o `0` exacto (servicio de $ 0); si no coincide con el calculado, P0001 "El precio cambió: ahora es $ X. Revisá la venta." (sin el parámetro no se compara). Patente **obligatoria** (migración 38; 22023 "Ingresá la patente del vehículo") y se normaliza (mayúsculas, sin espacios). `ventas.id` = número de venta |
 | `descuentos_para_servicio(p_servicio_id bigint) → setof (id, nombre, tipo, valor, precio_lista, monto_descuento, precio_final)` | todos | Descuentos activos habilitados para el servicio que descuentan algo (monto redondeado > 0) y dejan precio final > 0, con los montos calculados por la BD. Vacío si el servicio o su categoría están desactivados |
 | `fijar_servicios_descuento(p_descuento_id bigint, p_servicio_ids bigint[]) → descuentos` | admin | Reemplaza de una vez (atómico) los servicios donde se puede usar; `'{}'` = ninguno |
 | `resumen_descuentos(p_desde date = null, p_hasta date = null) → setof (agrupacion, id, nombre, cantidad_ventas, total_descontado)` | admin | Sin anuladas, rango por día de negocio. `agrupacion` = `total` (1 fila, id NULL) · `descuento` · `servicio` (nombres actuales del catálogo); en ese orden y de mayor a menor total descontado |

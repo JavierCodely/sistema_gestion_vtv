@@ -35,8 +35,8 @@ async function venderConTarjeta() {
   await userEvent.keyboard("{Enter}");
   await screen.findByRole("listbox", { name: "2. Servicio · Autos" });
   await userEvent.keyboard("{Enter}");
-  await screen.findByLabelText("3. Patente (opcional)");
-  await userEvent.keyboard("{Enter}");
+  await screen.findByLabelText("3. Patente");
+  await userEvent.keyboard("AA111AA{Enter}");
   await screen.findByRole("listbox", { name: "4. Medio de pago" });
   await userEvent.keyboard("3{Enter}");
 }

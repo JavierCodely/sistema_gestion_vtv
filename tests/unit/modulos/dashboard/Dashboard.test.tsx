@@ -82,6 +82,27 @@ beforeEach(() => {
   });
 });
 
+const impuesto = (agrupacion: string, nombre: string, cantidad: number, total: number) => ({
+  agrupacion,
+  id: agrupacion === "total" ? null : 1,
+  nombre,
+  cantidad_ventas: cantidad,
+  total,
+  total_efectivo: total / 2,
+  total_transferencia: 0,
+  total_tarjeta: total / 2,
+});
+
+beforeEach(() => {
+  responderRpc("resumen_impuestos", {
+    data: [
+      impuesto("total", "Total", 6, 1800),
+      impuesto("impuesto", "Ingresos brutos", 6, 1500),
+      impuesto("impuesto", "Tasa tarjeta", 2, 300),
+    ],
+  });
+});
+
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -202,6 +223,37 @@ describe("Dashboard (admin)", () => {
     expect(await screen.findByRole("heading", { name: /^Turno de Caja 1/ })).toBeInTheDocument();
   });
 
+  it("impuestos: total por medio de pago y por impuesto, con el mismo filtro", async () => {
+    renderConQuery(<Dashboard />);
+    expect(normal((await screen.findByTestId("dato-impuestos-total")).textContent)).toBe(
+      "$ 1.800,00",
+    );
+    await waitFor(() => {
+      expect(argumentosRpc("resumen_impuestos")).toEqual({
+        p_desde: "2026-11-01",
+        p_hasta: "2026-11-30",
+      });
+    });
+    expect(screen.getByText("6 ventas alcanzadas")).toBeInTheDocument();
+    expect(normal(screen.getByTestId("dato-impuestos-efectivo").textContent)).toBe("$ 900,00");
+    expect(normal(screen.getByTestId("dato-impuestos-transferencia").textContent)).toBe("$ 0,00");
+    expect(normal(screen.getByTestId("dato-impuestos-tarjeta").textContent)).toBe("$ 900,00");
+    expect(celdas(screen.getByTestId("impuesto-Tasa tarjeta"))).toEqual([
+      "Tasa tarjeta",
+      "2",
+      "$ 300,00",
+    ]);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Turno")).toBeEnabled();
+    });
+    await userEvent.click(screen.getByLabelText("Turno"));
+    await userEvent.click(await screen.findByRole("option", { name: /^Caja 1 · / }));
+    await waitFor(() => {
+      expect(argumentosRpc("resumen_impuestos")).toEqual({ p_turno_id: 7 });
+    });
+  });
+
   it("período vacío: lo dice en cada bloque", async () => {
     responderRpc("resumen_dashboard", { data: [ventas("total", "Total", 0, 0)] });
     responderRpc("resumen_gastos", {
@@ -211,10 +263,14 @@ describe("Dashboard (admin)", () => {
         gasto("otros_gastos", "Otros gastos", 0, 0),
       ],
     });
+    responderRpc("resumen_impuestos", { data: [impuesto("total", "Total", 0, 0)] });
     renderConQuery(<Dashboard />);
     expect(await screen.findAllByText("No hay ventas en ese período.")).toHaveLength(2);
     expect(screen.getByText("No se hicieron descuentos en ese período.")).toBeInTheDocument();
     expect(await screen.findAllByText("No hay gastos en ese período.")).toHaveLength(2);
+    expect(
+      await screen.findByText("No hay impuestos aplicados en ese período."),
+    ).toBeInTheDocument();
   });
 
   it("muestra el error de la BD", async () => {

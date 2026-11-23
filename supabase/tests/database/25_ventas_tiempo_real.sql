@@ -30,10 +30,10 @@ reset role;
 
 -- Un turno con ventas (una mixta, una anulada) y un gasto -------------------------------------------
 select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja, 100) as turno \gset
-select (registrar_venta(:turno, :servicio, 'efectivo')).id as v1 \gset
+select (registrar_venta(:turno, :servicio, 'efectivo', p_patente => $p$AB123CD$p$)).id as v1 \gset
 select (registrar_venta(:turno, :servicio, p_pagos =>
-  '[{"medio":"transferencia","monto":5000},{"medio":"tarjeta","monto":15000}]')).id as v2 \gset
-select (registrar_venta(:turno, :servicio, 'transferencia')).id as v3 \gset
+  '[{"medio":"transferencia","monto":5000},{"medio":"tarjeta","monto":15000}]', p_patente => $p$AB123CD$p$)).id as v2 \gset
+select (registrar_venta(:turno, :servicio, 'transferencia', p_patente => $p$AB123CD$p$)).id as v3 \gset
 select (registrar_gasto(:comida, 30, 'efectivo', 'Café', :turno)).id as g1 \gset
 
 -- El cajero no ve los totales

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { MENSAJE_DESACTIVADO } from "@/modulos/auth/lib/errores-login";
 import { authDePrueba, perfilDePrueba, renderRuta } from "@tests/soporte/render";
 
+vi.mock("@/modulos/dashboard/paginas/Dashboard", () => import("@tests/soporte/dashboard-liviano"));
 vi.mock("@/compartido/lib/salud", () => ({
   verificarConexion: vi.fn(() => Promise.resolve(true)),
 }));

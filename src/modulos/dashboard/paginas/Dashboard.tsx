@@ -11,6 +11,7 @@ import {
 } from "@/compartido/lib/periodo";
 import { Alert, AlertDescription } from "@/compartido/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/compartido/ui/card";
+import { useResumenImpuestos } from "@/modulos/impuestos/api/consultas";
 import { useTurnosDelPeriodo } from "@/modulos/ventas/api/consultas";
 import {
   useResumenGastos,
@@ -217,10 +218,71 @@ function SeccionGastos({ filtro }: { filtro: FiltroDashboard }) {
   );
 }
 
+function SeccionImpuestos({ filtro }: { filtro: FiltroDashboard }) {
+  const resumen = useResumenImpuestos(filtro, { alEntrar: true });
+  if (resumen.isPending) return <Cargando texto="Calculando impuestos…" />;
+  if (resumen.isError) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>{mensajeDeError(resumen.error)}</AlertDescription>
+      </Alert>
+    );
+  }
+  const { total, porImpuesto } = resumen.data;
+  return (
+    <>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <Dato
+          id="impuestos-total"
+          etiqueta="Impuestos"
+          valor={formatearMoneda(total?.total)}
+          detalle={`${formatearNumero(total?.cantidad_ventas ?? 0)} ventas alcanzadas`}
+        />
+        <Dato
+          id="impuestos-efectivo"
+          etiqueta="En efectivo"
+          valor={formatearMoneda(total?.total_efectivo)}
+        />
+        <Dato
+          id="impuestos-transferencia"
+          etiqueta="En transferencia"
+          valor={formatearMoneda(total?.total_transferencia)}
+        />
+        <Dato
+          id="impuestos-tarjeta"
+          etiqueta="En débito/crédito"
+          valor={formatearMoneda(total?.total_tarjeta)}
+        />
+        <Dato
+          id="impuestos-cantidad"
+          etiqueta="Impuestos aplicados"
+          valor={formatearNumero(porImpuesto.length)}
+        />
+      </div>
+      <Bloque
+        titulo="Impuestos por tipo"
+        descripcion="Total de cada impuesto y cuántas ventas alcanzó, de mayor a menor."
+        vacio={porImpuesto.length === 0 ? "No hay impuestos aplicados en ese período." : null}
+      >
+        <GraficoRanking
+          idBase="impuesto"
+          filas={porImpuesto.map((f) => ({
+            nombre: f.nombre,
+            cantidad: f.cantidad_ventas,
+            total: f.total,
+          }))}
+          medida="total"
+          etiquetaMedida="Impuesto"
+        />
+      </Bloque>
+    </>
+  );
+}
+
 /**
  * Dashboard del admin: ventas de la semana en la que estamos y, para el período elegido (año, mes
- * o un turno), ventas por servicio y categoría, descuentos y gastos. Todos los números los calcula
- * la BD (`ventas_por_dia`, `resumen_dashboard`, `resumen_gastos`); sin anuladas.
+ * o un turno), ventas por servicio y categoría, descuentos, gastos e impuestos. Todos los números los calcula
+ * la BD (`ventas_por_dia`, `resumen_dashboard`, `resumen_gastos`, `resumen_impuestos`); sin anuladas.
  */
 export function Dashboard() {
   const [periodo, setPeriodo] = useState<Periodo>(() => periodoActual());
@@ -269,6 +331,12 @@ export function Dashboard() {
           Gastos
         </h2>
         <SeccionGastos filtro={filtro} />
+      </section>
+      <section aria-labelledby="titulo-dashboard-impuestos" className="flex flex-col gap-4">
+        <h2 id="titulo-dashboard-impuestos" className="text-lg font-semibold">
+          Impuestos
+        </h2>
+        <SeccionImpuestos filtro={filtro} />
       </section>
     </section>
   );

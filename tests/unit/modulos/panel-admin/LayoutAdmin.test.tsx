@@ -11,6 +11,7 @@ import {
   responderRpc,
 } from "@tests/soporte/supabase-falso";
 
+vi.mock("@/modulos/dashboard/paginas/Dashboard", () => import("@tests/soporte/dashboard-liviano"));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/compartido/lib/supabase", async () => ({
   supabase: (await import("@tests/soporte/supabase-falso")).supabaseFalso,
@@ -53,6 +54,30 @@ beforeEach(() => {
 function barra() {
   return screen.getByRole("banner");
 }
+
+describe("scroll propio del contenido", () => {
+  it("el menú y la barra quedan fijos: solo el contenido se desplaza y vuelve arriba al cambiar de pantalla", async () => {
+    // Pantallas livianas (el dashboard carga la librería de gráficos).
+    responder("cajas", "select", { data: [] });
+    const { router } = renderRuta("/admin/cajas", admin());
+    const contenido = await screen.findByTestId("contenido-admin");
+    expect(contenido).toHaveClass("md:overflow-y-auto", "md:min-h-0");
+    expect(contenido.parentElement?.parentElement).toHaveClass("md:h-svh", "md:overflow-hidden");
+    // jsdom no desplaza: se simula que el contenido quedó scrolleado.
+    let posicion = 800;
+    Object.defineProperty(contenido, "scrollTop", {
+      configurable: true,
+      get: () => posicion,
+      set: (valor: number) => {
+        posicion = valor;
+      },
+    });
+    await router.navigate("/admin/ventas/pasadas");
+    await waitFor(() => {
+      expect(posicion).toBe(0);
+    });
+  });
+});
 
 describe("barra fija del admin", () => {
   it("es sticky y tiene siempre Abrir turno y Cerrar turno (sin turnos abiertos, deshabilitado y explicado)", async () => {

@@ -57,14 +57,14 @@ select is((select nota from movimientos_efectivo where tipo = 'apertura_turno'),
 
 -- Dos cajeros venden en la misma caja; cada venta con su vendedor ---------------------------------
 select pg_temp.como(:'cajero');
-select (registrar_venta(:turno, :servicio, 'efectivo')).id as v_carla \gset
+select (registrar_venta(:turno, :servicio, 'efectivo', p_patente => $p$AB123CD$p$)).id as v_carla \gset
 reset role;
 select pg_temp.como(:'cajero2');
-select (registrar_venta(:turno, :servicio, 'efectivo')).id as v_diego \gset
-select (registrar_venta(:turno, :servicio, 'tarjeta')).id as v_diego2 \gset
+select (registrar_venta(:turno, :servicio, 'efectivo', p_patente => $p$AB123CD$p$)).id as v_diego \gset
+select (registrar_venta(:turno, :servicio, 'tarjeta', p_patente => $p$AB123CD$p$)).id as v_diego2 \gset
 reset role;
 select pg_temp.como(:'admin');
-select (registrar_venta(:turno, :servicio, 'transferencia')).id as v_admin \gset
+select (registrar_venta(:turno, :servicio, 'transferencia', p_patente => $p$AB123CD$p$)).id as v_admin \gset
 reset role;
 select is(
   (select array_agg(row(id, usuario_id, turno_id, caja_id)::text order by id) from ventas where turno_id = :turno),
@@ -86,9 +86,9 @@ select is(public._efectivo_en_caja(:turno), 11000.00::numeric,
 
 -- Elegir la caja: obligatorio y con turno abierto ----------------------------------------------------
 select pg_temp.como(:'cajero');
-select throws_ok(format($$select registrar_venta(null, %s, 'efectivo')$$, :servicio), '22023',
+select throws_ok(format($$select registrar_venta(null, %s, 'efectivo', p_patente => $p$AB123CD$p$)$$, :servicio), '22023',
   'Elegí la caja en la que estás trabajando', 'sin turno no se vende (nunca se adivina la caja)');
-select throws_ok(format($$select registrar_venta(999999999, %s, 'efectivo')$$, :servicio), '22023',
+select throws_ok(format($$select registrar_venta(999999999, %s, 'efectivo', p_patente => $p$AB123CD$p$)$$, :servicio), '22023',
   'El turno elegido no existe', 'un turno inexistente se rechaza');
 select throws_ok(format($$select registrar_gasto(%s, 10, 'efectivo', 'x')$$, :comida), '22023',
   'Elegí la caja en la que estás trabajando', 'el cajero tiene que elegir la caja también para un gasto');
@@ -102,7 +102,7 @@ select (abrir_turno(:caja2, 500)).id as turno2 \gset
 reset role;
 select pg_temp.como(:'cajero');
 select (registrar_gasto(:comida, 200, 'efectivo', 'Gasto en la caja 2', :turno2)).id as g_caja2 \gset
-select (registrar_venta(:turno2, :servicio, 'tarjeta')).id as v_caja2 \gset
+select (registrar_venta(:turno2, :servicio, 'tarjeta', p_patente => $p$AB123CD$p$)).id as v_caja2 \gset
 reset role;
 select is((select row(turno_id, caja_id)::text from gastos where id = :g_caja2), row(:turno2, :caja2)::text,
   'el mismo cajero carga un gasto en otra caja abierta: queda en esa caja');
@@ -169,7 +169,7 @@ select is((select saldo from caja_efectivo), :saldo_antes::numeric + 200,
 
 -- Turno cerrado: no se vende ni se gasta ahí, y el cajero ya no lo ve -------------------------------
 select pg_temp.como(:'cajero');
-select throws_ok(format($$select registrar_venta(%s, %s, 'efectivo')$$, :turno2, :servicio), 'P0001',
+select throws_ok(format($$select registrar_venta(%s, %s, 'efectivo', p_patente => $p$AB123CD$p$)$$, :turno2, :servicio), 'P0001',
   'El turno de la caja "Caja Test 2" ya se cerró: elegí una caja abierta', 'no se vende en un turno cerrado');
 select throws_ok(format($$select registrar_gasto(%s, 10, 'efectivo', 'x', %s)$$, :comida, :turno2), 'P0001',
   'El turno de la caja "Caja Test 2" ya se cerró: elegí una caja abierta', 'ni se carga un gasto');
@@ -234,7 +234,7 @@ insert into cajas (nombre) values ('Caja vieja') returning id as caja_vieja \gse
 insert into turnos (caja_id, usuario_id, efectivo_inicial, abierto_por)
 values (:caja_vieja, :'cajero', 100, :'admin') returning id as turno_viejo \gset
 select pg_temp.como(:'cajero3');
-select lives_ok(format($$select registrar_venta(%s, %s, 'tarjeta')$$, :turno_viejo, :servicio),
+select lives_ok(format($$select registrar_venta(%s, %s, 'tarjeta', p_patente => $p$AB123CD$p$)$$, :turno_viejo, :servicio),
   'en un turno abierto antes de la 33 vende cualquiera, no solo el cajero asignado');
 reset role;
 select pg_temp.como(:'admin');
@@ -246,13 +246,13 @@ reset role;
 
 -- Anónimo y desactivado ---------------------------------------------------------------------------
 select pg_temp.como_anonimo();
-select throws_ok(format($$select registrar_venta(%s, %s, 'efectivo')$$, :turno, :servicio), '42501', null,
+select throws_ok(format($$select registrar_venta(%s, %s, 'efectivo', p_patente => $p$AB123CD$p$)$$, :turno, :servicio), '42501', null,
   'anon no vende');
 select throws_ok('select * from v_turnos_abiertos', '42501', null, 'anon no lee los turnos abiertos');
 reset role;
 update perfiles set activo = false where id = :'cajero2';
 select pg_temp.como(:'cajero2');
-select throws_ok(format($$select registrar_venta(%s, %s, 'efectivo')$$, :turno, :servicio), '42501',
+select throws_ok(format($$select registrar_venta(%s, %s, 'efectivo', p_patente => $p$AB123CD$p$)$$, :turno, :servicio), '42501',
   'Usuario no autenticado o desactivado', 'un usuario desactivado no vende en una caja abierta');
 select is((select count(*)::int from turnos), 0, 'ni ve los turnos abiertos');
 select is((select count(*)::int from ventas), 0, 'ni sus ventas');

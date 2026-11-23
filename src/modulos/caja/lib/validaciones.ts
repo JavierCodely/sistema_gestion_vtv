@@ -32,7 +32,9 @@ export function validarVenta(
   if (!cobro) errores.cobro = "Elegí el medio de pago.";
 
   const patente = normalizarPatente(formulario.patente);
-  if (patente.length > LARGO_MAXIMO_PATENTE) {
+  if (patente === "") {
+    errores.patente = "Ingresá la patente del vehículo.";
+  } else if (patente.length > LARGO_MAXIMO_PATENTE) {
     errores.patente = `La patente no puede superar los ${String(LARGO_MAXIMO_PATENTE)} caracteres.`;
   }
 

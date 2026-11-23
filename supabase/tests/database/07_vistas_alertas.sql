@@ -13,9 +13,9 @@ reset role;
 
 reset role;
 select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja) as turno \gset
-select (registrar_venta(:turno, :servicio, 'efectivo')).id as v1 \gset
-select (registrar_venta(:turno, :servicio, 'tarjeta')).id as v2 \gset
-select (registrar_venta(:turno, :servicio, 'transferencia')).id as v3 \gset
+select (registrar_venta(:turno, :servicio, 'efectivo', p_patente => $p$AB123CD$p$)).id as v1 \gset
+select (registrar_venta(:turno, :servicio, 'tarjeta', p_patente => $p$AB123CD$p$)).id as v2 \gset
+select (registrar_venta(:turno, :servicio, 'transferencia', p_patente => $p$AB123CD$p$)).id as v3 \gset
 select (registrar_gasto(:comida, 1500, 'efectivo', 'Almuerzo', :turno)).id as g1 \gset
 reset role;
 select pg_temp.como(:'admin');

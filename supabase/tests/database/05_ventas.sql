@@ -11,7 +11,7 @@ reset role;
 
 -- Sin elegir el turno de una caja no se vende
 select pg_temp.como(:'cajero');
-select throws_ok(format($$select registrar_venta(null, %s, 'efectivo')$$, :servicio),
+select throws_ok(format($$select registrar_venta(null, %s, 'efectivo', p_patente => $p$AB123CD$p$)$$, :servicio),
   '22023', 'Elegí la caja en la que estás trabajando', 'sin turno elegido no se puede vender');
 reset role;
 select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja) as turno \gset
@@ -37,7 +37,7 @@ select is((select efectivo_en_caja from v_turnos where id = :turno), 20100.00::n
 
 -- 89 ventas más (90 en total) → quedan 10 hojas
 select pg_temp.como(:'cajero');
-select registrar_venta(:turno, :servicio, 'tarjeta') from generate_series(1, 89);
+select registrar_venta(:turno, :servicio, 'tarjeta', p_patente => $p$AB123CD$p$) from generate_series(1, 89);
 reset role;
 select is((select stock_hojas from certificados where id = :cert), 10, '90 ventas → quedan 10 hojas');
 select is((select efectivo_en_caja from v_turnos where id = :turno), 20100.00::numeric,
@@ -50,8 +50,8 @@ select is(
 
 -- Agotar el stock y vender sin hojas
 select pg_temp.como(:'cajero');
-select registrar_venta(:turno, :servicio, 'transferencia') from generate_series(1, 10);
-select (registrar_venta(:turno, :servicio, 'transferencia')).id as venta_sin \gset
+select registrar_venta(:turno, :servicio, 'transferencia', p_patente => $p$AB123CD$p$) from generate_series(1, 10);
+select (registrar_venta(:turno, :servicio, 'transferencia', p_patente => $p$AB123CD$p$)).id as venta_sin \gset
 reset role;
 
 select is((select stock_hojas from certificados where id = :cert), 0, 'el stock nunca queda negativo');
@@ -66,7 +66,7 @@ select is(
 -- Servicio sin certificado configurado
 update certificados set activo = false where id = :cert;
 select pg_temp.como(:'cajero');
-select (registrar_venta(:turno, :servicio, 'tarjeta')).id as venta_sin_cert \gset
+select (registrar_venta(:turno, :servicio, 'tarjeta', p_patente => $p$AB123CD$p$)).id as venta_sin_cert \gset
 reset role;
 select ok(
   (select mensaje like '%no hay un certificado configurado%' from alertas where venta_id = :venta_sin_cert),
@@ -76,7 +76,7 @@ select ok(
 insert into servicios (nombre, categoria_id, precio, requiere_certificado)
   values ('Sin hoja', :categoria, 5000, false) returning id as sin_hoja \gset
 select pg_temp.como(:'cajero');
-select (registrar_venta(:turno, :sin_hoja, 'tarjeta')).id as venta_sin_hoja \gset
+select (registrar_venta(:turno, :sin_hoja, 'tarjeta', p_patente => $p$AB123CD$p$)).id as venta_sin_hoja \gset
 reset role;
 select is(
   (select row(sin_stock, certificado_id)::text from ventas where id = :venta_sin_hoja),
@@ -86,7 +86,7 @@ select is(
 -- Servicio desactivado
 update servicios set activo = false where id = :sin_hoja;
 select pg_temp.como(:'cajero');
-select throws_ok(format($$select registrar_venta(%s, %s, 'tarjeta')$$, :turno, :sin_hoja),
+select throws_ok(format($$select registrar_venta(%s, %s, 'tarjeta', p_patente => $p$AB123CD$p$)$$, :turno, :sin_hoja),
   '22023', 'El servicio no existe o está desactivado', 'no se vende un servicio desactivado');
 
 -- Anulación
@@ -109,8 +109,8 @@ select is((select stock_hojas from certificados where id = :cert), 0, 'la hoja d
 
 -- Anulación sin efectivo suficiente en el cajón
 select pg_temp.como(:'cajero');
-select (registrar_venta(:turno, :servicio, 'efectivo')).id as venta2 \gset
-select (registrar_venta(:turno, :servicio, 'efectivo')).id as venta3 \gset
+select (registrar_venta(:turno, :servicio, 'efectivo', p_patente => $p$AB123CD$p$)).id as venta2 \gset
+select (registrar_venta(:turno, :servicio, 'efectivo', p_patente => $p$AB123CD$p$)).id as venta3 \gset
 select registrar_gasto((select id from categorias_gasto where nombre = 'Comida'), 30000, 'efectivo', 'Compra grande',
   :turno);
 reset role;

@@ -83,7 +83,7 @@ reset role;
 -- Aislamiento: de un turno cerrado el cajero no ve nada (migración 33)
 reset role;
 select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja) as turno1 \gset
-select registrar_venta(:turno1, :servicio, 'tarjeta');
+select registrar_venta(:turno1, :servicio, 'tarjeta', p_patente => $p$AB123CD$p$);
 reset role;
 select pg_temp.como(:'admin');
 select cerrar_turno(:turno1);
@@ -100,7 +100,7 @@ reset role;
 -- Usuario desactivado no opera
 update perfiles set activo = false where id = :'cajero2';
 select pg_temp.como(:'cajero2');
-select throws_ok(format($$select registrar_venta(%s, %s, 'tarjeta')$$, :turno2, :servicio),
+select throws_ok(format($$select registrar_venta(%s, %s, 'tarjeta', p_patente => $p$AB123CD$p$)$$, :turno2, :servicio),
   '42501', 'Usuario no autenticado o desactivado', 'un usuario desactivado no puede vender');
 reset role;
 

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authDePrueba, perfilDePrueba, renderRuta } from "@tests/soporte/render";
 import { reiniciarSupabaseFalso, responder, responderRpc } from "@tests/soporte/supabase-falso";
 
+vi.mock("@/modulos/dashboard/paginas/Dashboard", () => import("@tests/soporte/dashboard-liviano"));
 vi.mock("@/compartido/lib/supabase", async () => ({
   supabase: (await import("@tests/soporte/supabase-falso")).supabaseFalso,
 }));

@@ -36,7 +36,7 @@ select is((select row(tipo::text, turno_id)::text from movimientos_efectivo wher
 
 -- Venta anulada después del cierre: la foto del cierre no cambia
 select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja2, 100) as turno_cajero \gset
-select (registrar_venta(:turno_cajero, :servicio, 'efectivo')).id as venta \gset
+select (registrar_venta(:turno_cajero, :servicio, 'efectivo', p_patente => $p$AB123CD$p$)).id as venta \gset
 reset role;
 select pg_temp.como(:'admin');
 select cerrar_turno(:turno_cajero);

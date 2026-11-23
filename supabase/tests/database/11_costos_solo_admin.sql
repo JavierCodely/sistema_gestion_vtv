@@ -9,7 +9,7 @@ select pg_temp.como(:'admin');
 select registrar_compra_certificado(:cert, 1, 50000, 'transferencia');
 reset role;
 select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja) as turno \gset
-select (registrar_venta(:turno, :servicio, 'efectivo')).id as venta \gset
+select (registrar_venta(:turno, :servicio, 'efectivo', p_patente => $p$AB123CD$p$)).id as venta \gset
 reset role;
 
 -- El cajero no ve costos por ningún camino

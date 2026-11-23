@@ -119,7 +119,7 @@ update servicios set activo = true where id = :servicio_b;
 -- Venta con descuento --------------------------------------------------------------------------------
 reset role;
 select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja, 100) as turno \gset
-select (registrar_venta(:turno, :servicio, 'efectivo', p_descuento_id => :jubilados, p_precio_esperado => 18000)).id as v_jub \gset
+select (registrar_venta(:turno, :servicio, 'efectivo', p_descuento_id => :jubilados, p_precio_esperado => 18000, p_patente => $p$AB123CD$p$)).id as v_jub \gset
 select is((select row(precio_lista, monto_descuento, precio, descuento_id, descuento_nombre,
                       descuento_tipo::text, descuento_valor)::text from ventas where id = :v_jub),
   row(20000.00, 2000.00, 18000.00, :jubilados::bigint, 'Jubilados 10', 'porcentaje', 10.00)::text,
@@ -127,51 +127,51 @@ select is((select row(precio_lista, monto_descuento, precio, descuento_id, descu
 select is((select monto from venta_pagos where venta_id = :v_jub), 18000.00::numeric,
   'el pago es por el precio final');
 -- Sin precio esperado (llamadas anteriores): no se compara.
-select (registrar_venta(:turno, :servicio_r, 'transferencia', p_descuento_id => :jubilados)).id as v_red \gset
+select (registrar_venta(:turno, :servicio_r, 'transferencia', p_descuento_id => :jubilados, p_patente => $p$AB123CD$p$)).id as v_red \gset
 select is((select row(monto_descuento, precio)::text from ventas where id = :v_red),
   row(33.33, 300.00)::text, '10 % de $ 333,33 descuenta $ 33,33');
 
 -- Con pago mixto: las partes suman el precio final
 select throws_ok(format($$select registrar_venta(%s, %s, p_descuento_id => %s,
-    p_pagos => '[{"medio":"efectivo","monto":5000},{"medio":"tarjeta","monto":15000}]')$$, :turno, :servicio, :promo),
+    p_pagos => '[{"medio":"efectivo","monto":5000},{"medio":"tarjeta","monto":15000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio, :promo),
   '22023', 'Las partes del pago suman $ 20.000,00 y el precio es $ 15.000,00: tienen que coincidir',
   'el pago mixto se compara con el precio con descuento');
 select (registrar_venta(:turno, :servicio, p_descuento_id => :promo,
-          p_pagos => '[{"medio":"efectivo","monto":5000},{"medio":"tarjeta","monto":10000}]')).id as v_promo \gset
+          p_pagos => '[{"medio":"efectivo","monto":5000},{"medio":"tarjeta","monto":10000}]', p_patente => $p$AB123CD$p$)).id as v_promo \gset
 select is((select row(precio, monto_descuento, medio_pago)::text from ventas where id = :v_promo),
   row(15000.00, 5000.00, null::text)::text, 'descuento fijo con pago mixto');
 
 -- Validaciones
-select throws_ok(format('select registrar_venta(%s, %s, %L, p_descuento_id => %s)', :turno, :servicio, 'efectivo', :viejo),
+select throws_ok(format('select registrar_venta(%s, %s, %L, p_descuento_id => %s, p_patente => $p$AB123CD$p$)', :turno, :servicio, 'efectivo', :viejo),
   '22023', 'El descuento no existe o está desactivado', 'un descuento inactivo no se usa');
-select throws_ok(format('select registrar_venta(%s, %s, %L, p_descuento_id => 999999999)', :turno, :servicio, 'efectivo'),
+select throws_ok(format('select registrar_venta(%s, %s, %L, p_descuento_id => 999999999, p_patente => $p$AB123CD$p$)', :turno, :servicio, 'efectivo'),
   '22023', 'El descuento no existe o está desactivado', 'un descuento inexistente tampoco');
-select throws_ok(format('select registrar_venta(%s, %s, %L, p_descuento_id => %s)', :turno, :servicio_r, 'efectivo', :promo),
+select throws_ok(format('select registrar_venta(%s, %s, %L, p_descuento_id => %s, p_patente => $p$AB123CD$p$)', :turno, :servicio_r, 'efectivo', :promo),
   '22023', 'El descuento "Promo" no está habilitado para "Servicio Redondeo"', 'solo en los servicios habilitados');
-select throws_ok(format('select registrar_venta(%s, %s, %L, p_descuento_id => %s)', :turno, :servicio, 'efectivo', :gigante),
+select throws_ok(format('select registrar_venta(%s, %s, %L, p_descuento_id => %s, p_patente => $p$AB123CD$p$)', :turno, :servicio, 'efectivo', :gigante),
   'P0001', 'Con el descuento "Gigante" el precio de "Servicio Test" queda en $ 0,00: tiene que ser mayor a cero',
   'el precio final tiene que quedar mayor a cero');
 -- Precio esperado: lo que el cajero vio en pantalla
-select throws_ok(format('select registrar_venta(%s, %s, %L, p_descuento_id => %s, p_precio_esperado => 20000)', :turno, :servicio, 'efectivo', :jubilados),
+select throws_ok(format('select registrar_venta(%s, %s, %L, p_descuento_id => %s, p_precio_esperado => 20000, p_patente => $p$AB123CD$p$)', :turno, :servicio, 'efectivo', :jubilados),
   'P0001', 'El precio cambió: ahora es $ 18.000,00. Revisá la venta.',
   'si el precio final no es el esperado (vio el precio sin descuento), se rechaza');
 reset role;
 update servicios set precio = 16000 where id = :servicio_b;
 select pg_temp.como(:'cajero');
-select throws_ok(format('select registrar_venta(%s, %s, %L, p_precio_esperado => 15000)', :turno, :servicio_b, 'efectivo'),
+select throws_ok(format('select registrar_venta(%s, %s, %L, p_precio_esperado => 15000, p_patente => $p$AB123CD$p$)', :turno, :servicio_b, 'efectivo'),
   'P0001', 'El precio cambió: ahora es $ 16.000,00. Revisá la venta.',
   'si el admin cambió el precio mientras el cajero cargaba la venta, se rechaza');
-select throws_ok(format('select registrar_venta(%s, %s, %L, p_precio_esperado => 0)', :turno, :servicio, 'efectivo'),
+select throws_ok(format('select registrar_venta(%s, %s, %L, p_precio_esperado => 0, p_patente => $p$AB123CD$p$)', :turno, :servicio, 'efectivo'),
   'P0001', 'El precio cambió: ahora es $ 20.000,00. Revisá la venta.',
   'esperar $ 0 en un servicio que no vale 0 también se rechaza');
-select throws_ok(format($$select registrar_venta(%s, %s, %L, p_precio_esperado => 'NaN')$$, :turno, :servicio, 'efectivo'),
+select throws_ok(format($$select registrar_venta(%s, %s, %L, p_precio_esperado => 'NaN', p_patente => $p$AB123CD$p$)$$, :turno, :servicio, 'efectivo'),
   '22023', 'El precio esperado no es válido', 'NaN no es un precio esperado');
-select throws_ok(format('select registrar_venta(%s, %s, %L, p_precio_esperado => -20000)', :turno, :servicio, 'efectivo'),
+select throws_ok(format('select registrar_venta(%s, %s, %L, p_precio_esperado => -20000, p_patente => $p$AB123CD$p$)', :turno, :servicio, 'efectivo'),
   '22023', 'El precio esperado debe ser mayor a cero', 'un precio esperado negativo se rechaza');
-select throws_ok(format('select registrar_venta(%s, %s, %L, p_precio_esperado => 20000.001)', :turno, :servicio, 'efectivo'),
+select throws_ok(format('select registrar_venta(%s, %s, %L, p_precio_esperado => 20000.001, p_patente => $p$AB123CD$p$)', :turno, :servicio, 'efectivo'),
   '22023', 'El precio esperado no puede tener más de 2 decimales', 'con más de 2 decimales también');
 select is((select count(*)::int from ventas where turno_id = :turno), 3, 'los intentos rechazados no dejan ventas');
-select lives_ok(format('select registrar_venta(%s, %s, %L, p_precio_esperado => 0)', :turno, :servicio_gratis, 'efectivo'),
+select lives_ok(format('select registrar_venta(%s, %s, %L, p_precio_esperado => 0, p_patente => $p$AB123CD$p$)', :turno, :servicio_gratis, 'efectivo'),
   'un servicio de $ 0 se vende esperando $ 0');
 select lives_ok('set constraints all immediate', 'las ventas con descuento quedan coherentes con sus pagos');
 set constraints all deferred;

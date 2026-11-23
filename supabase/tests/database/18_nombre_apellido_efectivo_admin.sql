@@ -42,7 +42,7 @@ select is((select nombre_completo from perfiles where id = :'cajero'), 'Carla GÃ
 reset role;
 insert into certificados (nombre, hojas_por_unidad) values ('Hoja nombres', 25);
 select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja) as turno \gset
-select registrar_venta(:turno, :servicio, 'tarjeta');
+select registrar_venta(:turno, :servicio, 'tarjeta', p_patente => $p$AB123CD$p$);
 reset role;
 select pg_temp.como(:'admin');
 select is((select atendido_por from v_turnos where id = :turno), array['Carla GÃ³mez'],
