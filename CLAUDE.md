@@ -631,7 +631,10 @@ Se implementa en la fase 4b, después de la caja (necesita el historial de venta
   pantalla**, guardados cifrados en Supabase Vault y nunca devueltos al navegador (solo CUIT del
   certificado y vencimiento). Botón "Probar conexión".
 - Representación impresa del comprobante con **QR** (RG 4892) en `/comprobantes/:id` (sin menú, para
-  imprimir); en homologación lleva la leyenda "sin validez fiscal". La Factura B informa el IVA
+  imprimir), en formato **ticket para impresora térmica** (decisión 2026-11-23: solo ticket): una columna
+  de ancho fluido hasta 80 mm (sirve para rollos de 80 y 58 mm; el ancho lo pone el papel del driver),
+  negro sobre blanco sin grises aunque la app esté en oscuro, `@page { margin: 2mm }` y sin botones ni
+  avisos al imprimir (`index.css`). Se imprime desde Chrome con el diálogo del navegador; en homologación lleva la leyenda "sin validez fiscal". La Factura B informa el IVA
   contenido (Ley 27.743). Los datos del emisor del impreso son los guardados al enviarlo (`emisor_*`),
   no la configuración actual.
 

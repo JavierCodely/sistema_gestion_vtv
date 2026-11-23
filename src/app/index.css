@@ -129,3 +129,23 @@
     @apply font-sans;
   }
 }
+
+/* Impresión (el comprobante es un ticket para impresora térmica): márgenes mínimos —el ancho y el
+   largo los pone el papel del driver, rollo de 80 o 58 mm— y fondo blanco aunque la app esté en modo
+   oscuro (el ticket ya usa negro sobre blanco explícito). */
+@page {
+  margin: 2mm;
+}
+
+@media print {
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /* Los avisos flotantes (sonner) no salen en el papel */
+  [data-sonner-toaster] {
+    display: none !important;
+  }
+}
