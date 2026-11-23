@@ -1,4 +1,4 @@
-import { History, Pencil, ShoppingCart, SlidersHorizontal } from "lucide-react";
+import { History, ListChecks, Pencil, ShoppingCart, SlidersHorizontal } from "lucide-react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { mensajeDeError } from "@/compartido/lib/errores";
@@ -21,7 +21,7 @@ import {
 import { describirPresentacion } from "../lib/validaciones";
 import { BadgeSemaforo } from "./BadgeSemaforo";
 
-export type AccionCertificado = "comprar" | "ajustar" | "editar";
+export type AccionCertificado = "comprar" | "ajustar" | "editar" | "destinos";
 
 export function TablaStock({
   certificados,
@@ -79,7 +79,16 @@ export function TablaStock({
                   {formatearNumero(c.stock_minimo)}
                 </div>
               </TableCell>
-              <TableCell>{c.aplica_a}</TableCell>
+              <TableCell data-columna="destinos">
+                {c.aplica_a}
+                {!c.todos_servicios &&
+                  c.categoria_ids.length === 0 &&
+                  c.servicio_ids.length === 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      No se usa en ninguna venta: elegí dónde con “Se usa en”.
+                    </div>
+                  )}
+              </TableCell>
               <TableCell className="text-right tabular-nums" data-columna="stock">
                 {formatearNumero(c.stock_hojas)}
               </TableCell>
@@ -102,6 +111,17 @@ export function TablaStock({
               </TableCell>
               <TableCell>
                 <div className="flex flex-wrap justify-end gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Dónde se usa ${c.nombre}`}
+                    onClick={() => {
+                      onAccion("destinos", c);
+                    }}
+                  >
+                    <ListChecks aria-hidden />
+                    Se usa en
+                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"

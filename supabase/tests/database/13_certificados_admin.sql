@@ -9,8 +9,8 @@ select pg_temp.como(:'admin');
 insert into certificados (nombre, hojas_por_unidad, stock_minimo)
   values ('  Hoja   VTV ', 25, 10) returning id as cert \gset
 select is((select nombre from certificados where id = :cert), 'Hoja VTV', 'el nombre se normaliza');
-select throws_ok(format($$insert into certificados (nombre, hojas_por_unidad, alcance, servicio_id, activo)
-                   values ('hoja vtv', 1, 'servicio', %s, false)$$, :servicio), '23505', null,
+select throws_ok($$insert into certificados (nombre, hojas_por_unidad, activo)
+                   values ('hoja vtv', 1, false)$$, '23505', null,
   'no se repite el nombre aunque cambien las mayúsculas');
 select throws_ok($$insert into certificados (nombre, hojas_por_unidad, activo) values ('Grande', 10001, false)$$,
   '23514', null, 'hojas por unidad tiene tope');

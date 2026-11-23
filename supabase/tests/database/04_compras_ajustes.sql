@@ -3,7 +3,7 @@ begin;
 select plan(17);
 
 select * from pg_temp.escenario() \gset
-insert into certificados (nombre, hojas_por_unidad, stock_minimo) values ('Hoja VTV', 25, 10) returning id as cert \gset
+insert into certificados (todos_servicios, nombre, hojas_por_unidad, stock_minimo) values (true, 'Hoja VTV', 25, 10) returning id as cert \gset
 
 -- Permisos
 select pg_temp.como(:'cajero');

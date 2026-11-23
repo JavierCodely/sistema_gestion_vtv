@@ -40,7 +40,7 @@ select is((select nombre_completo from perfiles where id = :'cajero'), 'Carla GÃ
 
 -- Las vistas muestran nombre y apellido (desde la 33 el turno es de la caja: quien vende).
 reset role;
-insert into certificados (nombre, hojas_por_unidad) values ('Hoja nombres', 25);
+insert into certificados (todos_servicios, nombre, hojas_por_unidad) values (true, 'Hoja nombres', 25);
 select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja) as turno \gset
 select registrar_venta(:turno, :servicio, 'tarjeta', p_patente => $p$AB123CD$p$);
 reset role;

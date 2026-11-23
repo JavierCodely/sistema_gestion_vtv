@@ -10,7 +10,7 @@ update perfiles set nombre = 'Carla', apellido = 'Gómez' where id = :'cajero';
 update perfiles set nombre = 'Diego', apellido = 'Pérez' where id = :'cajero2';
 select id as comida from categorias_gasto where nombre = 'Comida' \gset
 select id as sueldos from categorias_gasto where nombre = 'Sueldos' \gset
-insert into certificados (nombre, hojas_por_unidad) values ('Hoja VTV', 25) returning id as cert \gset
+insert into certificados (todos_servicios, nombre, hojas_por_unidad) values (true, 'Hoja VTV', 25) returning id as cert \gset
 
 -- Firmas: una sola sobrecarga de cada RPC, sin las viejas -------------------------------------------
 select is(

@@ -44,7 +44,7 @@ select throws_ok(format('select abrir_turno(%s, 100)', :caja2), '22023',
 reset role;
 
 -- Cerrar turno con totales: venden dos usuarios en la misma caja
-insert into certificados (nombre, hojas_por_unidad) values ('Hoja Test', 25);
+insert into certificados (todos_servicios, nombre, hojas_por_unidad) values (true, 'Hoja Test', 25);
 select pg_temp.como(:'cajero');
 select registrar_venta(:turno, :servicio, 'efectivo', p_patente => $p$AB123CD$p$);
 select registrar_venta(:turno, :servicio, 'efectivo', p_patente => $p$AB123CD$p$);

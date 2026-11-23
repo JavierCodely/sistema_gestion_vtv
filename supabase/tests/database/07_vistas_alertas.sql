@@ -4,7 +4,7 @@ select plan(15);
 
 select * from pg_temp.escenario() \gset
 select id as comida from categorias_gasto where nombre = 'Comida' \gset
-insert into certificados (nombre, hojas_por_unidad, stock_minimo) values ('Hoja VTV', 25, 23) returning id as cert \gset
+insert into certificados (todos_servicios, nombre, hojas_por_unidad, stock_minimo) values (true, 'Hoja VTV', 25, 23) returning id as cert \gset
 
 select pg_temp.como(:'admin');
 select registrar_compra_certificado(:cert, 1, 50000, 'transferencia');

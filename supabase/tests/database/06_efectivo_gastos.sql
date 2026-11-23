@@ -118,7 +118,7 @@ select pg_temp.abrir_turno_para(:'admin', :'admin', :caja2) as turno2 \gset
 select (registrar_gasto(:sueldos, 100, 'transferencia', 'Aguinaldo')).id as gasto_general \gset
 select (registrar_gasto(:sueldos, 100, 'transferencia', 'Desde la caja', :turno2)).id as gasto_turno \gset
 reset role;
-insert into certificados (nombre, hojas_por_unidad) values ('Hoja gastos', 10) returning id as cert \gset
+insert into certificados (todos_servicios, nombre, hojas_por_unidad) values (true, 'Hoja gastos', 10) returning id as cert \gset
 select pg_temp.como(:'admin');
 select (registrar_compra_certificado(:cert, 1, 1000, 'transferencia')).gasto_id as gasto_compra \gset
 reset role;

@@ -59,6 +59,32 @@ describe("TablaStock", () => {
     expect(onAccion).toHaveBeenCalledWith("comprar", expect.objectContaining({ id: 4 }));
   });
 
+  it("'Se usa en' muestra los destinos y avisa si no se usa en ninguna venta", async () => {
+    const onAccion = renderTabla([
+      certificadoDePrueba({
+        todos_servicios: false,
+        categoria_ids: [1],
+        servicio_ids: [7],
+        aplica_a: "Categoría Autos, Moto",
+      }),
+      certificadoDePrueba({
+        id: 5,
+        nombre: "Hoja nueva",
+        todos_servicios: false,
+        aplica_a: "Sin asignar",
+      }),
+    ]);
+    const destinos = (nombre: string) =>
+      screen.getByTestId(`certificado-${nombre}`).querySelector('[data-columna="destinos"]');
+    expect(destinos("Hoja VTV")).toHaveTextContent("Categoría Autos, Moto");
+    expect(destinos("Hoja VTV")).not.toHaveTextContent("No se usa en ninguna venta");
+    expect(destinos("Hoja nueva")).toHaveTextContent(
+      "Sin asignarNo se usa en ninguna venta: elegí dónde con “Se usa en”.",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Dónde se usa Hoja nueva" }));
+    expect(onAccion).toHaveBeenCalledWith("destinos", expect.objectContaining({ id: 5 }));
+  });
+
   it("un certificado desactivado no permite registrar compras", () => {
     renderTabla([certificadoDePrueba({ activo: false })]);
     expect(screen.getByRole("button", { name: "Registrar compra de Hoja VTV" })).toBeDisabled();
@@ -72,11 +98,13 @@ describe("TablaStock", () => {
         message: 'duplicate key value violates unique constraint "certificados_uno_por_servicio"',
       },
     });
-    renderTabla([certificadoDePrueba({ activo: false, alcance: "servicio", servicio_id: 5 })]);
+    renderTabla([
+      certificadoDePrueba({ activo: false, todos_servicios: false, servicio_ids: [5] }),
+    ]);
     await userEvent.click(screen.getByRole("switch", { name: "Certificado Hoja VTV activo" }));
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith(
-        "Ese servicio ya tiene un certificado activo. Desactivalo antes de activar otro.",
+        "Uno de los servicios ya tiene otro certificado activo. Desactivalo antes de activar este.",
       );
     });
     expect(argumentosDe("certificados", "update")).toEqual([{ activo: true }]);

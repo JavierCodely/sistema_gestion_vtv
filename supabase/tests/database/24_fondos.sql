@@ -6,7 +6,7 @@ select plan(77);
 select * from pg_temp.escenario() \gset
 select pg_temp.crear_usuario('admin2@test.local', 'admin') as admin2 \gset
 select id as comida from categorias_gasto where nombre = 'Comida' \gset
-insert into certificados (nombre, hojas_por_unidad) values ('Hoja Fondos', 10) returning id as cert \gset
+insert into certificados (todos_servicios, nombre, hojas_por_unidad) values (true, 'Hoja Fondos', 10) returning id as cert \gset
 
 -- Firmas y privilegios -------------------------------------------------------------------------------
 select ok(has_function_privilege('authenticated',

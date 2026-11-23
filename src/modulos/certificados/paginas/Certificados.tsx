@@ -9,6 +9,7 @@ import { useStockCertificados, type CertificadoConStock, type Compra } from "../
 import { DialogoAjuste } from "../componentes/DialogoAjuste";
 import { DialogoCertificado } from "../componentes/DialogoCertificado";
 import { DialogoCompra } from "../componentes/DialogoCompra";
+import { DialogoDestinosCertificado } from "../componentes/DialogoDestinosCertificado";
 import { TablaCompras } from "../componentes/TablaCompras";
 import { TablaStock, type AccionCertificado } from "../componentes/TablaStock";
 
@@ -16,6 +17,8 @@ type Dialogo =
   | { tipo: "nuevo" }
   | { tipo: AccionCertificado; certificado: CertificadoConStock }
   | { tipo: "editarCompra"; compra: Compra }
+  /** Recién creado: se elige dónde se usa (todavía no está en la lista del stock). */
+  | { tipo: "destinosNuevo"; id: number; nombre: string }
   | null;
 
 export function Certificados() {
@@ -77,16 +80,34 @@ export function Certificados() {
         />
       </section>
 
-      {dialogo?.tipo === "nuevo" && categorias.data && servicios.data && (
+      {dialogo?.tipo === "nuevo" && (
         <DialogoCertificado
+          onCerrar={cerrar}
+          onCreado={(id, nombre) => {
+            setDialogo({ tipo: "destinosNuevo", id, nombre });
+          }}
+        />
+      )}
+      {dialogo?.tipo === "editar" && (
+        <DialogoCertificado certificado={dialogo.certificado} onCerrar={cerrar} />
+      )}
+      {dialogo?.tipo === "destinos" && categorias.data && servicios.data && (
+        <DialogoDestinosCertificado
+          certificado={dialogo.certificado}
           categorias={categorias.data}
           servicios={servicios.data}
           onCerrar={cerrar}
         />
       )}
-      {dialogo?.tipo === "editar" && categorias.data && servicios.data && (
-        <DialogoCertificado
-          certificado={dialogo.certificado}
+      {dialogo?.tipo === "destinosNuevo" && categorias.data && servicios.data && (
+        <DialogoDestinosCertificado
+          certificado={{
+            id: dialogo.id,
+            nombre: dialogo.nombre,
+            todos_servicios: false,
+            categoria_ids: [],
+            servicio_ids: [],
+          }}
           categorias={categorias.data}
           servicios={servicios.data}
           onCerrar={cerrar}

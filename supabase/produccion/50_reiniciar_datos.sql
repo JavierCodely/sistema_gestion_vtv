@@ -1,40 +1,3 @@
--- =====================================================================
--- Sistema VTV — REINICIAR LOS DATOS (empezar de cero conservando los usuarios)
---
--- ⚠ DESTRUCTIVO E IRREVERSIBLE. Hacé un backup antes si hay algo que quieras guardar
---   (Dashboard → Database → Backups).
---
--- A diferencia de 99_borrar_todo.sql, NO toca el esquema (tablas, funciones, permisos,
--- historial de migraciones): la base queda instalada y lista para usar.
---
--- Borra SIEMPRE (operaciones):
---   ventas y sus pagos, turnos, gastos, compras de certificados, kardex de certificados,
---   libro de la caja de cambio (saldo a $ 0), movimientos manuales de Fondos, alertas,
---   comprobantes (facturas / NC), el log de ARCA y los impuestos calculados de cada venta.
---   Los números (venta, turno, gasto…) vuelven a empezar en 1.
---
--- Borra SI ELEGÍS (abajo):
---   v_borrar_catalogo       → cajas, categorías de servicio, servicios, certificados, descuentos
---                             e impuestos.
---                             Si queda en false, se conservan y el stock de los certificados
---                             vuelve a 0 hojas con costo promedio 0.
---   v_borrar_categorias_gasto → rubros y subcategorías de gasto: borra los que creaste y deja los
---                             que trae el sistema al instalarse (9 rubros con sus subcategorías,
---                             incluida "Insumos › Compra de certificados", que usa la BD), tal
---                             como vienen de fábrica (cuáles puede usar el cajero, todos activos).
---
--- Conserva SIEMPRE:
---   TODOS los usuarios (login, perfil, rol y contraseña), la configuración de
---   ARCA (CUIT, punto de venta, certificado y clave en Vault) y las condiciones de IVA.
---
--- Facturas reales: si hay facturas AUTORIZADAS en ambiente de PRODUCCIÓN, el script se niega
--- salvo que confirmes v_borrar_facturas_reales. Esas facturas siguen existiendo en ARCA (la
--- numeración continúa desde el último número autorizado en ARCA); solo se borran de este sistema.
---
--- Uso: completá los valores marcados con <<< y ejecutá TODO el script en el SQL Editor.
--- Corre en una transacción: si algo falla, no se borra nada.
--- Después: Fondos → Efectivo → "Fondo inicial", y Ventas → "Abrir turno".
--- =====================================================================
 
 begin;
 
@@ -70,7 +33,7 @@ begin
            || 'public.turnos';
   if v_borrar_catalogo then
     v_tablas := v_tablas || ', public.impuesto_servicios, public.impuestos, '
-             || 'public.descuento_servicios, public.descuentos, public.certificados, '
+             || 'public.descuento_servicios, public.descuentos, public.certificado_destinos, public.certificados, '
              || 'public.servicios, public.categorias_servicio, public.cajas';
   end if;
   if v_borrar_categorias_gasto then

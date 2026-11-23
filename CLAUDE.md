@@ -213,7 +213,7 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
 | 02 | `usuarios` | `perfiles`, trigger de alta, protección del último admin, `rol_actual()`, `es_admin()`, `_exigir_usuario()`, `_exigir_admin()` |
 | 03 | `cajas_turnos` | `cajas`, `turnos` (índices únicos parciales: 1 turno abierto por caja y por usuario; el de usuario lo quita la 33) |
 | 04 | `catalogo` | `categorias_servicio`, `servicios` |
-| 05 | `certificados` | `certificados` (alcance global/categoría/servicio, 1 activo por destino), kardex `movimientos_certificado`, `certificado_para_servicio()` |
+| 05 | `certificados` | `certificados` (alcance global/categoría/servicio, 1 activo por destino; destinos múltiples desde la 39), kardex `movimientos_certificado`, `certificado_para_servicio()` |
 | 06 | `efectivo` | `caja_efectivo` (fila única), `movimientos_efectivo`, `_mover_efectivo()`, `movimiento_efectivo()` |
 | 07 | `gastos` | `categorias_gasto` (2 niveles + precarga de 9 rubros), `gastos`, `registrar_gasto()`, `anular_gasto()` |
 | 08 | `compras_certificados` | `compras_certificado`, `registrar_compra_certificado()`, `ajustar_stock_certificado()` |
@@ -247,9 +247,20 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
 | 36 | `impuestos` | Sección **Impuestos** (solo admin, es un reporte): enum `tipo_impuesto` (porcentaje, monto_fijo por venta); `impuestos` (nombre, tipo, valor, `medios medio_pago[]` —al menos uno, sin repetidos—, `todos_servicios`, activo; CRUD admin por columna), `impuesto_servicios`; foto `venta_impuestos` (una fila por venta, impuesto y medio) calculada por el trigger de sentencia `venta_pagos_impuestos` (interna `_calcular_impuestos_venta`); `fijar_servicios_impuesto()`, `resumen_impuestos()` — decisiones 2026-11-23 |
 | 37 | `dashboard` | Dashboard del admin (solo lectura): `ventas_por_dia(desde, hasta)` (un día por fila hasta hoy, máx. 366 días), `resumen_dashboard(desde, hasta, turno)` (total, servicio, categoría, descuento) y `resumen_gastos(desde, hasta, turno)` (total, compra de certificados, otros gastos, rubro, subcategoría); interna `_validar_rango_reporte` — decisiones 2026-11-23 |
 | 38 | `patente_obligatoria` | Trigger `ventas_patente_obligatoria` (BEFORE INSERT): toda venta con turno lleva patente (22023 "Ingresá la patente del vehículo"); las ventas con fecha pasada siguen con patente opcional y las viejas sin patente no cambian — decisión 2026-11-23 |
+| 39 | `certificados_destinos` | Un certificado se usa en **una o más categorías y/o servicios**, mezclados: `certificados.todos_servicios` (el "global" de antes) o `certificado_destinos` (una fila por categoría entera —también los servicios futuros— o servicio suelto; `activo` copiado de `certificados.activo` por el trigger `certificados_destinos_activo`); se quitan `alcance`, `categoria_id`, `servicio_id` y el enum `alcance_certificado` (los existentes conservan su destino); un solo activo por destino y nivel (índices `certificados_un_global_activo`, `certificados_uno_por_categoria`, `certificados_uno_por_servicio`, con aviso previo por nombre de `_validar_destinos_certificado`); `fijar_destinos_certificado()`; `certificado_para_servicio` (servicio > categoría > todos), `v_stock_certificados` y `stock_certificados_valorizado()` con `todos_servicios`, `categoria_ids`, `servicio_ids` y `aplica_a` ("Todos los servicios", "Sin asignar" o "Categoría Autos, Reverificación") — decisión 2026-11-23 |
 
 Reglas que no son obvias leyendo una sola tabla:
-- **Certificado a usar**: el activo más específico (servicio > categoría > global).
+- **Certificado a usar**: el activo más específico (servicio > categoría > todos los servicios).
+  Un certificado se usa en todos los servicios (`todos_servicios`) o en una o más categorías enteras
+  y/o servicios sueltos, mezclados (`certificado_destinos`, migración 39; decisión 2026-11-23). Un
+  certificado nuevo no se usa en ninguna venta hasta fijarle los destinos ("Sin asignar"). Un solo
+  certificado **activo** por categoría, por servicio y para todos; uno desactivado puede tener un
+  destino ocupado, pero no se activa mientras choque (P0001 con el nombre del destino y del otro
+  certificado). En `/admin/certificados` el alta/edición es solo de datos y el botón **"Se usa en"**
+  (`DialogoDestinosCertificado`, se abre solo al crear) fija los destinos de una vez con
+  `fijar_destinos_certificado`: switch "Todos los servicios" o, por categoría, "Toda la categoría"
+  (sus servicios quedan "Incluido por la categoría") y switches por servicio. Fijar destinos y
+  activar/desactivar invalidan `["certificados"]` y `["caja", "certificado"]`.
 - **Venta sin stock** (o sin certificado configurado): se registra igual, `sin_stock = true`,
   costo 0, y se inserta una alerta `venta_sin_stock`. El stock nunca baja de 0.
 - **Stock bajo**: alerta `stock_bajo` solo al *cruzar* `stock_minimo` hacia abajo con una venta.
@@ -499,6 +510,7 @@ Todas requieren usuario autenticado y **activo**. Devuelven la fila afectada.
 | `resumen_ventas_mixtas(p_desde date = null, p_hasta date = null) → setof (cantidad_ventas, total, total_efectivo, total_transferencia, total_tarjeta, incluido_en_cuentas)` | admin | 1 fila. Ventas mixtas no anuladas por día de venta. **Informativo**: ya incluido en las cuentas (`incluido_en_cuentas = true`), no sumar |
 | `marcar_alertas_leidas(p_ids bigint[] = null) → int` | admin | `null` = todas; devuelve cuántas marcó |
 | `certificado_para_servicio(p_servicio_id bigint) → bigint` | todos | Para mostrar en Ventas qué hoja se usará |
+| `fijar_destinos_certificado(p_certificado_id bigint, p_todos boolean, p_categoria_ids bigint[], p_servicio_ids bigint[]) → void` | admin | Reemplaza de una vez dónde se usa: `p_todos = true` (listas vacías) o las categorías enteras y los servicios sueltos (`'{}'` = ninguno). Si el certificado está activo y un destino ya es de otro activo: P0001 con nombres |
 | `cajas_para_turno() → setof (id, nombre, ocupada, turno_id, abierto_en)` | admin | Cajas activas: libre u ocupada (con su turno abierto y desde cuándo) |
 | `turnos_abiertos() → setof (id, caja_id, caja_nombre, abierto_en)` | todos | Turnos abiertos sin dinero, por nombre de caja. La usa `v_turnos_abiertos` (el cliente lee la vista) |
 | `turno_abierto(p_turno_id bigint) → boolean` | todos | Solo sí/no (false si no existe, está cerrado o es NULL). La usan las políticas de `ventas`, `venta_pagos`, `gastos` y `comprobantes` |
@@ -510,7 +522,7 @@ Todas requieren usuario autenticado y **activo**. Devuelven la fila afectada.
 | `rol_actual() → rol_usuario`, `es_admin() → boolean` | todos | `null`/`false` si el usuario está desactivado |
 
 Enums: `medio_pago` = efectivo | transferencia | tarjeta · `fuente_fondos` = efectivo | transferencia ·
-`unidad_compra` = caja | libreta | unidad · `alcance_certificado` = global | categoria | servicio ·
+`unidad_compra` = caja | libreta | unidad ·
 `tipo_descuento` = porcentaje | monto_fijo · `cuenta_fondos` = efectivo | transferencia | tarjeta ·
 `tipo_mov_fondos` = fondo_inicial | ingreso | retiro · `tipo_impuesto` = porcentaje | monto_fijo.
 
@@ -538,7 +550,7 @@ se registra antes del `FECAESolicitar`; si no hubo respuesta, el siguiente `emit
 | `v_movimientos_caja` | Ventas + gastos juntos, con quién hizo cada uno (`usuario_id`, `usuario_nombre` —también para el cajero cuando lo hizo un compañero, vía `nombre_usuario`—). `tipo` = venta/gasto; **gastos con `monto` negativo** (fila roja); `anulada` para tacharlas (excluirlas de totales). `medio` = `'mixto'` en un pago mixto y `pagos` = detalle `[{medio, monto}]` (NULL en gastos); `descuento_nombre`, `monto_descuento`, `precio_lista` (NULL en gastos; `monto` es lo cobrado). Filtrar por `turno_id`, `caja_id`, `fecha_local`, etc. |
 | `v_turnos` | **Solo admin** (RLS de `turnos`; al cajero, 0 filas). Turnos con caja (sin cajero: el turno es de la caja), `abierto_por`/`abierto_por_nombre` (admin que lo abrió), `atendido_por` (text[]: quienes vendieron o gastaron, más el cajero asignado de los turnos anteriores a la 33), `abierto`, totales en vivo por medio (desde `venta_pagos`: una venta mixta suma en cada medio su parte), gastos y neto, y efectivo del cajón (`efectivo_inicial`, `gastos_efectivo`, `efectivo_en_caja` —en vivo si está abierto, foto del cierre si no—, `efectivo_cierre`); `fecha_apertura` = día de negocio de la apertura (filtro del historial) |
 | `v_turnos_abiertos` | `id`, `caja_id`, `caja_nombre`, `abierto_en` de los turnos abiertos, **sin dinero**: para que el usuario elija la caja donde trabaja. Envuelve `turnos_abiertos()` (security definer) porque el cajero no lee `turnos`; sin relación embebible con `cajas` |
-| `v_stock_certificados` | Stock en hojas, `semaforo` (ok/bajo/sin_stock), `aplica_a`. **Sin costos** (el admin usa `stock_certificados_valorizado()`) |
+| `v_stock_certificados` | Stock en hojas, `semaforo` (ok/bajo/sin_stock), `todos_servicios`, `categoria_ids`, `servicio_ids` y `aplica_a` (texto). **Sin costos** (el admin usa `stock_certificados_valorizado()`) |
 | `v_compras_certificado` | Compras con certificado, usuario, estado de anulación y `editable` (regla de §4). Solo admin (RLS) |
 | `v_gastos_por_categoria` | Totales por fecha, rubro, subcategoría y fuente |
 | `v_movimientos_efectivo` | Libro de la caja de cambio con quién hizo cada movimiento (`usuario_nombre`). Solo admin (RLS de `movimientos_efectivo`) |

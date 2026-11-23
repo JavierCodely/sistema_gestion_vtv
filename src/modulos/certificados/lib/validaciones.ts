@@ -17,21 +17,11 @@ export const MAXIMO_UNIDADES_COMPRA = 100_000;
 export const MAXIMO_HOJAS_AJUSTE = 100_000;
 
 export type UnidadCompra = Enums["unidad_compra"];
-export type Alcance = Enums["alcance_certificado"];
 
 export const UNIDADES: Record<UnidadCompra, { singular: string; plural: string }> = {
   caja: { singular: "caja", plural: "cajas" },
   libreta: { singular: "libreta", plural: "libretas" },
   unidad: { singular: "hoja suelta", plural: "hojas sueltas" },
-};
-
-/** Orden en que se ofrecen los alcances. */
-export const ORDEN_ALCANCES: readonly Alcance[] = ["global", "categoria", "servicio"];
-
-export const ALCANCES: Record<Alcance, string> = {
-  global: "Todos los servicios",
-  categoria: "Una categoría",
-  servicio: "Un servicio",
 };
 
 /** "Caja de 25 hojas", "Hoja suelta". */
@@ -47,25 +37,17 @@ export interface FormularioCertificado {
   nombre: string;
   unidadCompra: UnidadCompra;
   hojasPorUnidad: string;
-  alcance: Alcance;
-  destinoId: string;
   stockMinimo: string;
 }
 
 export type DatosCertificado = Required<
   Pick<
     Tablas["certificados"]["Insert"],
-    | "nombre"
-    | "unidad_compra"
-    | "hojas_por_unidad"
-    | "alcance"
-    | "categoria_id"
-    | "servicio_id"
-    | "stock_minimo"
+    "nombre" | "unidad_compra" | "hojas_por_unidad" | "stock_minimo"
   >
 >;
 
-export type ErroresCertificado = Errores<"nombre" | "hojasPorUnidad" | "destinoId" | "stockMinimo">;
+export type ErroresCertificado = Errores<"nombre" | "hojasPorUnidad" | "stockMinimo">;
 
 export function validarCertificado(
   formulario: FormularioCertificado,
@@ -94,13 +76,6 @@ export function validarCertificado(
   });
   if (minimo.error !== undefined) errores.stockMinimo = minimo.error;
 
-  const destino = Number(formulario.destinoId);
-  const necesitaDestino = formulario.alcance !== "global";
-  if (necesitaDestino && !(Number.isInteger(destino) && destino > 0)) {
-    errores.destinoId =
-      formulario.alcance === "categoria" ? "Elegí una categoría." : "Elegí un servicio.";
-  }
-
   if (hojas.valor === undefined || minimo.valor === undefined || Object.keys(errores).length > 0) {
     return { errores };
   }
@@ -109,9 +84,6 @@ export function validarCertificado(
       nombre: formulario.nombre.trim(),
       unidad_compra: formulario.unidadCompra,
       hojas_por_unidad: hojas.valor,
-      alcance: formulario.alcance,
-      categoria_id: formulario.alcance === "categoria" ? destino : null,
-      servicio_id: formulario.alcance === "servicio" ? destino : null,
       stock_minimo: minimo.valor,
     },
   };

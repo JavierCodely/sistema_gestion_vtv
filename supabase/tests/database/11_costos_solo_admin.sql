@@ -3,7 +3,7 @@ begin;
 select plan(16);
 
 select * from pg_temp.escenario() \gset
-insert into certificados (nombre, hojas_por_unidad) values ('Hoja VTV', 25) returning id as cert \gset
+insert into certificados (todos_servicios, nombre, hojas_por_unidad) values (true, 'Hoja VTV', 25) returning id as cert \gset
 
 select pg_temp.como(:'admin');
 select registrar_compra_certificado(:cert, 1, 50000, 'transferencia');

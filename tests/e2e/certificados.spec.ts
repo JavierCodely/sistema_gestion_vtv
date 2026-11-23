@@ -18,17 +18,30 @@ test("el admin gestiona certificados: alta, compra, ajuste, movimientos, edició
   test.setTimeout(90_000);
   const sufijo = unico();
   const categoria = `Cat cert ${sufijo}`;
+  const otraCategoria = `Cat otra ${sufijo}`;
+  const servicioSuelto = `Serv suelto ${sufijo}`;
   const nombre = `Hoja ${sufijo}`;
   await ingresar(page, ADMIN);
   await expect(page).toHaveURL("/admin");
 
-  // Categoría propia: cada corrida usa un destino nuevo (un solo certificado activo por destino).
+  // Destinos propios: cada corrida usa destinos nuevos (un solo certificado activo por destino).
+  // Una categoría entera y un servicio suelto de otra categoría.
   await page.goto("/admin/servicios");
-  await page.getByRole("button", { name: "Nueva categoría" }).click();
-  const dialogoCategoria = page.getByRole("dialog", { name: "Nueva categoría" });
-  await dialogoCategoria.getByLabel("Nombre").fill(categoria);
-  await dialogoCategoria.getByRole("button", { name: "Crear categoría" }).click();
-  await expect(page.getByText(`Categoría “${categoria}” creada`)).toBeVisible();
+  for (const nombreCategoria of [categoria, otraCategoria]) {
+    await page.getByRole("button", { name: "Nueva categoría" }).click();
+    const dialogoCategoria = page.getByRole("dialog", { name: "Nueva categoría" });
+    await dialogoCategoria.getByLabel("Nombre").fill(nombreCategoria);
+    await dialogoCategoria.getByRole("button", { name: "Crear categoría" }).click();
+    await expect(page.getByText(`Categoría “${nombreCategoria}” creada`)).toBeVisible();
+  }
+  await page.getByRole("button", { name: "Nuevo servicio" }).click();
+  const nuevoServicio = page.getByRole("dialog", { name: "Nuevo servicio" });
+  await nuevoServicio.getByLabel("Nombre").fill(servicioSuelto);
+  await elegir(page, nuevoServicio, "Categoría", otraCategoria);
+  await nuevoServicio.getByLabel("Precio ($)").fill("15.000");
+  await nuevoServicio.getByLabel("Usa hoja de certificado").click();
+  await nuevoServicio.getByRole("button", { name: "Crear servicio" }).click();
+  await expect(page.getByText(`Servicio “${servicioSuelto}” creado`)).toBeVisible();
 
   // Alta
   await page.getByRole("link", { name: "Certificados" }).click();
@@ -41,29 +54,44 @@ test("el admin gestiona certificados: alta, compra, ajuste, movimientos, edició
 
   await nuevo.getByLabel("Nombre").fill(nombre);
   await nuevo.getByLabel("Hojas por unidad").fill("25");
-  await elegir(page, nuevo, "Se usa en", "Una categoría");
-  await elegir(page, nuevo, "Categoría", categoria);
   await nuevo.getByLabel("Stock mínimo (hojas)").fill("30");
   await nuevo.getByRole("button", { name: "Crear certificado" }).click();
   await expect(page.getByText(`Certificado “${nombre}” creado`)).toBeVisible();
 
+  // Al crearlo se elige dónde se usa: una categoría entera + un servicio suelto de otra
+  const destinos = page.getByRole("dialog", { name: `Dónde se usa “${nombre}”` });
+  await expect(destinos.getByTestId("resumen-destinos")).toHaveText("Ningún servicio");
+  await destinos.getByRole("switch", { name: `Toda la categoría ${categoria}` }).click();
+  await destinos.getByRole("switch", { name: servicioSuelto, exact: true }).click();
+  await expect(destinos.getByTestId("resumen-destinos")).toHaveText("1 categoría y 1 servicio");
+  await destinos.getByRole("button", { name: "Guardar" }).click();
+  await expect(page.getByText(`Guardado dónde se usa “${nombre}”`)).toBeVisible();
+  await expect(destinos).toBeHidden();
+
   const fila = page.getByTestId(`certificado-${nombre}`);
-  await expect(fila).toContainText(categoria);
+  await expect(fila.locator('[data-columna="destinos"]')).toHaveText(
+    `Categoría ${categoria}, ${servicioSuelto}`,
+  );
   await expect(fila).toContainText("Caja de 25 hojas");
   await expect(fila.locator('[data-columna="stock"]')).toHaveText("0");
   await expect(fila).toContainText("Sin stock");
 
-  // Un solo certificado activo por destino: mensaje claro
+  // Un solo certificado activo por destino: la BD lo explica con nombres
   await page.getByRole("button", { name: "Nuevo certificado" }).click();
   await nuevo.getByLabel("Nombre").fill(`${nombre} B`);
   await nuevo.getByLabel("Hojas por unidad").fill("10");
-  await elegir(page, nuevo, "Se usa en", "Una categoría");
-  await elegir(page, nuevo, "Categoría", categoria);
   await nuevo.getByRole("button", { name: "Crear certificado" }).click();
-  await expect(nuevo.getByRole("alert")).toHaveText(
-    "Esa categoría ya tiene un certificado activo. Desactivalo antes de activar otro.",
+  const destinosB = page.getByRole("dialog", { name: `Dónde se usa “${nombre} B”` });
+  await destinosB.getByRole("switch", { name: `Toda la categoría ${categoria}` }).click();
+  await destinosB.getByRole("button", { name: "Guardar" }).click();
+  await expect(destinosB.getByRole("alert")).toHaveText(
+    `La categoría "${categoria}" ya usa el certificado activo "${nombre}". Desactivalo o quitale esa categoría antes.`,
   );
   await page.keyboard.press("Escape");
+  await expect(destinosB).toBeHidden();
+  await expect(
+    page.getByTestId(`certificado-${nombre} B`).locator('[data-columna="destinos"]'),
+  ).toContainText("Sin asignar");
 
   // Compra: 2 cajas × $50.000 → 50 hojas a $2.000
   await fila.getByRole("button", { name: `Registrar compra de ${nombre}` }).click();
@@ -119,7 +147,6 @@ test("el admin gestiona certificados: alta, compra, ajuste, movimientos, edició
   await fila.getByRole("button", { name: `Editar certificado ${nombre}` }).click();
   const edicion = page.getByRole("dialog", { name: "Editar certificado" });
   await expect(edicion.getByLabel("Nombre")).toHaveValue(nombre);
-  await expect(edicion.getByLabel("Categoría")).toHaveText(categoria);
   await edicion.getByLabel("Stock mínimo (hojas)").fill("20");
   await edicion.getByRole("button", { name: "Guardar" }).click();
   await expect(page.getByText("Cambios guardados")).toBeVisible();
@@ -156,10 +183,12 @@ test("el admin edita la última compra: se revierte la original y se registra la
   const nuevo = page.getByRole("dialog", { name: "Nuevo certificado" });
   await nuevo.getByLabel("Nombre").fill(nombre);
   await nuevo.getByLabel("Hojas por unidad").fill("25");
-  await elegir(page, nuevo, "Se usa en", "Una categoría");
-  await elegir(page, nuevo, "Categoría", categoria);
   await nuevo.getByRole("button", { name: "Crear certificado" }).click();
   await expect(page.getByText(`Certificado “${nombre}” creado`)).toBeVisible();
+  const destinos = page.getByRole("dialog", { name: `Dónde se usa “${nombre}”` });
+  await destinos.getByRole("switch", { name: `Toda la categoría ${categoria}` }).click();
+  await destinos.getByRole("button", { name: "Guardar" }).click();
+  await expect(destinos).toBeHidden();
   const fila = page.getByTestId(`certificado-${nombre}`);
 
   // Compra con un error de carga: 2 cajas × $50.000

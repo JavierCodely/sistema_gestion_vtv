@@ -22,7 +22,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/compartido/ui/select";
-import type { Categoria, Servicio } from "@/modulos/servicios/api/consultas";
 import {
   MENSAJES_ERROR_CERTIFICADO,
   useActualizarCertificado,
@@ -30,11 +29,8 @@ import {
   type CertificadoConStock,
 } from "../api/consultas";
 import {
-  ALCANCES,
-  ORDEN_ALCANCES,
   UNIDADES,
   validarCertificado,
-  type Alcance,
   type ErroresCertificado,
   type FormularioCertificado,
   type UnidadCompra,
@@ -46,37 +42,32 @@ function formularioInicial(certificado?: CertificadoConStock): FormularioCertifi
       nombre: "",
       unidadCompra: "caja",
       hojasPorUnidad: "",
-      alcance: "global",
-      destinoId: "",
       stockMinimo: "0",
     };
   }
-  const destino =
-    certificado.alcance === "categoria" ? certificado.categoria_id : certificado.servicio_id;
   return {
     nombre: certificado.nombre,
     unidadCompra: certificado.unidad_compra,
     hojasPorUnidad: String(certificado.hojas_por_unidad),
-    alcance: certificado.alcance,
-    destinoId: destino === null ? "" : String(destino),
     stockMinimo: String(certificado.stock_minimo),
   };
 }
 
 const esUnidad = (valor: string): valor is UnidadCompra => valor in UNIDADES;
-const esAlcance = (valor: string): valor is Alcance => valor in ALCANCES;
 
-/** Alta o edición de un certificado. Se monta abierto; el padre lo desmonta al cerrar. */
+/**
+ * Alta o edición de los datos de un certificado. Dónde se usa se elige en "Se usa en"
+ * (`DialogoDestinosCertificado`): al crear uno, `onCreado` recibe su id y nombre para seguir por ahí.
+ * Se monta abierto; el padre lo desmonta al cerrar.
+ */
 export function DialogoCertificado({
   certificado,
-  categorias,
-  servicios,
   onCerrar,
+  onCreado,
 }: {
   certificado?: CertificadoConStock;
-  categorias: Categoria[];
-  servicios: Servicio[];
   onCerrar: () => void;
+  onCreado?: (id: number, nombre: string) => void;
 }) {
   const crear = useCrearCertificado();
   const actualizar = useActualizarCertificado();
@@ -84,17 +75,6 @@ export function DialogoCertificado({
   const [errores, setErrores] = useState<ErroresCertificado>({});
   const [errorServidor, setErrorServidor] = useState<string | null>(null);
   const guardando = crear.isPending || actualizar.isPending;
-
-  // Destinos activos, más el que ya tiene el certificado (para no perderlo al editar).
-  const destinoActual = formularioInicial(certificado).destinoId;
-  const opcionesDestino =
-    formulario.alcance === "categoria"
-      ? categorias
-          .filter((c) => c.activa || String(c.id) === destinoActual)
-          .map((c) => ({ id: c.id, nombre: c.nombre, activo: c.activa }))
-      : servicios
-          .filter((s) => s.activo || String(s.id) === destinoActual)
-          .map((s) => ({ id: s.id, nombre: s.nombre, activo: s.activo }));
 
   function cambiar<K extends keyof FormularioCertificado>(
     clave: K,
@@ -116,6 +96,10 @@ export function DialogoCertificado({
       } else {
         const creado = await crear.mutateAsync(resultado.datos);
         toast.success(`Certificado “${creado.nombre}” creado`);
+        if (onCreado) {
+          onCreado(creado.id, creado.nombre);
+          return;
+        }
       }
       onCerrar();
     } catch (e) {
@@ -127,15 +111,15 @@ export function DialogoCertificado({
     <Dialog
       open
       onOpenChange={(abierto) => {
-        if (!abierto) onCerrar();
+        if (!abierto && !guardando) onCerrar();
       }}
     >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{certificado ? "Editar certificado" : "Nuevo certificado"}</DialogTitle>
           <DialogDescription>
-            La hoja que se entrega con cada servicio. En cada venta se usa la más específica:
-            servicio, después categoría y por último la de todos los servicios.
+            La hoja que se entrega con cada servicio. En qué categorías y servicios se usa lo elegís
+            con “Se usa en”.
           </DialogDescription>
         </DialogHeader>
         <form className="flex flex-col gap-4" onSubmit={(e) => void enviar(e)} noValidate>
@@ -189,64 +173,6 @@ export function DialogoCertificado({
               />
             </Campo>
           </div>
-
-          <Campo id="certificado-alcance" etiqueta="Se usa en">
-            <Select
-              value={formulario.alcance}
-              onValueChange={(valor) => {
-                if (!esAlcance(valor)) return;
-                setFormulario((actual) => ({ ...actual, alcance: valor, destinoId: "" }));
-              }}
-            >
-              <SelectTrigger id="certificado-alcance" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ORDEN_ALCANCES.map((alcance) => (
-                  <SelectItem key={alcance} value={alcance}>
-                    {ALCANCES[alcance]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Campo>
-
-          {formulario.alcance !== "global" && (
-            <Campo
-              id="certificado-destino"
-              etiqueta={formulario.alcance === "categoria" ? "Categoría" : "Servicio"}
-              error={errores.destinoId}
-            >
-              <Select
-                value={formulario.destinoId}
-                onValueChange={(valor) => {
-                  cambiar("destinoId", valor);
-                }}
-              >
-                <SelectTrigger
-                  id="certificado-destino"
-                  className="w-full"
-                  {...propsError("certificado-destino", errores.destinoId)}
-                >
-                  <SelectValue
-                    placeholder={
-                      formulario.alcance === "categoria"
-                        ? "Elegí una categoría"
-                        : "Elegí un servicio"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {opcionesDestino.map((opcion) => (
-                    <SelectItem key={opcion.id} value={String(opcion.id)}>
-                      {opcion.nombre}
-                      {!opcion.activo && " (desactivado)"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Campo>
-          )}
 
           <Campo
             id="certificado-minimo"
