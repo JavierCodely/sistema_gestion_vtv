@@ -47,6 +47,22 @@ describe("VerComprobante", () => {
     expect(screen.getByRole("button", { name: "Imprimir" })).toBeInTheDocument();
   });
 
+  it("es un ticket para impresora térmica: una columna de hasta 80 mm, negro sobre blanco y sin grises", async () => {
+    responder("v_comprobantes", "select", { data: comprobanteDePrueba() });
+    renderRuta("/comprobantes/10", cajero());
+    const ticket = await screen.findByTestId("ticket");
+    expect(ticket).toHaveClass("max-w-[80mm]", "bg-white", "text-black");
+    // En papel térmico el gris sale pálido: nada del ticket usa el color atenuado del tema
+    expect(ticket.querySelector('[class*="muted"]')).toBeNull();
+    expect(
+      await within(ticket).findByRole("img", { name: "Código QR para verificar en ARCA" }),
+    ).toHaveClass("print:size-[38mm]");
+    // Los botones no salen en el papel
+    expect(screen.getByRole("button", { name: "Imprimir" }).parentElement).toHaveClass(
+      "print:hidden",
+    );
+  });
+
   it("la factura A discrimina neto e IVA; la NC muestra el comprobante asociado", async () => {
     responder("v_comprobantes", "select", {
       data: comprobanteDePrueba({

@@ -8,21 +8,22 @@ import {
 const venta = (cambios: Partial<FormularioVenta> = {}): FormularioVenta => ({
   servicioId: 3,
   cobro: { medio: "efectivo" },
-  patente: "",
+  patente: "AB123CD",
   descuentoId: null,
   precioEsperado: 18000,
   ...cambios,
 });
 
 describe("validarVenta", () => {
-  it("exige servicio y medio de pago", () => {
-    expect(validarVenta(venta({ servicioId: null, cobro: null })).errores).toEqual({
+  it("exige servicio, medio de pago y patente", () => {
+    expect(validarVenta(venta({ servicioId: null, cobro: null, patente: "" })).errores).toEqual({
       servicioId: "Elegí un servicio.",
       cobro: "Elegí el medio de pago.",
+      patente: "Ingresá la patente del vehículo.",
     });
   });
 
-  it("normaliza la patente como la BD y la deja en null si está vacía", () => {
+  it("normaliza la patente como la BD; en blanco no se acepta", () => {
     expect(validarVenta(venta({ cobro: { medio: "tarjeta" }, patente: " ab 123 cd " }))).toEqual({
       datos: {
         servicioId: 3,
@@ -32,7 +33,9 @@ describe("validarVenta", () => {
         precioEsperado: 18000,
       },
     });
-    expect(validarVenta(venta({ patente: "  " })).datos?.patente).toBeNull();
+    expect(validarVenta(venta({ patente: "  " })).errores).toEqual({
+      patente: "Ingresá la patente del vehículo.",
+    });
   });
 
   it("pasa el pago mixto, el descuento y el precio esperado tal cual (los valida la BD)", () => {
@@ -45,7 +48,7 @@ describe("validarVenta", () => {
     expect(validarVenta(venta({ cobro, descuentoId: 4, precioEsperado: 16200 })).datos).toEqual({
       servicioId: 3,
       cobro,
-      patente: null,
+      patente: "AB123CD",
       descuentoId: 4,
       precioEsperado: 16200,
     });

@@ -81,13 +81,13 @@ reset role;
 
 -- Ventas del cajero ---------------------------------------------------------------------------------
 select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja, 100) as turno \gset
-select (registrar_venta(:turno, :servicio, 'efectivo')).id as v1 \gset
-select (registrar_venta(:turno, :servicio, 'tarjeta')).id as v2 \gset
+select (registrar_venta(:turno, :servicio, 'efectivo', p_patente => $p$AB123CD$p$)).id as v1 \gset
+select (registrar_venta(:turno, :servicio, 'tarjeta', p_patente => $p$AB123CD$p$)).id as v2 \gset
 select (registrar_venta(:turno, :servicio, p_pagos =>
-  '[{"medio":"efectivo","monto":5000},{"medio":"tarjeta","monto":15000}]')).id as v3 \gset
+  '[{"medio":"efectivo","monto":5000},{"medio":"tarjeta","monto":15000}]', p_patente => $p$AB123CD$p$)).id as v3 \gset
 select (registrar_venta(:turno, :serv2, p_pagos =>
-  '[{"medio":"efectivo","monto":10000},{"medio":"transferencia","monto":10000},{"medio":"tarjeta","monto":10000}]')).id as v5 \gset
-select (registrar_venta(:turno, :servicio, 'efectivo')).id as v7 \gset
+  '[{"medio":"efectivo","monto":10000},{"medio":"transferencia","monto":10000},{"medio":"tarjeta","monto":10000}]', p_patente => $p$AB123CD$p$)).id as v5 \gset
+select (registrar_venta(:turno, :servicio, 'efectivo', p_patente => $p$AB123CD$p$)).id as v7 \gset
 select is((select count(*)::int from venta_impuestos), 0, 'el cajero no lee la foto de impuestos');
 reset role;
 
@@ -130,7 +130,7 @@ reset role;
 select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja2, 100) as turno_x \gset
 reset role;
 select pg_temp.como(:'cajero');
-select (registrar_venta(:turno, :servicio, 'efectivo')).id as v8 \gset
+select (registrar_venta(:turno, :servicio, 'efectivo', p_patente => $p$AB123CD$p$)).id as v8 \gset
 reset role;
 select is((select monto from venta_impuestos where venta_id = :v8 and impuesto_id = :imp_a), 1000.00,
   'una venta nueva usa el valor actual (5 %)');

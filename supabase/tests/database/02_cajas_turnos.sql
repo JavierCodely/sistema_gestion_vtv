@@ -46,14 +46,14 @@ reset role;
 -- Cerrar turno con totales: venden dos usuarios en la misma caja
 insert into certificados (nombre, hojas_por_unidad) values ('Hoja Test', 25);
 select pg_temp.como(:'cajero');
-select registrar_venta(:turno, :servicio, 'efectivo');
-select registrar_venta(:turno, :servicio, 'efectivo');
+select registrar_venta(:turno, :servicio, 'efectivo', p_patente => $p$AB123CD$p$);
+select registrar_venta(:turno, :servicio, 'efectivo', p_patente => $p$AB123CD$p$);
 select registrar_gasto((select id from categorias_gasto where nombre = 'Comida'), 3000, 'efectivo', 'Almuerzo',
   :turno);
 reset role;
 select pg_temp.como(:'otro');
-select registrar_venta(:turno, :servicio, 'tarjeta');
-select registrar_venta(:turno, :servicio, 'transferencia');
+select registrar_venta(:turno, :servicio, 'tarjeta', p_patente => $p$AB123CD$p$);
+select registrar_venta(:turno, :servicio, 'transferencia', p_patente => $p$AB123CD$p$);
 select throws_ok(format('select cerrar_turno(%s)', :turno), '42501', null,
   'un cajero no cierra turnos');
 reset role;

@@ -23,54 +23,78 @@ function dia(fecha: string | null): string {
 
 function Dato({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
   return (
-    <div>
-      <dt className="text-xs text-muted-foreground">{etiqueta}</dt>
-      <dd className="font-medium">{children}</dd>
+    <div className="flex justify-between gap-2">
+      <dt>{etiqueta}</dt>
+      <dd className="text-right font-semibold">{children}</dd>
     </div>
   );
 }
 
+function Linea({
+  etiqueta,
+  valor,
+  fuerte = false,
+}: {
+  etiqueta: string;
+  valor: string;
+  fuerte?: boolean;
+}) {
+  return (
+    <div className={fuerte ? "flex justify-between text-[15px] font-bold" : "flex justify-between"}>
+      <dt>{etiqueta}</dt>
+      <dd className="tabular-nums" data-testid={fuerte ? "comprobante-total" : undefined}>
+        {valor}
+      </dd>
+    </div>
+  );
+}
+
+/**
+ * Ticket para impresora térmica (rollo de 80 o 58 mm, por USB desde Chrome): una columna de ancho
+ * fluido (el ancho lo pone el papel elegido en el driver), todo en negro sobre blanco —el gris sale
+ * pálido en papel térmico— y siempre claro aunque la app esté en modo oscuro. Los márgenes de la
+ * página los fija `@page` en index.css.
+ */
 function Impreso({ c }: { c: Comprobante }) {
   const nombre = nombreComprobante(c.cbte_tipo);
   const numero = numeroComprobante(c.punto_venta, c.numero);
+  const separador = "border-t border-dashed border-black pt-2";
   return (
     <article
-      className="flex flex-col gap-4 rounded-md border bg-background p-6 print:border-0 print:p-0"
+      data-testid="ticket"
+      className="mx-auto flex w-full max-w-[80mm] flex-col gap-2 bg-white p-3 font-sans text-[13px] leading-snug text-black shadow-sm ring-1 ring-black/10 print:max-w-none print:p-0 print:shadow-none print:ring-0"
       aria-label={`${nombre} ${numero}`}
     >
       {c.ambiente === "homologacion" && (
-        <p className="rounded-md border border-dashed p-2 text-center text-sm font-semibold uppercase">
+        <p className="border border-dashed border-black p-1 text-center text-[11px] font-bold uppercase">
           Comprobante de prueba (homologación) · sin validez fiscal
         </p>
       )}
 
-      <header className="grid gap-4 border-b pb-4 sm:grid-cols-[1fr_auto_1fr]">
-        <div className="flex flex-col gap-1 text-sm">
-          <p className="text-lg font-semibold">{c.emisor_razon_social ?? "—"}</p>
-          <p>{c.emisor_domicilio ?? "—"}</p>
-          <p>IVA Responsable Inscripto</p>
-        </div>
-        <div className="flex flex-col items-center">
-          <span className="flex size-14 items-center justify-center rounded-md border-2 text-3xl font-bold">
-            {c.clase}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            Cód. {String(c.cbte_tipo).padStart(3, "0")}
-          </span>
-        </div>
-        <div className="flex flex-col gap-1 text-sm sm:text-right">
-          <h1 className="text-lg font-semibold">{nombre}</h1>
-          <p>N° {numero}</p>
-          <p>Fecha: {dia(c.fecha)}</p>
-          <p>CUIT: {formatearCuit(c.cuit_emisor)}</p>
-          {c.emisor_iibb && <p>IIBB: {c.emisor_iibb}</p>}
-          {c.emisor_inicio_actividades && (
-            <p>Inicio de actividades: {dia(c.emisor_inicio_actividades)}</p>
-          )}
-        </div>
+      <header className="flex flex-col items-center gap-0.5 text-center">
+        <p className="text-base font-bold">{c.emisor_razon_social ?? "—"}</p>
+        <p>{c.emisor_domicilio ?? "—"}</p>
+        <p>CUIT: {formatearCuit(c.cuit_emisor)}</p>
+        {c.emisor_iibb && <p>IIBB: {c.emisor_iibb}</p>}
+        {c.emisor_inicio_actividades && (
+          <p>Inicio de actividades: {dia(c.emisor_inicio_actividades)}</p>
+        )}
+        <p>IVA Responsable Inscripto</p>
       </header>
 
-      <dl className="grid gap-3 border-b pb-4 text-sm sm:grid-cols-2">
+      <div className={`${separador} flex flex-col items-center gap-0.5 text-center`}>
+        <div className="flex items-center gap-2">
+          <span className="flex size-9 items-center justify-center border-2 border-black text-2xl font-bold">
+            {c.clase}
+          </span>
+          <h1 className="text-base font-bold">{nombre}</h1>
+        </div>
+        <p className="text-[11px]">Cód. {String(c.cbte_tipo).padStart(3, "0")}</p>
+        <p className="font-semibold">N° {numero}</p>
+        <p>Fecha: {dia(c.fecha)}</p>
+      </div>
+
+      <dl className={`${separador} flex flex-col gap-0.5`}>
         <Dato etiqueta="Cliente">{c.receptor_nombre ?? "Consumidor final"}</Dato>
         <Dato etiqueta="Documento">{formatearDocumento(c.doc_tipo, c.doc_nro)}</Dato>
         <Dato etiqueta="Condición frente al IVA">{c.condicion_iva_receptor}</Dato>
@@ -86,64 +110,48 @@ function Impreso({ c }: { c: Comprobante }) {
           )}
       </dl>
 
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-left">
-            <th className="py-1 font-medium">Descripción</th>
-            <th className="py-1 text-right font-medium">Importe</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td className="py-1">
-              {c.servicio_nombre}
-              {c.patente && ` · Dominio ${c.patente}`} · Venta N° {c.venta_id}
-            </td>
-            <td className="py-1 text-right tabular-nums">
-              {formatearMoneda(c.clase === "A" ? c.neto : c.total)}
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div className={`${separador} flex flex-col gap-0.5`}>
+        <p className="font-semibold">
+          {c.servicio_nombre}
+          {c.patente && ` · Dominio ${c.patente}`}
+        </p>
+        <div className="flex justify-between">
+          <span>Venta N° {c.venta_id}</span>
+          <span className="tabular-nums">
+            {formatearMoneda(c.clase === "A" ? c.neto : c.total)}
+          </span>
+        </div>
+      </div>
 
-      <dl className="ml-auto grid w-full max-w-xs gap-1 text-sm">
+      <dl className={`${separador} flex flex-col gap-0.5`}>
         {c.clase === "A" ? (
           <>
-            <div className="flex justify-between">
-              <dt>Importe neto gravado</dt>
-              <dd className="tabular-nums">{formatearMoneda(c.neto)}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt>IVA 21 %</dt>
-              <dd className="tabular-nums">{formatearMoneda(c.iva)}</dd>
-            </div>
+            <Linea etiqueta="Importe neto gravado" valor={formatearMoneda(c.neto)} />
+            <Linea etiqueta="IVA 21 %" valor={formatearMoneda(c.iva)} />
           </>
         ) : (
-          <div className="flex justify-between text-muted-foreground">
-            {/* Ley 27.743 (transparencia fiscal): el IVA contenido se informa en la Factura B. */}
-            <dt>IVA contenido</dt>
-            <dd className="tabular-nums">{formatearMoneda(c.iva)}</dd>
-          </div>
+          // Ley 27.743 (transparencia fiscal): el IVA contenido se informa en la Factura B.
+          <Linea etiqueta="IVA contenido" valor={formatearMoneda(c.iva)} />
         )}
-        <div className="flex justify-between border-t pt-1 text-base font-semibold">
-          <dt>Total</dt>
-          <dd className="tabular-nums" data-testid="comprobante-total">
-            {formatearMoneda(c.total)}
-          </dd>
-        </div>
+        <Linea etiqueta="Total" valor={formatearMoneda(c.total)} fuerte />
       </dl>
 
-      <footer className="flex flex-wrap items-center gap-4 border-t pt-4">
+      <footer className={`${separador} flex flex-col items-center gap-1 text-center`}>
         {c.qr_url && (
-          <CodigoQr key={c.qr_url} texto={c.qr_url} etiqueta="Código QR para verificar en ARCA" />
+          <CodigoQr
+            key={c.qr_url}
+            texto={c.qr_url}
+            etiqueta="Código QR para verificar en ARCA"
+            className="size-36 print:size-[38mm]"
+          />
         )}
-        <dl className="grid gap-1 text-sm">
+        <dl className="flex w-full flex-col gap-0.5">
           <Dato etiqueta="CAE">
             <span data-testid="comprobante-cae">{c.cae ?? "—"}</span>
           </Dato>
           <Dato etiqueta="Vencimiento del CAE">{dia(c.cae_vencimiento)}</Dato>
-          <p className="text-xs text-muted-foreground">Comprobante autorizado por ARCA</p>
         </dl>
+        <p className="text-[11px]">Comprobante autorizado por ARCA</p>
       </footer>
     </article>
   );
@@ -184,8 +192,8 @@ export function VerComprobante() {
   }
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-4 p-4 md:p-6 print:max-w-none print:p-0">
-      <div className="flex flex-wrap gap-2 print:hidden">
+    <main className="mx-auto flex max-w-3xl flex-col gap-4 p-4 md:p-6 print:max-w-none print:bg-white print:p-0">
+      <div className="flex flex-wrap justify-center gap-2 print:hidden">
         <Button
           variant="ghost"
           onClick={() => {

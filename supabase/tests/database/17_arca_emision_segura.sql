@@ -16,8 +16,8 @@ reset role;
 
 reset role;
 select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja) as turno \gset
-select (registrar_venta(:turno, :servicio, 'efectivo')).id as v1 \gset
-select (registrar_venta(:turno, :servicio, 'efectivo')).id as v2 \gset
+select (registrar_venta(:turno, :servicio, 'efectivo', p_patente => $p$AB123CD$p$)).id as v1 \gset
+select (registrar_venta(:turno, :servicio, 'efectivo', p_patente => $p$AB123CD$p$)).id as v2 \gset
 select (preparar_factura(:v1, 5, 99::smallint, 0)).id as f1 \gset
 select (preparar_factura(:v2, 5, 99::smallint, 0)).id as f2 \gset
 reset role;

@@ -45,10 +45,11 @@
 --   35. 20261123000035_ventas_tiempo_real.sql
 --   36. 20261123000036_impuestos.sql
 --   37. 20261123000037_dashboard.sql
+--   38. 20261123000038_patente_obligatoria.sql
 --
 -- Después de ejecutarlo, registrá las migraciones como aplicadas para que
 -- `supabase db push` no intente aplicarlas de nuevo:
---   npx supabase migration repair --status applied 20261119000001 20261119000002 20261119000003 20261119000004 20261119000005 20261119000006 20261119000007 20261119000008 20261119000009 20261119000010 20261119000011 20261119000012 20261119000013 20261120000014 20261120000015 20261120000016 20261120000017 20261120000018 20261120000019 20261120000020 20261120000021 20261120000022 20261120000023 20261120000024 20261120000025 20261121000026 20261121000027 20261121000028 20261121000029 20261122000030 20261122000031 20261122000032 20261122000033 20261122000034 20261123000035 20261123000036 20261123000037
+--   npx supabase migration repair --status applied 20261119000001 20261119000002 20261119000003 20261119000004 20261119000005 20261119000006 20261119000007 20261119000008 20261119000009 20261119000010 20261119000011 20261119000012 20261119000013 20261120000014 20261120000015 20261120000016 20261120000017 20261120000018 20261120000019 20261120000020 20261120000021 20261120000022 20261120000023 20261120000024 20261120000025 20261121000026 20261121000027 20261121000028 20261121000029 20261122000030 20261122000031 20261122000032 20261122000033 20261122000034 20261123000035 20261123000036 20261123000037 20261123000038
 -- =====================================================================
 
 begin;
@@ -8914,5 +8915,37 @@ end;
 $$;
 
 grant execute on function public.resumen_gastos(date, date, bigint) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- 20261123000038_patente_obligatoria.sql
+-- ---------------------------------------------------------------------
+-- =====================================================================
+-- Migración 38: patente obligatoria en las ventas de la caja (decisión del negocio, 2026-11-23)
+--
+-- Toda venta con turno (la que registra `registrar_venta` desde una caja abierta) lleva patente.
+-- `registrar_venta` ya la normaliza (mayúsculas, sin espacios; vacía → NULL), así que el control
+-- va en un trigger BEFORE INSERT de `ventas`: cubre cualquier camino de alta, sin reescribir la RPC.
+-- Las ventas con fecha pasada (sin turno, carga histórica del admin) siguen con patente opcional.
+-- Las ventas existentes sin patente no cambian (el control es solo al insertar).
+-- =====================================================================
+
+create function public.tg_ventas_patente_obligatoria()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if new.turno_id is not null and nullif(btrim(coalesce(new.patente, '')), '') is null then
+    raise exception 'Ingresá la patente del vehículo' using errcode = '22023';
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.tg_ventas_patente_obligatoria() from public, authenticated, anon;
+
+create trigger ventas_patente_obligatoria
+  before insert on public.ventas
+  for each row execute function public.tg_ventas_patente_obligatoria();
 
 commit;

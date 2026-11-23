@@ -127,7 +127,7 @@ export async function venderEnCaja(
     categoria,
     servicio,
     medio,
-    patente = "",
+    patente = "AA111AA",
     recibido = "",
   }: {
     categoria: string;
@@ -148,7 +148,7 @@ export async function iniciarVentaEnCaja(
     categoria,
     servicio,
     medio,
-    patente = "",
+    patente = "AA111AA",
     recibido = "",
   }: {
     categoria: string;
@@ -167,7 +167,7 @@ export async function iniciarVentaEnCaja(
     .getByRole("listbox", { name: /^2\. Servicio/ })
     .getByRole("option", { name: new RegExp(`^${servicio}`) })
     .click();
-  const campoPatente = page.getByLabel("3. Patente (opcional)");
+  const campoPatente = page.getByLabel("3. Patente");
   await expect(campoPatente).toBeFocused();
   await page.keyboard.type(patente);
   await page.keyboard.press("Enter");

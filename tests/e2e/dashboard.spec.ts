@@ -139,7 +139,22 @@ test("dashboard: ventas de la semana, servicios, categorías y gastos del turno 
     "1",
     /\$\s?1\.500,00/,
   ]);
-  await page.screenshot({ path: "test-results/dashboard.png", fullPage: true });
+  // Impuestos del mismo turno (su cálculo lo prueba impuestos.spec): la sección está con el filtro
+  await expect(page.getByRole("heading", { name: "Impuestos", level: 2 })).toBeVisible();
+  await expect(page.getByTestId("dato-impuestos-total")).toHaveText(/\$\s?[\d.]+,\d{2}/);
+
+  // Scroll propio: con la rueda se desplaza el contenido hasta abajo y el menú y la barra siguen a la
+  // vista (si se desplazara la ventana, se irían para arriba)
+  const menu = page.getByRole("navigation", { name: "Menú de administración" });
+  await page.getByTestId("contenido-admin").hover();
+  for (let i = 0; i < 10; i++) await page.mouse.wheel(0, 1000);
+  await expect(page.getByText("Impuestos por tipo")).toBeInViewport();
+  await expect(menu.getByRole("link", { name: "Dashboard" })).toBeInViewport();
+  await expect(
+    page.getByRole("banner").getByRole("button", { name: "Abrir turno" }),
+  ).toBeInViewport();
+  await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).not.toBeInViewport();
+  await page.screenshot({ path: "test-results/dashboard.png" });
 
   await cerrarTurnoDesdeBarra(page, { caja });
 });

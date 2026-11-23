@@ -161,6 +161,20 @@ test("facturación ARCA: configurar, facturar B y A desde la caja, ver el compro
     impreso.getByRole("img", { name: "Código QR para verificar en ARCA" }),
   ).toBeVisible();
   await expect(impreso.getByText(/sin validez fiscal/)).toBeVisible();
+  // Impreso en rollos térmicos de 80 y 58 mm (72 y 48 mm útiles ≈ 272 y 181 px): sin botones, sin
+  // scroll horizontal y todo el ticket a lo ancho del papel
+  await pc.emulateMedia({ media: "print" });
+  for (const ancho of [272, 181]) {
+    await pc.setViewportSize({ width: ancho, height: 900 });
+    await expect(pc.getByRole("button", { name: "Imprimir" })).toBeHidden();
+    await expect(pc.locator("[data-sonner-toaster]")).toBeHidden();
+    const caja = await impreso.boundingBox();
+    expect(caja && caja.x >= 0 && caja.x + caja.width <= ancho + 0.5).toBe(true);
+    await expect(impreso.getByTestId("comprobante-total")).toBeInViewport();
+    await pc.screenshot({ path: `test-results/ticket-${String(ancho)}.png`, fullPage: true });
+  }
+  await pc.emulateMedia({ media: "screen" });
+  await pc.setViewportSize({ width: 1280, height: 720 });
   await pc.getByRole("button", { name: "Volver" }).click();
   await esperarCaja(pc, caja);
 

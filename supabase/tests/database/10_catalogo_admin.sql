@@ -47,12 +47,12 @@ select is((select activa from categorias_servicio where id = :cat), true, 'un ca
 -- Una categoría desactivada saca de la venta a sus servicios (el cajero trabaja en el turno de caja2)
 update categorias_servicio set activa = false where id = :categoria;
 select pg_temp.como(:'cajero');
-select throws_ok(format($$select registrar_venta(%s, %s, 'efectivo')$$, :turno, :servicio), '22023',
+select throws_ok(format($$select registrar_venta(%s, %s, 'efectivo', p_patente => $p$AB123CD$p$)$$, :turno, :servicio), '22023',
   'La categoría de este servicio está desactivada', 'no se vende un servicio de una categoría desactivada');
 reset role;
 update categorias_servicio set activa = true where id = :categoria;
 select pg_temp.como(:'cajero');
-select lives_ok(format($$select registrar_venta(%s, %s, 'efectivo')$$, :turno, :servicio),
+select lives_ok(format($$select registrar_venta(%s, %s, 'efectivo', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
   'al reactivar la categoría se vuelve a vender');
 reset role;
 select is((select count(*)::int from ventas where usuario_id = :'cajero'), 1, 'quedó registrada una sola venta');

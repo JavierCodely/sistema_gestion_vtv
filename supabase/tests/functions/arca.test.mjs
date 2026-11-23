@@ -93,6 +93,7 @@ async function nuevaVenta(token = cajero, medio = "tarjeta", turno = turnoId) {
       p_turno_id: turno,
       p_servicio_id: servicioId,
       p_medio_pago: medio,
+      p_patente: "AB123CD",
     })
   ).id;
 }

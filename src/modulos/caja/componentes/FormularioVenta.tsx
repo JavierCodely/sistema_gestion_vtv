@@ -103,6 +103,7 @@ export function FormularioVenta({
   const [errorMixto, setErrorMixto] = useState(false);
   const [recibido, setRecibido] = useState("");
   const [errorRecibido, setErrorRecibido] = useState<string | null>(null);
+  const [errorPatente, setErrorPatente] = useState<string | null>(null);
   const [errorServidor, setErrorServidor] = useState<string | null>(null);
   const [ultima, setUltima] = useState<UltimaVenta | null>(null);
   const descuentos = useDescuentosParaServicio(servicioId);
@@ -140,6 +141,7 @@ export function FormularioVenta({
   function irA(destino: Paso) {
     setErrorServidor(null);
     setErrorRecibido(null);
+    setErrorPatente(null);
     setErrorMixto(false);
     setPaso(destino);
   }
@@ -405,12 +407,17 @@ export function FormularioVenta({
             noValidate
             onSubmit={(e) => {
               e.preventDefault();
+              // Obligatoria (migración 38): la BD también la exige en toda venta con turno.
+              if (patente === "") {
+                setErrorPatente("Ingresá la patente del vehículo.");
+                return;
+              }
               irA("medio");
             }}
           >
             <BotonVolverPaso onVolver={volverDePatente} />
             <Label htmlFor="venta-patente" className="text-2xl font-semibold md:text-3xl">
-              3. Patente (opcional)
+              3. Patente
             </Label>
             <Input
               id="venta-patente"
@@ -422,7 +429,11 @@ export function FormularioVenta({
               placeholder="AB123CD"
               className={cn(CAMPO_GRANDE, "uppercase")}
               value={patente}
+              required
+              aria-invalid={errorPatente ? true : undefined}
+              aria-describedby={errorPatente ? "venta-patente-error" : undefined}
               onChange={(e) => {
+                setErrorPatente(null);
                 setPatente(limpiarPatente(e.target.value));
               }}
               onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
@@ -432,9 +443,16 @@ export function FormularioVenta({
                 }
               }}
             />
-            <p className="text-base text-muted-foreground">
-              Enter para seguir (vacía si no tiene) · Esc para volver
-            </p>
+            {errorPatente && (
+              <p
+                id="venta-patente-error"
+                role="alert"
+                className="text-2xl font-semibold text-destructive"
+              >
+                {errorPatente}
+              </p>
+            )}
+            <p className="text-base text-muted-foreground">Enter para seguir · Esc para volver</p>
             <Button type="submit" size="lg" className="h-14 self-start px-8 text-xl">
               Continuar
             </Button>

@@ -127,7 +127,7 @@ test("fondos: ventas por transferencia, tarjeta y mixta, un gasto y un saldo ini
     .getByRole("listbox", { name: /^2\. Servicio/ })
     .getByRole("option", { name: new RegExp(`^${servicio}`) })
     .click();
-  await expect(pc.getByLabel("3. Patente (opcional)")).toBeFocused();
+  await expect(pc.getByLabel("3. Patente")).toBeFocused();
   await pc.keyboard.type(patenteMixta);
   await pc.keyboard.press("Enter");
   await expect(pc.getByRole("listbox", { name: "4. Medio de pago" })).toBeFocused();

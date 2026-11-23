@@ -2,7 +2,16 @@ import QRCode from "qrcode";
 import { useEffect, useState } from "react";
 
 /** QR como SVG (no necesita canvas). `texto` es la URL de ARCA que arma la BD (RG 4892). */
-export function CodigoQr({ texto, etiqueta }: { texto: string; etiqueta: string }) {
+export function CodigoQr({
+  texto,
+  etiqueta,
+  className = "size-32",
+}: {
+  texto: string;
+  etiqueta: string;
+  /** Tamaño del QR (clases de Tailwind). */
+  className?: string;
+}) {
   const [svg, setSvg] = useState<string | null>(null);
   const [fallo, setFallo] = useState(false);
 
@@ -27,12 +36,12 @@ export function CodigoQr({ texto, etiqueta }: { texto: string; etiqueta: string 
       </a>
     );
   }
-  if (!svg) return <div className="size-32" aria-hidden />;
+  if (!svg) return <div className={className} aria-hidden />;
   return (
     <img
       src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`}
       alt={etiqueta}
-      className="size-32"
+      className={className}
     />
   );
 }

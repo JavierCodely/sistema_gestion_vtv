@@ -85,8 +85,16 @@ export function useImpuestos() {
 }
 
 /** Reporte: lo calcula la BD (`resumen_impuestos`), sin ventas anuladas. `filtro` null: no consulta. */
-export function useResumenImpuestos(filtro: FiltroImpuestos | null) {
+export function useResumenImpuestos(
+  filtro: FiltroImpuestos | null,
+  {
+    alEntrar = false,
+  }: {
+    /** Volver a consultar cada vez que se monta (ej. el dashboard). */ alEntrar?: boolean;
+  } = {},
+) {
   return useQuery({
+    ...(alEntrar ? { staleTime: 0, refetchOnMount: "always" as const } : {}),
     queryKey: clavesImpuestos.resumen(
       filtro?.rango.desde ?? "",
       filtro?.rango.hasta ?? "",
