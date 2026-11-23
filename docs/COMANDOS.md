@@ -190,7 +190,7 @@ migración nueva. Para registrar la 029 y aplicar las siguientes:
 
 ```bash
 npx supabase migration repair --linked --status applied 20261121000029
-npx supabase migration list --linked     # deben faltar solo las nuevas (030 en adelante)
+npx supabase migration list --linked     # deben faltar solo las nuevas (030 a 037)
 npx supabase db push
 npx supabase functions deploy admin-usuarios   # si cambió desde la última publicación
 ```
@@ -210,7 +210,7 @@ En el **SQL Editor**:
 
 | Script | Qué hace | Después |
 |---|---|---|
-| `supabase/produccion/50_reiniciar_datos.sql` | Borra los **datos** (ventas, turnos, gastos, compras, caja de cambio a $ 0, Fondos, comprobantes; opcional el catálogo y los rubros de gasto creados) y deja la base instalada con todos los usuarios. Exige escribir `EMPEZAR DE CERO` | Fondos → "Fondo inicial" y abrir turnos |
+| `supabase/produccion/50_reiniciar_datos.sql` | Borra los **datos** (ventas, turnos, gastos, compras, caja de cambio a $ 0, Fondos, comprobantes; opcional el catálogo —con descuentos e impuestos— y los rubros de gasto creados) y deja la base instalada con todos los usuarios. Exige escribir `EMPEZAR DE CERO` | Fondos → "Fondo inicial" y abrir turnos |
 | `supabase/produccion/51_borrar_gastos.sql` | Borra los **gastos** (no los de compras de certificados) y, opcional, sus rubros y subcategorías; recalcula la caja de cambio. Exige escribir `BORRAR GASTOS` | — |
 | `supabase/produccion/52_borrar_usuarios.sql` | Borra los **usuarios** (login, email y perfil): todos o todos menos tu admin. Solo sin operaciones: antes correr `50_reiniciar_datos.sql`. Exige escribir `BORRAR USUARIOS` | Si no quedó nadie: pasos D6 y D7 |
 | `supabase/produccion/90_deshacer_primer_admin.sql` | Borra solo el usuario indicado (si no tiene operaciones) | Repetir pasos D6 y D7 |

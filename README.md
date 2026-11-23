@@ -1,8 +1,9 @@
 # Sistema de gestión VTV
 
 Sistema de ventas para una planta de VTV (Argentina): cobro de servicios, stock y costo de las
-hojas de certificado, cajas con turnos, caja de efectivo para cambio, gastos y reportes.
-Más adelante, facturación electrónica con ARCA.
+hojas de certificado, cajas compartidas con turnos, pago mixto, descuentos, caja de efectivo para cambio y Fondos
+(efectivo, transferencia, crédito/débito), gastos, impuestos, facturación electrónica con ARCA y un
+dashboard con gráficos para el administrador.
 
 **Stack:** Supabase (Postgres 17, Auth, Realtime, Edge Functions) · Vite + React 19 + TypeScript
 strict · Tailwind 4 + shadcn · TanStack Query · Vitest · Playwright · pgTAP.
@@ -44,8 +45,9 @@ build, pgTAP, Edge Functions y E2E).
 | 3 | Admin: certificados, compras (con edición), ajustes, movimientos y stock | Hecha |
 | 4 | Caja: turnos, ventas, historial, cierre; admin: totales por turno y anulaciones | Hecha |
 | 4b | Facturación electrónica ARCA: configuración, facturas A/B, comprobante con QR, notas de crédito, log | Hecha |
-| 5 | Gastos y caja de efectivo | Próxima |
-| 6 | Dashboard, reportes, alertas en tiempo real | Pendiente |
+| 5 | Gastos, caja de efectivo, turnos con efectivo inicial, modo oscuro | Hecha |
+| 5b | Caja compartida, pago mixto (efectivo + transferencia o débito/crédito), descuentos, Fondos, ventas con fecha pasada, ventas en vivo, impuestos | Hecha |
+| 6 | Dashboard (hecho: ventas de la semana, servicios, categorías, descuentos y gastos por período o turno); alertas en tiempo real | En curso |
 | 7 | Pulido y E2E completo | Pendiente |
 
 Principio central: **la base de datos es la fuente de verdad del dinero y el stock**. El frontend
