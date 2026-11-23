@@ -12,35 +12,19 @@ const certificado: FormularioCertificado = {
   nombre: " Hoja VTV ",
   unidadCompra: "caja",
   hojasPorUnidad: "25",
-  alcance: "global",
-  destinoId: "",
   stockMinimo: "30",
 };
 
 describe("validarCertificado", () => {
-  it("global: sin categoría ni servicio", () => {
+  it("arma los datos de la tabla (los destinos se fijan aparte)", () => {
     expect(validarCertificado(certificado)).toEqual({
       datos: {
         nombre: "Hoja VTV",
         unidad_compra: "caja",
         hojas_por_unidad: 25,
-        alcance: "global",
-        categoria_id: null,
-        servicio_id: null,
         stock_minimo: 30,
       },
     });
-  });
-
-  it("categoría o servicio: exige el destino y lo pone en la columna correcta", () => {
-    expect(validarCertificado({ ...certificado, alcance: "categoria" }).errores).toEqual({
-      destinoId: "Elegí una categoría.",
-    });
-    expect(validarCertificado({ ...certificado, alcance: "servicio" }).errores).toEqual({
-      destinoId: "Elegí un servicio.",
-    });
-    const datos = validarCertificado({ ...certificado, alcance: "servicio", destinoId: "7" }).datos;
-    expect(datos).toMatchObject({ alcance: "servicio", servicio_id: 7, categoria_id: null });
   });
 
   it("una hoja suelta siempre tiene 1 hoja por unidad", () => {

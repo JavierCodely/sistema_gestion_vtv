@@ -4,7 +4,7 @@ select plan(20);
 
 select * from pg_temp.escenario() \gset
 select pg_temp.crear_usuario('cajero2@test.local') as cajero2 \gset
-insert into certificados (nombre, hojas_por_unidad) values ('Hoja VTV', 25);
+insert into certificados (todos_servicios, nombre, hojas_por_unidad) values (true, 'Hoja VTV', 25);
 
 -- Todas las tablas de public tienen RLS
 select is(

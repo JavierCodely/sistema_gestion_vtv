@@ -7,7 +7,7 @@ select plan(27);
 select * from pg_temp.escenario() \gset
 insert into categorias_servicio (nombre) values ('Motos test') returning id as cat_motos \gset
 insert into servicios (categoria_id, nombre, precio) values (:cat_motos, 'VTV moto test', 10000) returning id as moto \gset
-insert into certificados (nombre, hojas_por_unidad) values ('Hoja dashboard', 10) returning id as cert \gset
+insert into certificados (todos_servicios, nombre, hojas_por_unidad) values (true, 'Hoja dashboard', 10) returning id as cert \gset
 select id as comida from categorias_gasto where nombre = 'Comida' \gset
 select id as luz from categorias_gasto where nombre = 'Luz' \gset
 

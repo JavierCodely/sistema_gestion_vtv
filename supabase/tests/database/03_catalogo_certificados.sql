@@ -1,6 +1,6 @@
 begin;
 \ir _helpers.psql
-select plan(15);
+select plan(14);
 
 select * from pg_temp.escenario() \gset
 
@@ -17,13 +17,13 @@ select throws_ok(format($$insert into servicios (nombre, categoria_id, precio) v
 select lives_ok(format($$update servicios set precio = 25000 where id = %s$$, :servicio), 'el admin edita precios');
 reset role;
 
--- Alcance y coherencia de certificados
+-- Coherencia de certificados (los destinos se prueban en 29_certificados_destinos.sql)
 select throws_ok($$insert into certificados (nombre, unidad_compra, hojas_por_unidad) values ('U', 'unidad', 5)$$,
   '23514', null, 'una unidad suelta tiene 1 hoja');
-select throws_ok($$insert into certificados (nombre, hojas_por_unidad, alcance) values ('Sin cat', 25, 'categoria')$$,
-  '23514', null, 'alcance categoría exige categoría');
-select throws_ok(format($$insert into certificados (nombre, hojas_por_unidad, alcance, categoria_id) values ('G', 25, 'global', %s)$$, :categoria),
-  '23514', null, 'alcance global no lleva categoría ni servicio');
+select throws_ok(format($$with c as (insert into certificados (nombre, hojas_por_unidad) values ('Doble', 1) returning id)
+                         insert into certificado_destinos (certificado_id, categoria_id, servicio_id, activo)
+                         select id, %s, %s, true from c$$, :categoria, :servicio),
+  '23514', null, 'un destino es una categoría o un servicio, no los dos');
 
 -- Elección del más específico
 insert into categorias_servicio (nombre) values ('Motos Test') returning id as cat_motos \gset
@@ -34,18 +34,21 @@ insert into servicios (nombre, categoria_id, precio, requiere_certificado)
 
 select is(certificado_para_servicio(:moto), null, 'sin certificados configurados no hay certificado');
 
-insert into certificados (nombre, hojas_por_unidad) values ('Hoja general', 25) returning id as c_global \gset
-insert into certificados (nombre, hojas_por_unidad, alcance, categoria_id)
-  values ('Hoja motos', 50, 'categoria', :cat_motos) returning id as c_motos \gset
-insert into certificados (nombre, unidad_compra, hojas_por_unidad, alcance, servicio_id)
-  values ('Hoja moto grande', 'libreta', 10, 'servicio', :moto_grande) returning id as c_grande \gset
+insert into certificados (todos_servicios, nombre, hojas_por_unidad) values (true, 'Hoja general', 25) returning id as c_global \gset
+insert into certificados (nombre, hojas_por_unidad) values ('Hoja motos', 50) returning id as c_motos \gset
+insert into certificados (nombre, unidad_compra, hojas_por_unidad)
+  values ('Hoja moto grande', 'libreta', 10) returning id as c_grande \gset
+select pg_temp.como(:'admin');
+select fijar_destinos_certificado(:c_motos, false, array[:cat_motos]::bigint[], '{}');
+select fijar_destinos_certificado(:c_grande, false, '{}', array[:moto_grande]::bigint[]);
+reset role;
 
 select is(certificado_para_servicio(:servicio), :c_global::bigint, 'sin otro más específico se usa el global');
 select is(certificado_para_servicio(:moto), :c_motos::bigint, 'la categoría gana sobre el global');
 select is(certificado_para_servicio(:moto_grande), :c_grande::bigint, 'el de servicio gana sobre categoría y global');
 select is(certificado_para_servicio(:rever), null, 'un servicio sin certificado no usa hoja');
 
-select throws_ok($$insert into certificados (nombre, hojas_por_unidad) values ('Otro global', 25)$$,
+select throws_ok($$insert into certificados (todos_servicios, nombre, hojas_por_unidad) values (true, 'Otro global', 25)$$,
   '23505', null, 'solo puede haber un certificado global activo');
 
 -- El stock no se toca a mano

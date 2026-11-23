@@ -221,31 +221,57 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
-                },"certificados": {
+                },"certificado_destinos": {
                   Row: {
-                    "activo": boolean,"actualizado_en": string,"alcance": Database["public"]['Enums']["alcance_certificado"],"categoria_id": number | null,"costo_promedio": number,"creado_en": string,"hojas_por_unidad": number,"id": number,"nombre": string,"servicio_id": number | null,"stock_hojas": number,"stock_minimo": number,"unidad_compra": Database["public"]['Enums']["unidad_compra"]
+                    "activo": boolean,"categoria_id": number | null,"certificado_id": number,"id": number,"servicio_id": number | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "activo"?: boolean,"actualizado_en"?: string,"alcance"?: Database["public"]['Enums']["alcance_certificado"],"categoria_id"?: number | null,"costo_promedio"?: number,"creado_en"?: string,"hojas_por_unidad": number,"id"?: never,"nombre": string,"servicio_id"?: number | null,"stock_hojas"?: number,"stock_minimo"?: number,"unidad_compra"?: Database["public"]['Enums']["unidad_compra"]
+                    "activo": boolean,"categoria_id"?: number | null,"certificado_id": number,"id"?: never,"servicio_id"?: number | null
                   }
                   Update: {
-                    "activo"?: boolean,"actualizado_en"?: string,"alcance"?: Database["public"]['Enums']["alcance_certificado"],"categoria_id"?: number | null,"costo_promedio"?: number,"creado_en"?: string,"hojas_por_unidad"?: number,"id"?: never,"nombre"?: string,"servicio_id"?: number | null,"stock_hojas"?: number,"stock_minimo"?: number,"unidad_compra"?: Database["public"]['Enums']["unidad_compra"]
+                    "activo"?: boolean,"categoria_id"?: number | null,"certificado_id"?: number,"id"?: never,"servicio_id"?: number | null
                   }
                   Relationships: [
                     {
-      foreignKeyName: "certificados_categoria_id_fkey"
+      foreignKeyName: "certificado_destinos_categoria_id_fkey"
       columns: ["categoria_id"]
 isOneToOne: false
       referencedRelation: "categorias_servicio"
       referencedColumns: ["id"]
     },{
-      foreignKeyName: "certificados_servicio_id_fkey"
+      foreignKeyName: "certificado_destinos_certificado_id_fkey"
+      columns: ["certificado_id"]
+isOneToOne: false
+      referencedRelation: "certificados"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "certificado_destinos_certificado_id_fkey"
+      columns: ["certificado_id"]
+isOneToOne: false
+      referencedRelation: "v_stock_certificados"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "certificado_destinos_servicio_id_fkey"
       columns: ["servicio_id"]
 isOneToOne: false
       referencedRelation: "servicios"
       referencedColumns: ["id"]
     }
+                  ]
+                },"certificados": {
+                  Row: {
+                    "activo": boolean,"actualizado_en": string,"costo_promedio": number,"creado_en": string,"hojas_por_unidad": number,"id": number,"nombre": string,"stock_hojas": number,"stock_minimo": number,"todos_servicios": boolean,"unidad_compra": Database["public"]['Enums']["unidad_compra"]
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "activo"?: boolean,"actualizado_en"?: string,"costo_promedio"?: number,"creado_en"?: string,"hojas_por_unidad": number,"id"?: never,"nombre": string,"stock_hojas"?: number,"stock_minimo"?: number,"todos_servicios"?: boolean,"unidad_compra"?: Database["public"]['Enums']["unidad_compra"]
+                  }
+                  Update: {
+                    "activo"?: boolean,"actualizado_en"?: string,"costo_promedio"?: number,"creado_en"?: string,"hojas_por_unidad"?: number,"id"?: never,"nombre"?: string,"stock_hojas"?: number,"stock_minimo"?: number,"todos_servicios"?: boolean,"unidad_compra"?: Database["public"]['Enums']["unidad_compra"]
+                  }
+                  Relationships: [
+                    
                   ]
                 },"compras_certificado": {
                   Row: {
@@ -1006,23 +1032,11 @@ isOneToOne: false
                   ]
                 },"v_stock_certificados": {
                   Row: {
-                    "activo": boolean,"alcance": Database["public"]['Enums']["alcance_certificado"],"aplica_a": string | null,"categoria_id": number | null,"hojas_por_unidad": number,"id": number,"nombre": string,"semaforo": string | null,"servicio_id": number | null,"stock_hojas": number,"stock_minimo": number,"unidad_compra": Database["public"]['Enums']["unidad_compra"]
+                    "activo": boolean,"aplica_a": string | null,"categoria_ids": (number)[] | null,"hojas_por_unidad": number,"id": number,"nombre": string,"semaforo": string | null,"servicio_ids": (number)[] | null,"stock_hojas": number,"stock_minimo": number,"todos_servicios": boolean,"unidad_compra": Database["public"]['Enums']["unidad_compra"]
                   }
                   ComputedFields: never
                   Relationships: [
-                    {
-      foreignKeyName: "certificados_categoria_id_fkey"
-      columns: ["categoria_id"]
-isOneToOne: false
-      referencedRelation: "categorias_servicio"
-      referencedColumns: ["id"]
-    },{
-      foreignKeyName: "certificados_servicio_id_fkey"
-      columns: ["servicio_id"]
-isOneToOne: false
-      referencedRelation: "servicios"
-      referencedColumns: ["id"]
-    }
+                    
                   ]
                 },"v_turnos": {
                   Row: {
@@ -1587,6 +1601,9 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"_validar_destinos_certificado":
+{ Args: { "p_categoria_ids": (number)[],"p_certificado_id": number,"p_servicio_ids": (number)[],"p_todos": boolean }; Returns: undefined
+                           },
 "_validar_monto":
 { Args: { "p_campo": string,"p_monto": number }; Returns: undefined
                            },
@@ -1770,6 +1787,9 @@ isOneToOne: false
                            },
 "fecha_local":
 { Args: { "ts": string }; Returns: string
+                           },
+"fijar_destinos_certificado":
+{ Args: { "p_categoria_ids": (number)[],"p_certificado_id": number,"p_servicio_ids": (number)[],"p_todos": boolean }; Returns: undefined
                            },
 "fijar_servicios_descuento":
 { Args: { "p_descuento_id": number,"p_servicio_ids": (number)[] }; Returns: {
@@ -2113,7 +2133,7 @@ isOneToOne: false
                            },
 "stock_certificados_valorizado":
 { Args: Record<PropertyKey, never>; Returns: {
-              "activo": boolean,"alcance": Database["public"]['Enums']["alcance_certificado"],"aplica_a": string,"categoria_id": number,"costo_promedio": number,"hojas_por_unidad": number,"id": number,"nombre": string,"semaforo": string,"servicio_id": number,"stock_hojas": number,"stock_minimo": number,"unidad_compra": Database["public"]['Enums']["unidad_compra"],"valor_stock": number
+              "activo": boolean,"aplica_a": string,"categoria_ids": (number)[],"costo_promedio": number,"hojas_por_unidad": number,"id": number,"nombre": string,"semaforo": string,"servicio_ids": (number)[],"stock_hojas": number,"stock_minimo": number,"todos_servicios": boolean,"unidad_compra": Database["public"]['Enums']["unidad_compra"],"valor_stock": number
             }[]
                            },
 "turno_abierto":
@@ -2131,7 +2151,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "alcance_certificado": "global"|"categoria"|"servicio","ambiente_arca": "homologacion"|"produccion","cuenta_fondos": "efectivo"|"transferencia"|"tarjeta","estado_comprobante": "pendiente"|"procesando"|"autorizado"|"rechazado"|"cancelado","fuente_fondos": "efectivo"|"transferencia","medio_pago": "efectivo"|"transferencia"|"tarjeta","rol_usuario": "admin"|"cajero","tipo_alerta": "venta_sin_stock"|"stock_bajo","tipo_comprobante": "factura"|"nota_credito","tipo_descuento": "porcentaje"|"monto_fijo","tipo_impuesto": "porcentaje"|"monto_fijo","tipo_mov_certificado": "compra"|"venta"|"ajuste"|"anulacion_compra","tipo_mov_efectivo": "fondo_inicial"|"ingreso"|"retiro"|"venta"|"anulacion_venta"|"gasto"|"anulacion_gasto"|"apertura_turno"|"cierre_turno","tipo_mov_fondos": "fondo_inicial"|"ingreso"|"retiro","unidad_compra": "caja"|"libreta"|"unidad"
+            "ambiente_arca": "homologacion"|"produccion","cuenta_fondos": "efectivo"|"transferencia"|"tarjeta","estado_comprobante": "pendiente"|"procesando"|"autorizado"|"rechazado"|"cancelado","fuente_fondos": "efectivo"|"transferencia","medio_pago": "efectivo"|"transferencia"|"tarjeta","rol_usuario": "admin"|"cajero","tipo_alerta": "venta_sin_stock"|"stock_bajo","tipo_comprobante": "factura"|"nota_credito","tipo_descuento": "porcentaje"|"monto_fijo","tipo_impuesto": "porcentaje"|"monto_fijo","tipo_mov_certificado": "compra"|"venta"|"ajuste"|"anulacion_compra","tipo_mov_efectivo": "fondo_inicial"|"ingreso"|"retiro"|"venta"|"anulacion_venta"|"gasto"|"anulacion_gasto"|"apertura_turno"|"cierre_turno","tipo_mov_fondos": "fondo_inicial"|"ingreso"|"retiro","unidad_compra": "caja"|"libreta"|"unidad"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -2251,7 +2271,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "alcance_certificado": ["global", "categoria", "servicio"],"ambiente_arca": ["homologacion", "produccion"],"cuenta_fondos": ["efectivo", "transferencia", "tarjeta"],"estado_comprobante": ["pendiente", "procesando", "autorizado", "rechazado", "cancelado"],"fuente_fondos": ["efectivo", "transferencia"],"medio_pago": ["efectivo", "transferencia", "tarjeta"],"rol_usuario": ["admin", "cajero"],"tipo_alerta": ["venta_sin_stock", "stock_bajo"],"tipo_comprobante": ["factura", "nota_credito"],"tipo_descuento": ["porcentaje", "monto_fijo"],"tipo_impuesto": ["porcentaje", "monto_fijo"],"tipo_mov_certificado": ["compra", "venta", "ajuste", "anulacion_compra"],"tipo_mov_efectivo": ["fondo_inicial", "ingreso", "retiro", "venta", "anulacion_venta", "gasto", "anulacion_gasto", "apertura_turno", "cierre_turno"],"tipo_mov_fondos": ["fondo_inicial", "ingreso", "retiro"],"unidad_compra": ["caja", "libreta", "unidad"]
+            "ambiente_arca": ["homologacion", "produccion"],"cuenta_fondos": ["efectivo", "transferencia", "tarjeta"],"estado_comprobante": ["pendiente", "procesando", "autorizado", "rechazado", "cancelado"],"fuente_fondos": ["efectivo", "transferencia"],"medio_pago": ["efectivo", "transferencia", "tarjeta"],"rol_usuario": ["admin", "cajero"],"tipo_alerta": ["venta_sin_stock", "stock_bajo"],"tipo_comprobante": ["factura", "nota_credito"],"tipo_descuento": ["porcentaje", "monto_fijo"],"tipo_impuesto": ["porcentaje", "monto_fijo"],"tipo_mov_certificado": ["compra", "venta", "ajuste", "anulacion_compra"],"tipo_mov_efectivo": ["fondo_inicial", "ingreso", "retiro", "venta", "anulacion_venta", "gasto", "anulacion_gasto", "apertura_turno", "cierre_turno"],"tipo_mov_fondos": ["fondo_inicial", "ingreso", "retiro"],"unidad_compra": ["caja", "libreta", "unidad"]
           }
         }
 } as const

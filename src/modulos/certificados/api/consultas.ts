@@ -10,13 +10,11 @@ import type { DatosAjuste, DatosCertificado, DatosCompra } from "../lib/validaci
 type FilaValorizada =
   Database["public"]["Functions"]["stock_certificados_valorizado"]["Returns"][number];
 
-/** Stock con costos (solo admin). El RPC no conserva la nulabilidad de las columnas. */
-export type CertificadoConStock = Omit<
-  FilaValorizada,
-  "categoria_id" | "servicio_id" | "semaforo"
-> & {
-  categoria_id: number | null;
-  servicio_id: number | null;
+/**
+ * Stock con costos (solo admin). Dónde se usa: `todos_servicios` o las categorías enteras
+ * (`categoria_ids`) y los servicios sueltos (`servicio_ids`); `aplica_a` es el texto para mostrar.
+ */
+export type CertificadoConStock = Omit<FilaValorizada, "semaforo"> & {
   semaforo: "ok" | "bajo" | "sin_stock";
 };
 
@@ -53,17 +51,18 @@ export const claves = {
 
 /** Columnas que se leen de `certificados` (nunca `*`: los costos no son legibles por columna). */
 const COLUMNAS_CERTIFICADO =
-  "id, nombre, unidad_compra, hojas_por_unidad, alcance, categoria_id, servicio_id, stock_minimo, stock_hojas, activo";
+  "id, nombre, unidad_compra, hojas_por_unidad, todos_servicios, stock_minimo, stock_hojas, activo";
 
 export const MENSAJES_ERROR_CERTIFICADO = {
   repetido: "Ya existe un certificado con ese nombre.",
   restricciones: {
+    // La BD avisa antes con nombres (P0001); estos quedan para dos cambios simultáneos.
     certificados_un_global_activo:
       "Ya hay un certificado activo para todos los servicios. Desactivalo antes de activar otro.",
     certificados_uno_por_categoria:
-      "Esa categoría ya tiene un certificado activo. Desactivalo antes de activar otro.",
+      "Una de las categorías ya tiene otro certificado activo. Desactivalo antes de activar este.",
     certificados_uno_por_servicio:
-      "Ese servicio ya tiene un certificado activo. Desactivalo antes de activar otro.",
+      "Uno de los servicios ya tiene otro certificado activo. Desactivalo antes de activar este.",
   },
 };
 
@@ -157,12 +156,16 @@ export function useMovimientos(id: number) {
   });
 }
 
-/** Compras y ajustes cambian stock, kardex, compras y (si fue en efectivo) el saldo. */
+/**
+ * Compras y ajustes cambian stock, kardex, compras y (si fue en efectivo) el saldo; activar o
+ * cambiar los destinos cambia qué hoja usa cada servicio en la caja (`["caja", "certificado"]`).
+ */
 function useInvalidarCertificados() {
   const queryClient = useQueryClient();
   return () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: ["certificados"] }),
+      queryClient.invalidateQueries({ queryKey: ["caja", "certificado"] }),
       queryClient.invalidateQueries({ queryKey: claveEfectivo }),
       queryClient.invalidateQueries({ queryKey: claveFondos }),
     ]);
@@ -202,6 +205,33 @@ export function useActualizarCertificado() {
         .single();
       if (error) throw error;
       return data;
+    },
+    onSuccess: invalidar,
+  });
+}
+
+/** Fija de una vez dónde se usa el certificado (`fijar_destinos_certificado`, atómica). */
+export function useFijarDestinosCertificado() {
+  const invalidar = useInvalidarCertificados();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      todos,
+      categoriaIds,
+      servicioIds,
+    }: {
+      id: number;
+      todos: boolean;
+      categoriaIds: number[];
+      servicioIds: number[];
+    }) => {
+      const { error } = await supabase.rpc("fijar_destinos_certificado", {
+        p_certificado_id: id,
+        p_todos: todos,
+        p_categoria_ids: categoriaIds,
+        p_servicio_ids: servicioIds,
+      });
+      if (error) throw error;
     },
     onSuccess: invalidar,
   });
