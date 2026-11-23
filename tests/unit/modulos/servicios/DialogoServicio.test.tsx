@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DialogoServicio } from "@/modulos/servicios/componentes/DialogoServicio";
@@ -88,7 +88,7 @@ describe("DialogoServicio", () => {
       <DialogoServicio categorias={CATEGORIAS} categoriaInicial={1} onCerrar={onCerrar} />,
     );
     await completar(" Auto ", "20.000,50");
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(onCerrar).toHaveBeenCalled();
     });
     expect(argumentosDe("servicios", "insert")).toEqual([

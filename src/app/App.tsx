@@ -4,6 +4,7 @@ import { createBrowserRouter, RouterProvider } from "react-router";
 import { AuthProvider } from "@/modulos/auth/AuthProvider";
 import { Toaster } from "@/compartido/ui/sonner";
 import { crearQueryClient } from "@/compartido/lib/query-client";
+import { ProveedorTema } from "@/compartido/componentes/ProveedorTema";
 import { rutas } from "@/app/rutas";
 
 const router = createBrowserRouter(rutas);
@@ -11,11 +12,14 @@ const router = createBrowserRouter(rutas);
 export function App() {
   const [queryClient] = useState(crearQueryClient);
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <RouterProvider router={router} />
-      </AuthProvider>
-      <Toaster richColors position="top-right" />
-    </QueryClientProvider>
+    // Tema: claro/oscuro con la clase `dark` en <html>; por defecto, el del sistema operativo.
+    <ProveedorTema>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <RouterProvider router={router} />
+        </AuthProvider>
+        <Toaster richColors position="top-right" />
+      </QueryClientProvider>
+    </ProveedorTema>
   );
 }

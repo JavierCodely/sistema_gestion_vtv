@@ -4,6 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sistema VTV</title>
+    <script>
+      // Tema antes de pintar (lo mantiene src/compartido/componentes/ProveedorTema.tsx): "vtv-tema" o el del sistema.
+      (function () {
+        var tema = null;
+        try {
+          tema = localStorage.getItem("vtv-tema");
+        } catch (e) {}
+        if (tema !== "light" && tema !== "dark") {
+          tema = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        document.documentElement.classList.toggle("dark", tema === "dark");
+        document.documentElement.style.colorScheme = tema;
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

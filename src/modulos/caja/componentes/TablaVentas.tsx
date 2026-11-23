@@ -10,10 +10,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/compartido/ui/table";
-import { MEDIOS_PAGO, type Venta } from "../api/consultas";
+import type { Venta } from "../api/consultas";
+import { DescuentoDeVenta } from "./DescuentoDeVenta";
+import { MedioDeVenta } from "./MedioDeVenta";
+import { NombreUsuario } from "./NombreUsuario";
 
 /**
- * Ventas de un turno, sin totales (el cajero no los ve; el admin los lee de `v_turnos`).
+ * Ventas de un turno, de todos los que vendieron en la caja, sin totales (el cajero no los ve; el admin
+ * los lee de `v_turnos`). Muestra quién vendió, el medio ("Mixto" con su detalle) y el descuento de
+ * cada venta; el precio es lo cobrado.
  * `acciones` agrega una columna por venta (ej. anular, en la pantalla del admin).
  */
 export function TablaVentas({
@@ -38,9 +43,11 @@ export function TablaVentas({
           <TableRow>
             <TableHead>N°</TableHead>
             <TableHead>Hora</TableHead>
+            <TableHead>Vendió</TableHead>
             <TableHead>Servicio</TableHead>
             <TableHead>Patente</TableHead>
             <TableHead>Medio</TableHead>
+            <TableHead>Descuento</TableHead>
             <TableHead className="text-right">Precio</TableHead>
             <TableHead>Estado</TableHead>
             {acciones && <TableHead className="text-right">Acciones</TableHead>}
@@ -55,9 +62,17 @@ export function TablaVentas({
                 <TableCell className={cn("whitespace-nowrap", tachada)}>
                   {formatearFechaHora(venta.creado_en)}
                 </TableCell>
+                <TableCell className={tachada}>
+                  <NombreUsuario usuarioId={venta.usuario_id} />
+                </TableCell>
                 <TableCell className={tachada}>{venta.servicio_nombre}</TableCell>
                 <TableCell className={tachada}>{venta.patente ?? "—"}</TableCell>
-                <TableCell className={tachada}>{MEDIOS_PAGO[venta.medio_pago]}</TableCell>
+                <TableCell className={tachada}>
+                  <MedioDeVenta venta={venta} />
+                </TableCell>
+                <TableCell className={tachada}>
+                  <DescuentoDeVenta venta={venta} />
+                </TableCell>
                 <TableCell className={cn("text-right tabular-nums", tachada)}>
                   {formatearMoneda(venta.precio)}
                 </TableCell>

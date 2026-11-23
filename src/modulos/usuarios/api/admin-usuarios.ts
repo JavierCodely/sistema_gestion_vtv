@@ -5,14 +5,16 @@ import { invocarFuncion } from "@/compartido/lib/funciones";
 export interface UsuarioAdmin {
   id: string;
   nombre: string;
+  apellido: string | null;
+  nombre_completo: string;
   email: string | null;
   rol: Rol;
   activo: boolean;
 }
 
 export type AccionUsuario =
-  | { accion: "crear"; nombre: string; email: string; password: string; rol: Rol }
-  | { accion: "actualizar"; id: string; nombre?: string; rol?: Rol }
+  | { accion: "crear"; nombre: string; apellido: string; email: string; password: string; rol: Rol }
+  | { accion: "actualizar"; id: string; nombre?: string; apellido?: string; rol?: Rol }
   | { accion: "activar"; id: string; activo: boolean }
   | { accion: "cambiar_password"; id: string; password: string };
 

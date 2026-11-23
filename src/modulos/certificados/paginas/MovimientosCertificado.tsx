@@ -150,7 +150,7 @@ export function MovimientosCertificado() {
                         {formatearMoneda(m.costo_promedio_resultante)}
                       </TableCell>
                       <TableCell>{detalle(m)}</TableCell>
-                      <TableCell>{m.perfiles?.nombre ?? "—"}</TableCell>
+                      <TableCell>{m.perfiles?.nombre_completo ?? "—"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

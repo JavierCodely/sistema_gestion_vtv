@@ -15,8 +15,15 @@ const env = JSON.parse(
 );
 const API = env.API_URL;
 const ANON = env.ANON_KEY;
-const SERVICE = env.SERVICE_ROLE_KEY;
 const FN = `${env.FUNCTIONS_URL}/arca`;
+
+/**
+ * SQL de preparación contra la BD local, como postgres. service_role no tiene DML sobre las tablas
+ * (igual que en la nube, migración 28): lo que es solo del test no se hace por la API.
+ */
+function sqlLocal(sql) {
+  execSync(`npx supabase db query ${JSON.stringify(sql)}`, { stdio: ["ignore", "ignore", "pipe"] });
+}
 const CUIT = "30712345671";
 // El simulador arranca vacío en cada corrida y la BD puede traer comprobantes de corridas
 // anteriores: un punto de venta propio de esta corrida evita choques de numeración.
@@ -27,6 +34,7 @@ const control = controlSimulador();
 let admin;
 let cajero;
 let servicioId;
+let turnoId;
 
 async function login(email, password) {
   const r = await fetch(`${API}/auth/v1/token?grant_type=password`, {
@@ -39,7 +47,7 @@ async function login(email, password) {
 
 const cabeceras = (token) => ({
   Authorization: `Bearer ${token}`,
-  apikey: token === SERVICE ? SERVICE : ANON,
+  apikey: ANON,
   "Content-Type": "application/json",
 });
 
@@ -79,9 +87,14 @@ async function rest(token, ruta, opciones = {}) {
   return { status: r.status, body: texto ? JSON.parse(texto) : null };
 }
 
-async function nuevaVenta(token = cajero, medio = "tarjeta") {
-  return (await rpc(token, "registrar_venta", { p_servicio_id: servicioId, p_medio_pago: medio }))
-    .id;
+async function nuevaVenta(token = cajero, medio = "tarjeta", turno = turnoId) {
+  return (
+    await rpc(token, "registrar_venta", {
+      p_turno_id: turno,
+      p_servicio_id: servicioId,
+      p_medio_pago: medio,
+    })
+  ).id;
 }
 
 /** Plazo mínimo entre dos intentos del cajero sobre el mismo comprobante. */
@@ -113,12 +126,33 @@ before(async () => {
     }),
   });
   servicioId = (await rest(cajero, "servicios?select=id&activo=eq.true&limit=1")).body[0].id;
-  const cajas = await rpc(cajero, "cajas_para_turno");
-  await rpc(cajero, "abrir_turno", { p_caja_id: cajas.find((c) => !c.ocupada).id });
+  turnoId = await abrirCaja();
 });
 
+/**
+ * El admin abre una caja libre con efectivo inicial, que sale de la caja de cambio (migraciones 27
+ * y 33). El turno es de la caja: cualquier usuario activo vende en él pasando su id.
+ */
+async function abrirCaja() {
+  const cajas = await rpc(admin, "cajas_para_turno");
+  await rpc(admin, "movimiento_efectivo", {
+    p_tipo: "ingreso",
+    p_monto: 1000,
+    p_nota: "Efectivo inicial para tests arca",
+  });
+  const turno = await rpc(admin, "abrir_turno", {
+    p_caja_id: cajas.find((c) => !c.ocupada).id,
+    p_efectivo_inicial: 1000,
+  });
+  return turno.id;
+}
+
 after(async () => {
-  await rpc(cajero, "cerrar_turno", { p_observaciones: "tests arca" }).catch(() => {});
+  if (turnoId) {
+    await rpc(admin, "cerrar_turno", { p_turno_id: turnoId, p_observaciones: "tests arca" }).catch(
+      () => {},
+    );
+  }
   await simulador.cerrar();
 });
 
@@ -181,7 +215,7 @@ test("guarda el certificado en Vault y prueba la conexión (WSAA, condiciones, p
 });
 
 // ------------------------------------------------------------------ emisión
-test("el cajero factura una venta de su turno: CAE, número correlativo y QR", async () => {
+test("el cajero factura una venta de una caja abierta: CAE, número correlativo y QR", async () => {
   const venta = await nuevaVenta();
   const comp = await facturarConsumidorFinal(cajero, venta);
   const r = await funcion(cajero, { accion: "emitir", comprobante_id: comp.id });
@@ -320,7 +354,7 @@ test("si la consulta no encuentra un número ya autorizado, no se pide otro (nun
 
 test("si WSAA no responde, la factura queda pendiente sin número", async () => {
   // Ticket vencido en ambos lados: la próxima emisión tiene que pedir uno nuevo a WSAA.
-  await rest(SERVICE, `arca_tokens?cuit=eq.${CUIT}`, { method: "DELETE" });
+  sqlLocal(`delete from public.arca_tokens where cuit = '${CUIT}'`);
   await control.vencerTickets();
   const comp = await facturarConsumidorFinal(cajero, await nuevaVenta());
   await control.escenario("wsaa_caido");
@@ -358,18 +392,27 @@ test("anular una venta facturada emite la nota de crédito asociada (solo admin)
   assert.equal(Number(enArca.asociado.Nro), f.numero);
 });
 
-test("el cajero no emite comprobantes de ventas ajenas", async () => {
-  const cajas = await rpc(admin, "cajas_para_turno");
-  const libre = cajas.find((c) => !c.ocupada);
-  await rpc(admin, "abrir_turno", { p_caja_id: libre.id });
+test("el cajero emite la factura de una venta ajena de una caja abierta, no de un turno cerrado", async () => {
+  const otraCaja = await abrirCaja();
+  let cerrada = false;
   try {
-    const venta = await nuevaVenta(admin);
+    // Caja compartida (migración 33): la venta del admin en otra caja abierta la factura el cajero.
+    const ajena = await nuevaVenta(admin, "tarjeta", otraCaja);
+    const compAjena = await facturarConsumidorFinal(admin, ajena);
+    const ok = await funcion(cajero, { accion: "emitir", comprobante_id: compAjena.id });
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    assert.equal(ok.body.comprobante.estado, "autorizado");
+
+    // Turno cerrado: ya no.
+    const venta = await nuevaVenta(admin, "tarjeta", otraCaja);
     const comp = await facturarConsumidorFinal(admin, venta);
+    await rpc(admin, "cerrar_turno", { p_turno_id: otraCaja });
+    cerrada = true;
     const r = await funcion(cajero, { accion: "emitir", comprobante_id: comp.id });
     assert.equal(r.status, 403);
-    assert.equal(r.body.error, "Solo podés facturar las ventas de tu turno abierto");
+    assert.equal(r.body.error, "Solo podés facturar ventas de una caja con el turno abierto");
   } finally {
-    await rpc(admin, "cerrar_turno", {});
+    if (!cerrada) await rpc(admin, "cerrar_turno", { p_turno_id: otraCaja }).catch(() => {});
   }
 });
 

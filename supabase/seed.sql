@@ -9,9 +9,9 @@ declare
 begin
   for v_usuario in
     select * from (values
-      ('00000000-0000-0000-0000-00000000a001'::uuid, 'admin@vtv.local',  'admin1234',  'Administrador', 'admin'),
-      ('00000000-0000-0000-0000-00000000c001'::uuid, 'cajero@vtv.local', 'cajero1234', 'Cajero Demo',   'cajero')
-    ) as t(id, email, clave, nombre, rol)
+      ('00000000-0000-0000-0000-00000000a001'::uuid, 'admin@vtv.local',  'admin1234',  'Ana',    'Administradora', 'admin'),
+      ('00000000-0000-0000-0000-00000000c001'::uuid, 'cajero@vtv.local', 'cajero1234', 'Carlos', 'Demo',           'cajero')
+    ) as t(id, email, clave, nombre, apellido, rol)
   loop
     insert into auth.users (
       instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -22,7 +22,7 @@ begin
       '00000000-0000-0000-0000-000000000000', v_usuario.id, 'authenticated', 'authenticated',
       v_usuario.email, extensions.crypt(v_usuario.clave, extensions.gen_salt('bf')), now(),
       jsonb_build_object('provider', 'email', 'providers', jsonb_build_array('email'), 'rol', v_usuario.rol),
-      jsonb_build_object('nombre', v_usuario.nombre), now(), now(),
+      jsonb_build_object('nombre', v_usuario.nombre, 'apellido', v_usuario.apellido), now(), now(),
       '', '', '', '', '', '', '', ''
     );
 

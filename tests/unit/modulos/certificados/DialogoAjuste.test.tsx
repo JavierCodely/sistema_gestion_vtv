@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DialogoAjuste } from "@/modulos/certificados/componentes/DialogoAjuste";
@@ -35,7 +35,7 @@ describe("DialogoAjuste", () => {
     const onCerrar = vi.fn();
     renderConQuery(<DialogoAjuste certificado={CERTIFICADO} onCerrar={onCerrar} />);
     await completar("Restar hojas", "3", " Hojas rotas ");
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(onCerrar).toHaveBeenCalled();
     });
     expect(argumentosRpc("ajustar_stock_certificado")).toEqual({
@@ -50,7 +50,7 @@ describe("DialogoAjuste", () => {
     const onCerrar = vi.fn();
     renderConQuery(<DialogoAjuste certificado={CERTIFICADO} onCerrar={onCerrar} />);
     await completar("Sumar hojas", "1.000", "Conteo físico");
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(onCerrar).toHaveBeenCalled();
     });
     expect(argumentosRpc("ajustar_stock_certificado")).toEqual({

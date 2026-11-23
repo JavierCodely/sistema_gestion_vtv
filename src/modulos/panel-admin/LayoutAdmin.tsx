@@ -1,11 +1,13 @@
 import {
-  Banknote,
   Bell,
   ClipboardList,
   FileText,
   FileCheck,
   KeyRound,
+  Landmark,
   LayoutDashboard,
+  Percent,
+  Scale,
   Receipt,
   Store,
   Users,
@@ -13,11 +15,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Suspense } from "react";
-import { Link, NavLink, Outlet } from "react-router";
+import { NavLink, Outlet } from "react-router";
 import { useAuth } from "@/modulos/auth/contexto";
 import { BotonSalir } from "@/modulos/auth/componentes/BotonSalir";
+import { BotonTema } from "@/compartido/componentes/BotonTema";
 import { Cargando } from "@/compartido/componentes/Cargando";
-import { Button } from "@/compartido/ui/button";
+import { AccionesTurnoAdmin } from "@/modulos/caja/componentes/AccionesTurnoAdmin";
 import { cn } from "@/compartido/lib/utils";
 
 interface ItemMenu {
@@ -34,9 +37,11 @@ const MENU_ADMIN: ItemMenu[] = [
   { a: "/admin/usuarios", texto: "Usuarios", icono: Users },
   { a: "/admin/cajas", texto: "Cajas", icono: Store },
   { a: "/admin/servicios", texto: "Servicios", icono: ClipboardList },
+  { a: "/admin/descuentos", texto: "Descuentos", icono: Percent },
+  { a: "/admin/impuestos", texto: "Impuestos", icono: Scale },
   { a: "/admin/certificados", texto: "Certificados", icono: FileText },
   { a: "/admin/gastos", texto: "Gastos", icono: Wallet },
-  { a: "/admin/efectivo", texto: "Caja de efectivo", icono: Banknote },
+  { a: "/admin/fondos", texto: "Fondos", icono: Landmark },
   { a: "/admin/arca", texto: "Configuración ARCA", icono: KeyRound },
 ];
 
@@ -70,14 +75,18 @@ export function LayoutAdmin() {
         </nav>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex flex-wrap items-center justify-end gap-2 border-b px-4 py-2">
-          <span className="mr-auto text-sm text-muted-foreground">
-            {perfil?.nombre} · Administrador
+        {/* Barra fija: las acciones de turno quedan siempre a mano al hacer scroll. */}
+        <header className="sticky top-0 z-40 flex items-center gap-2 border-b bg-background px-4 py-2 md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+          <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+            {perfil?.nombre_completo} · Administrador
           </span>
-          <Button asChild variant="ghost" size="sm">
-            <Link to="/caja">Operar caja</Link>
-          </Button>
-          <BotonSalir />
+          <div className="md:justify-self-center">
+            <AccionesTurnoAdmin mostrarIrALaCaja />
+          </div>
+          <div className="flex items-center justify-end gap-1">
+            <BotonTema />
+            <BotonSalir />
+          </div>
         </header>
         <main className="flex-1 p-4 md:p-6">
           <Suspense fallback={<Cargando />}>

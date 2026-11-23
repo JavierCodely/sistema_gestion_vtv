@@ -4,17 +4,17 @@ select plan(56);
 
 select * from pg_temp.escenario() \gset
 
--- Ventas: una del cajero (turno abierto) y una del admin (otro turno).
-select pg_temp.como(:'cajero');
-select abrir_turno(:caja);
-select (registrar_venta(:servicio, 'efectivo')).id as venta \gset
-select (registrar_venta(:servicio, 'tarjeta')).id as venta2 \gset
-select (registrar_venta(:servicio, 'tarjeta')).id as venta3 \gset
-select (registrar_venta(:servicio, 'tarjeta')).id as venta4 \gset
+-- Ventas: del cajero (turno abierto) y una del admin en otra caja, cuyo turno se cierra.
 reset role;
-select pg_temp.como(:'admin');
-select abrir_turno(:caja2);
-select (registrar_venta(:servicio, 'transferencia')).id as venta_admin \gset
+select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja) as turno \gset
+select (registrar_venta(:turno, :servicio, 'efectivo')).id as venta \gset
+select (registrar_venta(:turno, :servicio, 'tarjeta')).id as venta2 \gset
+select (registrar_venta(:turno, :servicio, 'tarjeta')).id as venta3 \gset
+select (registrar_venta(:turno, :servicio, 'tarjeta')).id as venta4 \gset
+reset role;
+select pg_temp.abrir_turno_para(:'admin', :'admin', :caja2) as turno_admin \gset
+select (registrar_venta(:turno_admin, :servicio, 'transferencia')).id as venta_admin \gset
+select cerrar_turno(:turno_admin);
 reset role;
 
 -- Condiciones frente al IVA como las devuelve ARCA (FEParamGetCondicionIvaReceptor).
@@ -95,7 +95,7 @@ select is(
 
 select pg_temp.como(:'cajero');
 select throws_ok(format('select preparar_factura(%s, 5, 99::smallint, 0)', :venta_admin),
-  '42501', 'Solo podés facturar las ventas de tu turno abierto', 'el cajero no factura ventas ajenas');
+  '42501', 'Solo podés facturar ventas de una caja con el turno abierto', 'el cajero no factura ventas de un turno cerrado');
 select throws_ok(format('select preparar_factura(%s, 6, 96::smallint, 30111222, %L)', :venta2, 'Ana'),
   'P0001', 'La Factura A requiere el CUIT del cliente', 'monotributista: Factura A, exige CUIT');
 select throws_ok(format('select preparar_factura(%s, 1, 80::smallint, 20123456780, %L)', :venta2, 'Ana'),
@@ -246,9 +246,9 @@ select preparar_factura(:venta_admin, 5, 99::smallint, 0);
 reset role;
 select pg_temp.como(:'cajero');
 select is((select count(*)::int from comprobantes where venta_id = :venta_admin), 0,
-  'el cajero no ve comprobantes de ventas ajenas');
+  'el cajero no ve comprobantes de ventas de un turno cerrado');
 select is((select count(*)::int from v_comprobantes where venta_id = :venta), 2,
-  've los de sus ventas (factura y nota de crédito)');
+  've los de las ventas de un turno abierto (factura y nota de crédito)');
 select is((select count(*)::int from arca_intentos), 0, 'no ve el log de ARCA');
 reset role;
 

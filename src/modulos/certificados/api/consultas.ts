@@ -2,7 +2,8 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { siguienteCursor, TAMANO_PAGINA } from "@/compartido/lib/paginacion";
 import { supabase } from "@/compartido/lib/supabase";
 import type { Enums, Tablas } from "@/compartido/tipos";
-import { claveEfectivo } from "@/modulos/efectivo/api/consultas";
+import { claveFondos } from "@/modulos/fondos/api/claves";
+import { claveEfectivo } from "@/modulos/fondos/api/efectivo";
 import type { Database } from "@/types/database";
 import type { DatosAjuste, DatosCertificado, DatosCompra } from "../lib/validaciones";
 
@@ -40,7 +41,7 @@ export type Movimiento = Pick<
   | "nota"
   | "venta_id"
   | "compra_id"
-> & { perfiles: { nombre: string } | null };
+> & { perfiles: { nombre_completo: string } | null };
 
 export type FuenteFondos = Enums["fuente_fondos"];
 
@@ -134,7 +135,7 @@ async function paginaMovimientos(id: number, antesDe: number | null): Promise<Mo
   let consulta = supabase
     .from("movimientos_certificado")
     .select(
-      "id, creado_en, tipo, hojas, costo_unitario, costo_total, stock_resultante, costo_promedio_resultante, nota, venta_id, compra_id, perfiles(nombre)",
+      "id, creado_en, tipo, hojas, costo_unitario, costo_total, stock_resultante, costo_promedio_resultante, nota, venta_id, compra_id, perfiles(nombre_completo)",
     )
     .eq("certificado_id", id)
     .order("id", { ascending: false })
@@ -163,6 +164,7 @@ function useInvalidarCertificados() {
     Promise.all([
       queryClient.invalidateQueries({ queryKey: ["certificados"] }),
       queryClient.invalidateQueries({ queryKey: claveEfectivo }),
+      queryClient.invalidateQueries({ queryKey: claveFondos }),
     ]);
 }
 

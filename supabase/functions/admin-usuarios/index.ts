@@ -1,12 +1,12 @@
 // Edge Function: administración de usuarios (solo admin).
 //
-// POST { accion: "crear", nombre, email, password, rol }
-// POST { accion: "actualizar", id, nombre?, rol? }
+// POST { accion: "crear", nombre, apellido, email, password, rol }
+// POST { accion: "actualizar", id, nombre?, apellido?, rol? }
 // POST { accion: "activar", id, activo }
 // POST { accion: "cambiar_password", id, password }
 //
 // Respuesta: 200 { usuario } | 4xx { error } con mensaje en español.
-// El perfil se crea por trigger (tg_crear_perfil) a partir de user_metadata.nombre
+// El perfil se crea por trigger (tg_crear_perfil) a partir de user_metadata.nombre/apellido
 // y app_metadata.rol. Las reglas de "último admin activo" las aplica la BD.
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.49.4";
@@ -42,7 +42,7 @@ function texto(valor: unknown, campo: string, largoMaximo: number): string {
   if (valor.trim().length > largoMaximo) {
     throw new ErrorHttp(400, `${campo} no puede superar los ${largoMaximo} caracteres`);
   }
-  return valor.trim();
+  return valor.trim().replace(/\s+/g, " ");
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -86,7 +86,7 @@ function traducirError(mensaje: string): string {
 async function perfil(admin: SupabaseClient, id: string) {
   const { data, error } = await admin
     .from("perfiles")
-    .select("id, nombre, email, rol, activo")
+    .select("id, nombre, apellido, nombre_completo, email, rol, activo")
     .eq("id", id)
     .maybeSingle();
   if (error) {
@@ -139,13 +139,14 @@ async function manejar(req: Request): Promise<Response> {
   switch (body?.accion) {
     case "crear": {
       const nombre = texto(body.nombre, "El nombre", 100);
+      const apellido = texto(body.apellido, "El apellido", 100);
       const email = texto(body.email, "El email", 254).toLowerCase();
       const r = rol(body.rol);
       const { data, error } = await admin.auth.admin.createUser({
         email,
         password: password(body.password),
         email_confirm: true,
-        user_metadata: { nombre },
+        user_metadata: { nombre, apellido },
         app_metadata: { rol: r },
       });
       if (error) throw new ErrorHttp(400, traducirError(error.message));
@@ -157,15 +158,23 @@ async function manejar(req: Request): Promise<Response> {
       const actual = await perfil(admin, id);
       const cambios: Record<string, unknown> = {};
       if (body.nombre !== undefined) cambios.nombre = texto(body.nombre, "El nombre", 100);
+      if (body.apellido !== undefined) cambios.apellido = texto(body.apellido, "El apellido", 100);
       if (body.rol !== undefined) cambios.rol = rol(body.rol);
       if (Object.keys(cambios).length === 0)
         throw new ErrorHttp(400, "No hay cambios para guardar");
+      // Nombre y apellido son obligatorios: quien viene sin apellido lo completa al editarse.
+      if (actual.apellido === null && cambios.apellido === undefined) {
+        throw new ErrorHttp(400, "Completá el apellido");
+      }
       if (id === yo && cambios.rol && cambios.rol !== "admin") {
         throw new ErrorHttp(400, "No podés quitarte el rol de administrador a vos mismo");
       }
       await actualizarPerfil(admin, id, cambios);
       const { error } = await admin.auth.admin.updateUserById(id, {
-        user_metadata: { nombre: cambios.nombre ?? actual.nombre },
+        user_metadata: {
+          nombre: cambios.nombre ?? actual.nombre,
+          apellido: cambios.apellido ?? actual.apellido,
+        },
         app_metadata: { rol: cambios.rol ?? actual.rol },
       });
       if (error) throw new ErrorHttp(500, traducirError(error.message));

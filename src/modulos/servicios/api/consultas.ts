@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { clavesDescuentos } from "@/compartido/lib/claves-descuentos";
 import { supabase } from "@/compartido/lib/supabase";
 import type { Tablas } from "@/compartido/tipos";
 import type { DatosServicio } from "../lib/validaciones";
@@ -49,12 +50,18 @@ export function useServicios() {
   });
 }
 
+/**
+ * Categorías y servicios, y todo lo de descuentos: el precio de un servicio o activar/desactivar un
+ * servicio o una categoría cambian los descuentos que se ofrecen (`descuentos_para_servicio`) y la
+ * disponibilidad que muestra el catálogo de descuentos.
+ */
 function useInvalidarCatalogo() {
   const queryClient = useQueryClient();
   return () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: claveCategorias }),
       queryClient.invalidateQueries({ queryKey: claveServicios }),
+      queryClient.invalidateQueries({ queryKey: clavesDescuentos.todo }),
     ]);
 }
 

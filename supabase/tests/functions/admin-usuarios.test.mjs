@@ -64,6 +64,7 @@ test("un cajero no puede gestionar usuarios", async () => {
   const r = await llamar(tokenCajero, {
     accion: "crear",
     nombre: "X",
+    apellido: "Y",
     email: `x${sufijo}@t.local`,
     password: "12345678",
     rol: "cajero",
@@ -81,6 +82,7 @@ test("valida datos obligatorios, rol y contraseña", async () => {
   let r = await llamar(tokenAdmin, {
     accion: "crear",
     nombre: "",
+    apellido: "B",
     email: "a@b.c",
     password: "12345678",
     rol: "cajero",
@@ -89,6 +91,16 @@ test("valida datos obligatorios, rol y contraseña", async () => {
   r = await llamar(tokenAdmin, {
     accion: "crear",
     nombre: "A",
+    apellido: "  ",
+    email: "a@b.c",
+    password: "12345678",
+    rol: "cajero",
+  });
+  assert.equal(r.body.error, "El apellido es obligatorio");
+  r = await llamar(tokenAdmin, {
+    accion: "crear",
+    nombre: "A",
+    apellido: "B",
     email: "a@b.c",
     password: "12345678",
     rol: "jefe",
@@ -97,6 +109,7 @@ test("valida datos obligatorios, rol y contraseña", async () => {
   r = await llamar(tokenAdmin, {
     accion: "crear",
     nombre: "A",
+    apellido: "B",
     email: "a@b.c",
     password: "123",
     rol: "cajero",
@@ -111,7 +124,8 @@ test("ciclo completo: crear, login, editar, desactivar, reactivar, cambiar contr
 
   let r = await llamar(tokenAdmin, {
     accion: "crear",
-    nombre: "Ana Pérez",
+    nombre: "  Ana   María ",
+    apellido: "Pérez",
     email,
     password: "clave1234",
     rol: "cajero",
@@ -120,13 +134,26 @@ test("ciclo completo: crear, login, editar, desactivar, reactivar, cambiar contr
   const { id } = r.body.usuario;
   creados.push(id);
   assert.deepEqual(
-    { nombre: r.body.usuario.nombre, rol: r.body.usuario.rol, activo: r.body.usuario.activo },
-    { nombre: "Ana Pérez", rol: "cajero", activo: true },
+    {
+      nombre: r.body.usuario.nombre,
+      apellido: r.body.usuario.apellido,
+      nombre_completo: r.body.usuario.nombre_completo,
+      rol: r.body.usuario.rol,
+      activo: r.body.usuario.activo,
+    },
+    {
+      nombre: "Ana María",
+      apellido: "Pérez",
+      nombre_completo: "Ana María Pérez",
+      rol: "cajero",
+      activo: true,
+    },
   );
 
   r = await llamar(tokenAdmin, {
     accion: "crear",
     nombre: "Otra",
+    apellido: "Persona",
     email,
     password: "clave1234",
     rol: "cajero",
@@ -140,9 +167,19 @@ test("ciclo completo: crear, login, editar, desactivar, reactivar, cambiar contr
     "el usuario creado puede iniciar sesión",
   );
 
-  r = await llamar(tokenAdmin, { accion: "actualizar", id, nombre: "Ana P.", rol: "admin" });
+  r = await llamar(tokenAdmin, { accion: "actualizar", id, apellido: "", rol: "admin" });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.error, "El apellido es obligatorio");
+  r = await llamar(tokenAdmin, {
+    accion: "actualizar",
+    id,
+    nombre: "Ana",
+    apellido: "Pérez Gómez",
+    rol: "admin",
+  });
   assert.equal(r.status, 200);
-  assert.equal(r.body.usuario.nombre, "Ana P.");
+  assert.equal(r.body.usuario.nombre, "Ana");
+  assert.equal(r.body.usuario.nombre_completo, "Ana Pérez Gómez");
   assert.equal(r.body.usuario.rol, "admin");
 
   r = await llamar(tokenAdmin, { accion: "activar", id, activo: false });
@@ -173,6 +210,36 @@ test("el admin no puede desactivarse ni quitarse el rol a sí mismo", async () =
   assert.equal(r.body.error, "No podés desactivarte a vos mismo");
   r = await llamar(tokenAdmin, { accion: "actualizar", id: yo, rol: "cajero" });
   assert.equal(r.body.error, "No podés quitarte el rol de administrador a vos mismo");
+});
+
+test("un usuario sin apellido (alta desde el Dashboard) tiene que completarlo al editarse", async () => {
+  const email = `sinapellido${sufijo}@test.local`;
+  const alta = await fetch(`${API}/auth/v1/admin/users`, {
+    method: "POST",
+    headers: {
+      apikey: SERVICE,
+      Authorization: `Bearer ${SERVICE}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email,
+      password: "clave1234",
+      email_confirm: true,
+      user_metadata: { nombre: "Solo" },
+      app_metadata: { rol: "cajero" },
+    }),
+  });
+  assert.equal(alta.status, 200);
+  const { id } = await alta.json();
+  creados.push(id);
+
+  let r = await llamar(tokenAdmin, { accion: "actualizar", id, rol: "admin" });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.error, "Completá el apellido");
+
+  r = await llamar(tokenAdmin, { accion: "actualizar", id, nombre: "Solo", apellido: "Pérez" });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.usuario.nombre_completo, "Solo Pérez");
 });
 
 test("usuario inexistente", async () => {
@@ -206,6 +273,17 @@ test("valida el id, el largo de los textos y el máximo de la contraseña", asyn
   r = await llamar(tokenAdmin, {
     accion: "crear",
     nombre: "Largo",
+    apellido: "y".repeat(101),
+    email: "largo@t.local",
+    password: "12345678",
+    rol: "cajero",
+  });
+  assert.equal(r.body.error, "El apellido no puede superar los 100 caracteres");
+
+  r = await llamar(tokenAdmin, {
+    accion: "crear",
+    nombre: "Largo",
+    apellido: "Apellido",
     email: "largo@t.local",
     password: "x".repeat(73),
     rol: "cajero",

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -69,7 +69,7 @@ describe("FacturaDeVenta", () => {
     expect(within(dialogo).getByRole("radio", { name: "Sin identificar" })).toBeChecked();
     await userEvent.click(within(dialogo).getByRole("button", { name: "Emitir factura" }));
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
     expect(argumentosRpc("preparar_factura")).toEqual({
@@ -106,7 +106,7 @@ describe("FacturaDeVenta", () => {
     await userEvent.type(within(dialogo).getByLabelText("Número de CUIT"), "30-71234567-1");
     await userEvent.type(within(dialogo).getByLabelText("Nombre o razón social"), "Empresa SA");
     await userEvent.click(within(dialogo).getByRole("button", { name: "Emitir factura" }));
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(argumentosRpc("preparar_factura")).toEqual({
         p_venta_id: 82,
         p_condicion_iva_id: 1,
@@ -169,7 +169,7 @@ describe("FacturaDeVenta", () => {
     expect(within(dialogo).getByLabelText("Número de DNI")).toBeDisabled();
     expect(within(dialogo).getByLabelText("Número de DNI")).toHaveValue("30111222");
     await userEvent.click(within(dialogo).getByRole("button", { name: "Reintentar con ARCA" }));
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(invocarFuncion).toHaveBeenCalledWith("arca", { accion: "emitir", comprobante_id: 10 });
     });
     expect(argumentosRpc("preparar_factura")).toBeUndefined();
@@ -218,7 +218,7 @@ describe("FacturaDeVenta", () => {
     expect(await within(dialogo).findByText("Falta confirmar con ARCA")).toBeInTheDocument();
     invocarFuncion.mockResolvedValueOnce({ comprobante: comprobanteDePrueba() });
     await userEvent.click(within(dialogo).getByRole("button", { name: "Reintentar con ARCA" }));
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(onCerrar).toHaveBeenCalled();
     });
     expect(invocarFuncion).toHaveBeenLastCalledWith("arca", {
@@ -268,7 +268,7 @@ describe("FacturaDeVenta", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Emitir nota de crédito de la venta N° 82" }),
     );
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(invocarFuncion).toHaveBeenCalledWith("arca", { accion: "emitir", comprobante_id: 12 });
     });
   });

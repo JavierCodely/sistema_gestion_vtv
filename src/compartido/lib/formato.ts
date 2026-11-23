@@ -48,3 +48,30 @@ const entero = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 export function formatearNumero(valor: number): string {
   return entero.format(valor);
 }
+
+/** Hoy en hora argentina, como YYYY-MM-DD (para campos de fecha, validaciones y rangos de reportes). */
+export function hoyEnArgentina(ahora: Date = new Date()): string {
+  // en-CA formatea las fechas como YYYY-MM-DD.
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: ZONA_HORARIA,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(ahora);
+}
+
+const lista = new Intl.ListFormat("es-AR", { style: "long", type: "conjunction" });
+
+/** "Ana, Beto y Carla" (ej. quiénes atendieron un turno). Vacío si no hay nombres. */
+export function formatearLista(nombres: readonly string[] | null | undefined): string {
+  return lista.format(nombres ?? []);
+}
+
+/**
+ * Un día de negocio (YYYY-MM-DD, ej. `fecha_local` o un campo de fecha) como 01/11/2026. Se arma
+ * con el texto, sin pasar por `Date`: "2026-11-01" en UTC sería el 31/10 en hora argentina.
+ */
+export function formatearDia(fecha: string): string {
+  const [a, m, d] = fecha.split("-");
+  return a && m && d ? `${d}/${m}/${a}` : fecha;
+}

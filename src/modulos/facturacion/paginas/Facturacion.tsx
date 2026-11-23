@@ -238,7 +238,7 @@ function Log() {
                       )}
                     </TableCell>
                     <TableCell className="tabular-nums">{i.comprobante_id ?? "—"}</TableCell>
-                    <TableCell>{i.perfiles?.nombre ?? "—"}</TableCell>
+                    <TableCell>{i.perfiles?.nombre_completo ?? "—"}</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {formatearNumero(i.duracion_ms)} ms
                     </TableCell>

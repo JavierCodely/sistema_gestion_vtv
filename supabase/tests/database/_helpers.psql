@@ -28,6 +28,28 @@ begin
 end;
 $$;
 
+-- Abre el turno de una caja como lo hace el admin (migraciones 27 y 33): pone en la caja general el
+-- efectivo inicial (ingreso) y lo asigna al turno, así el saldo general queda igual. El turno es de la
+-- caja (sin usuario); termina actuando como p_usuario, que es quien va a trabajar en ella.
+-- Devuelve el id del turno (las ventas y gastos del turno lo reciben como p_turno_id).
+create function pg_temp.abrir_turno_para(p_admin uuid, p_usuario uuid, p_caja bigint,
+                                         p_efectivo numeric default 100)
+returns bigint
+language plpgsql
+as $$
+declare
+  v_id bigint;
+begin
+  -- Solo los claims del admin (sin cambiar de rol): las RPC leen auth.uid() de ahí.
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', p_admin::text, 'role', 'authenticated')::text, true);
+  perform public.movimiento_efectivo('ingreso', p_efectivo, 'Efectivo para el turno de prueba');
+  select (public.abrir_turno(p_caja, p_efectivo)).id into v_id;
+  perform pg_temp.como(p_usuario);
+  return v_id;
+end;
+$$;
+
 -- Actúa como visitante sin sesión.
 create function pg_temp.como_anonimo()
 returns void

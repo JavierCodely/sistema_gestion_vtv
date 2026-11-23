@@ -39,7 +39,7 @@ export function DialogoPassword({
     setErrorServidor(null);
     try {
       await mutacion.mutateAsync({ accion: "cambiar_password", id: usuario.id, password });
-      toast.success(`Contraseña de ${usuario.nombre} actualizada`);
+      toast.success(`Contraseña de ${usuario.nombre_completo} actualizada`);
       onCerrar();
     } catch (e) {
       setErrorServidor(mensajeDeError(e));
@@ -56,7 +56,7 @@ export function DialogoPassword({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Cambiar contraseña</DialogTitle>
-          <DialogDescription>{usuario.nombre}</DialogDescription>
+          <DialogDescription>{usuario.nombre_completo}</DialogDescription>
         </DialogHeader>
         <form className="flex flex-col gap-4" onSubmit={(e) => void enviar(e)} noValidate>
           <Campo id="password-nueva" etiqueta="Nueva contraseña">

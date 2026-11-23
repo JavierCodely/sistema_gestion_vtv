@@ -8,9 +8,8 @@ insert into certificados (nombre, hojas_por_unidad) values ('Hoja VTV', 25) retu
 select pg_temp.como(:'admin');
 select registrar_compra_certificado(:cert, 1, 50000, 'transferencia');
 reset role;
-select pg_temp.como(:'cajero');
-select abrir_turno(:caja);
-select (registrar_venta(:servicio, 'efectivo')).id as venta \gset
+select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja) as turno \gset
+select (registrar_venta(:turno, :servicio, 'efectivo')).id as venta \gset
 reset role;
 
 -- El cajero no ve costos por ningún camino

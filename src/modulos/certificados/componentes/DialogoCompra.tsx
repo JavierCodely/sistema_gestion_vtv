@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/compartido/ui/select";
-import { useSaldoEfectivo } from "@/modulos/efectivo/api/consultas";
+import { useSaldoEfectivo } from "@/modulos/fondos/api/efectivo";
 import {
   useCorregirCompra,
   useRegistrarCompra,

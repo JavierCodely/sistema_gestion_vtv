@@ -4,6 +4,7 @@ import {
   formatearFechaHora,
   formatearMoneda,
   formatearNumero,
+  hoyEnArgentina,
 } from "@/compartido/lib/formato";
 
 // Intl usa espacios no separables; normalizamos para comparar.
@@ -39,5 +40,13 @@ describe("formatearNumero", () => {
     expect(formatearNumero(1250)).toBe("1.250");
     expect(formatearNumero(-3)).toBe("-3");
     expect(formatearNumero(0)).toBe("0");
+  });
+});
+
+describe("hoyEnArgentina", () => {
+  it("usa el día argentino, no el UTC", () => {
+    // 21/11 a las 01:00 UTC = 20/11 a las 22:00 en Argentina.
+    expect(hoyEnArgentina(new Date("2026-11-21T01:00:00Z"))).toBe("2026-11-20");
+    expect(hoyEnArgentina(new Date("2026-11-21T15:00:00Z"))).toBe("2026-11-21");
   });
 });

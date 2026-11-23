@@ -8,6 +8,13 @@ export const LARGO_MAXIMO_PASSWORD = 72;
 /** Mismos límites que los CHECK de la BD (migración 014). */
 export const LARGO_MAXIMO_NOMBRE = 100;
 export const LARGO_MAXIMO_EMAIL = 254;
+/** Mismo límite que el CHECK ventas_patente_largo (migración 014). */
+export const LARGO_MAXIMO_PATENTE = 10;
+
+/** Igual que `registrar_venta` y `registrar_venta_pasada`: sin espacios y en mayúsculas ("ab 123 cd" → "AB123CD"). */
+export function normalizarPatente(texto: string): string {
+  return texto.replace(/\s/g, "").toUpperCase();
+}
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -136,6 +143,16 @@ export function validarNota(nota: string): string | undefined {
   if (!nota.trim()) return "Escribí una nota.";
   if (nota.trim().length > LARGO_MAXIMO_NOTA) {
     return `La nota no puede superar los ${LARGO_MAXIMO_NOTA} caracteres.`;
+  }
+  return undefined;
+}
+
+/** Motivo de anulación: obligatorio, mismo límite que la BD. */
+export function validarMotivo(motivo: string): string | undefined {
+  const limpio = motivo.trim();
+  if (!limpio) return "Escribí el motivo.";
+  if (limpio.length > LARGO_MAXIMO_NOTA) {
+    return `El motivo no puede superar los ${String(LARGO_MAXIMO_NOTA)} caracteres.`;
   }
   return undefined;
 }

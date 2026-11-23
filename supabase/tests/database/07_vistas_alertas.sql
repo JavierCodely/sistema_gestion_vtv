@@ -1,6 +1,6 @@
 begin;
 \ir _helpers.psql
-select plan(14);
+select plan(15);
 
 select * from pg_temp.escenario() \gset
 select id as comida from categorias_gasto where nombre = 'Comida' \gset
@@ -11,12 +11,12 @@ select registrar_compra_certificado(:cert, 1, 50000, 'transferencia');
 select movimiento_efectivo('fondo_inicial', 5000, 'Fondo');
 reset role;
 
-select pg_temp.como(:'cajero');
-select abrir_turno(:caja);
-select (registrar_venta(:servicio, 'efectivo')).id as v1 \gset
-select (registrar_venta(:servicio, 'tarjeta')).id as v2 \gset
-select (registrar_venta(:servicio, 'transferencia')).id as v3 \gset
-select (registrar_gasto(:comida, 1500, 'efectivo', 'Almuerzo')).id as g1 \gset
+reset role;
+select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja) as turno \gset
+select (registrar_venta(:turno, :servicio, 'efectivo')).id as v1 \gset
+select (registrar_venta(:turno, :servicio, 'tarjeta')).id as v2 \gset
+select (registrar_venta(:turno, :servicio, 'transferencia')).id as v3 \gset
+select (registrar_gasto(:comida, 1500, 'efectivo', 'Almuerzo', :turno)).id as g1 \gset
 reset role;
 select pg_temp.como(:'admin');
 select anular_venta(:v3, 'Error de carga');
@@ -34,13 +34,16 @@ select is((select anulada from v_movimientos_caja where tipo = 'venta' and id = 
   'las ventas anuladas aparecen marcadas');
 select is(
   (select sum(monto) from v_movimientos_caja
-   where turno_id = (select id from turnos where cerrado_en is null) and not anulada),
+   where turno_id = :turno and not anulada),
   38500.00::numeric, 'neto del turno = ventas − gastos, sin anuladas');
 
--- v_turnos
+-- v_turnos: solo admin (migración 33); el cajero no lee los totales ni el efectivo de ningún turno
+select is((select count(*)::int from v_turnos), 0, 'el cajero no lee v_turnos');
+reset role;
+select pg_temp.como(:'admin');
 select is(
   (select row(ventas_cantidad, ventas_efectivo, ventas_tarjeta, ventas_transferencia, gastos_total, neto, abierto)::text
-   from v_turnos where usuario_id = :'cajero'),
+   from v_turnos where id = :turno),
   row(2, 20000.00, 20000.00, 0.00, 1500.00, 38500.00, true)::text,
   'v_turnos calcula los totales en vivo');
 reset role;

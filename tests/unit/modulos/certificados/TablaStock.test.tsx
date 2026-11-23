@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { toast } from "sonner";
@@ -74,7 +74,7 @@ describe("TablaStock", () => {
     });
     renderTabla([certificadoDePrueba({ activo: false, alcance: "servicio", servicio_id: 5 })]);
     await userEvent.click(screen.getByRole("switch", { name: "Certificado Hoja VTV activo" }));
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith(
         "Ese servicio ya tiene un certificado activo. Desactivalo antes de activar otro.",
       );

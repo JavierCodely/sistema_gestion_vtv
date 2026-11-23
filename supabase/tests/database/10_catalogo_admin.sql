@@ -28,7 +28,7 @@ select throws_ok(format($$update servicios set precio = 'NaN' where id = %s$$, :
 select lives_ok(format('update cajas set activa = false where id = %s', :caja), 'el admin desactiva una caja');
 select is((select activa from cajas where id = :caja), false, 'la caja quedó desactivada');
 reset role;
-insert into turnos (caja_id, usuario_id) values (:caja2, :'cajero');
+insert into turnos (caja_id, efectivo_inicial) values (:caja2, 100) returning id as turno \gset
 select pg_temp.como(:'admin');
 select throws_ok(format('delete from cajas where id = %s', :caja2), '23503', null,
   'una caja con turnos no se puede borrar');
@@ -44,15 +44,15 @@ select throws_ok(format('update servicios set creado_en = now() where id = %s', 
 reset role;
 select is((select activa from categorias_servicio where id = :cat), true, 'un cajero no desactiva categorías');
 
--- Una categoría desactivada saca de la venta a sus servicios (el cajero tiene turno en caja2)
+-- Una categoría desactivada saca de la venta a sus servicios (el cajero trabaja en el turno de caja2)
 update categorias_servicio set activa = false where id = :categoria;
 select pg_temp.como(:'cajero');
-select throws_ok(format($$select registrar_venta(%s, 'efectivo')$$, :servicio), '22023',
+select throws_ok(format($$select registrar_venta(%s, %s, 'efectivo')$$, :turno, :servicio), '22023',
   'La categoría de este servicio está desactivada', 'no se vende un servicio de una categoría desactivada');
 reset role;
 update categorias_servicio set activa = true where id = :categoria;
 select pg_temp.como(:'cajero');
-select lives_ok(format($$select registrar_venta(%s, 'efectivo')$$, :servicio),
+select lives_ok(format($$select registrar_venta(%s, %s, 'efectivo')$$, :turno, :servicio),
   'al reactivar la categoría se vuelve a vender');
 reset role;
 select is((select count(*)::int from ventas where usuario_id = :'cajero'), 1, 'quedó registrada una sola venta');

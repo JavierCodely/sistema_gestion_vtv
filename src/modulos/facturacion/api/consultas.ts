@@ -146,7 +146,7 @@ export type Intento = Pick<
   | "respuesta"
   | "duracion_ms"
   | "creado_en"
-> & { perfiles: { nombre: string } | null };
+> & { perfiles: { nombre_completo: string } | null };
 
 export const claves = {
   todo: ["facturacion"] as const,
@@ -249,7 +249,7 @@ export function useIntentos() {
       let consulta = supabase
         .from("arca_intentos")
         .select(
-          "id, comprobante_id, operacion, ambiente, exito, mensaje, solicitud, respuesta, duracion_ms, creado_en, perfiles(nombre)",
+          "id, comprobante_id, operacion, ambiente, exito, mensaje, solicitud, respuesta, duracion_ms, creado_en, perfiles(nombre_completo)",
         )
         .order("id", { ascending: false })
         .limit(TAMANO_PAGINA);

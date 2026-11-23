@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DialogoCertificado } from "@/modulos/certificados/componentes/DialogoCertificado";
@@ -69,7 +69,7 @@ describe("DialogoCertificado", () => {
     await userEvent.clear(screen.getByLabelText("Stock mínimo (hojas)"));
     await userEvent.type(screen.getByLabelText("Stock mínimo (hojas)"), "20");
     await userEvent.click(screen.getByRole("button", { name: "Crear certificado" }));
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(onCerrar).toHaveBeenCalled();
     });
     expect(argumentosDe("certificados", "insert")).toEqual([
@@ -131,7 +131,7 @@ describe("DialogoCertificado", () => {
     await userEvent.clear(screen.getByLabelText("Nombre"));
     await userEvent.type(screen.getByLabelText("Nombre"), "Hoja vieja 2");
     await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(onCerrar).toHaveBeenCalled();
     });
     expect(argumentosDe("certificados", "update")).toEqual([

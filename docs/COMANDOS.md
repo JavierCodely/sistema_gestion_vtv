@@ -182,9 +182,23 @@ npx supabase functions deploy arca
 
 > En una base ya instalada **nunca** se vuelve a correr `01_esquema_completo.sql`.
 
-**Estado de la nube (`gestion_vtv`), verificado el 2026-11-21:** las 25 migraciones aplicadas y
-registradas en el historial (`migration list --linked`: local y remoto coinciden), Edge Functions
-`admin-usuarios` y `arca` publicadas. Desde la 026 en adelante alcanza con `npx supabase db push`.
+**Estado de la nube (`gestion_vtv`), verificado el 2026-11-22** (cuerpos de todas las funciones,
+columnas, restricciones, índices y vistas comparados contra los archivos): migraciones 001–028
+aplicadas y registradas; la **029 está aplicada** (corrida desde el SQL Editor, idéntica al archivo)
+**pero no registrada** en el historial. Por eso 026–029 ya no se editan: todo cambio va en una
+migración nueva. Para registrar la 029 y aplicar las siguientes:
+
+```bash
+npx supabase migration repair --linked --status applied 20261121000029
+npx supabase migration list --linked     # deben faltar solo las nuevas (030 en adelante)
+npx supabase db push
+npx supabase functions deploy admin-usuarios   # si cambió desde la última publicación
+```
+
+Después, en la app:
+1. Usuarios → editar a quien figure con "Falta el apellido" (ej. el primer admin).
+2. Fondos → pestaña Efectivo → "Fondo inicial" con el efectivo disponible para cambio (y, si hace falta, "Saldo inicial" en Transferencia y Crédito/Débito).
+3. Ventas → "Abrir turno" de cada caja, con su efectivo inicial (el turno es de la caja: cualquier usuario activo trabaja en una caja abierta).
 
 > Si alguna vez se aplica una migración desde el SQL Editor, hay que registrarla después con
 > `npx supabase migration repair --linked --status applied <versión>`: el SQL Editor no escribe el
@@ -196,6 +210,9 @@ En el **SQL Editor**:
 
 | Script | Qué hace | Después |
 |---|---|---|
+| `supabase/produccion/50_reiniciar_datos.sql` | Borra los **datos** (ventas, turnos, gastos, compras, caja de cambio a $ 0, Fondos, comprobantes; opcional el catálogo y los rubros de gasto creados) y deja la base instalada con todos los usuarios. Exige escribir `EMPEZAR DE CERO` | Fondos → "Fondo inicial" y abrir turnos |
+| `supabase/produccion/51_borrar_gastos.sql` | Borra los **gastos** (no los de compras de certificados) y, opcional, sus rubros y subcategorías; recalcula la caja de cambio. Exige escribir `BORRAR GASTOS` | — |
+| `supabase/produccion/52_borrar_usuarios.sql` | Borra los **usuarios** (login, email y perfil): todos o todos menos tu admin. Solo sin operaciones: antes correr `50_reiniciar_datos.sql`. Exige escribir `BORRAR USUARIOS` | Si no quedó nadie: pasos D6 y D7 |
 | `supabase/produccion/90_deshacer_primer_admin.sql` | Borra solo el usuario indicado (si no tiene operaciones) | Repetir pasos D6 y D7 |
 | `supabase/produccion/99_borrar_todo.sql` | ⚠ Borra **todo**: tablas, datos, usuarios e historial de migraciones. Exige escribir `BORRAR TODO` | Repetir desde el paso D3 |
 

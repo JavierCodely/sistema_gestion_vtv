@@ -19,10 +19,12 @@ test("ciclo completo de un usuario: crear, editar, contraseña, desactivar y rea
   const nuevo = page.getByRole("dialog", { name: "Nuevo usuario" });
   await nuevo.getByRole("button", { name: "Crear usuario" }).click();
   await expect(nuevo.getByText("Ingresá el nombre.")).toBeVisible();
+  await expect(nuevo.getByText("Ingresá el apellido.")).toBeVisible();
   await expect(nuevo.getByText("Ingresá el email.")).toBeVisible();
 
   // Crear
-  await nuevo.getByLabel("Nombre").fill("Ana Pérez");
+  await nuevo.getByLabel("Nombre").fill("Ana");
+  await nuevo.getByLabel("Apellido").fill("Pérez");
   await nuevo.getByLabel("Email").fill(email);
   await nuevo.getByLabel("Contraseña").fill("clave1234");
   await conFuncion(page, F, () => nuevo.getByRole("button", { name: "Crear usuario" }).click());
@@ -34,16 +36,18 @@ test("ciclo completo de un usuario: crear, editar, contraseña, desactivar y rea
   // Email repetido: error del servidor en español
   await page.getByRole("button", { name: "Nuevo usuario" }).click();
   await nuevo.getByLabel("Nombre").fill("Otra");
+  await nuevo.getByLabel("Apellido").fill("Persona");
   await nuevo.getByLabel("Email").fill(email);
   await nuevo.getByLabel("Contraseña").fill("clave1234");
   await conFuncion(page, F, () => nuevo.getByRole("button", { name: "Crear usuario" }).click());
   await expect(nuevo.getByRole("alert")).toHaveText("Ya existe un usuario con ese email");
   await page.keyboard.press("Escape");
 
-  // Editar nombre y rol
+  // Editar apellido y rol
   await fila.getByRole("button", { name: "Editar Ana Pérez" }).click();
   const editar = page.getByRole("dialog", { name: "Editar usuario" });
-  await editar.getByLabel("Nombre").fill("Ana P.");
+  await expect(editar.getByLabel("Nombre")).toHaveValue("Ana");
+  await editar.getByLabel("Apellido").fill("P.");
   await editar.getByLabel("Rol").click();
   await page.getByRole("option", { name: "Administrador" }).click();
   await conFuncion(page, F, () => editar.getByRole("button", { name: "Guardar" }).click());

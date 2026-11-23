@@ -14,20 +14,27 @@ test("el admin entra al panel con menú lateral y puede ir a operar una caja", a
     "Servicios",
     "Certificados",
     "Gastos",
-    "Caja de efectivo",
+    "Fondos",
   ]) {
     await expect(menu.getByRole("link", { name: item })).toBeVisible();
   }
-  await page.getByRole("link", { name: "Operar caja" }).click();
-  await expect(page).toHaveURL("/caja");
-  await expect(page.getByRole("link", { name: "Panel admin" })).toBeVisible();
+  // "Abrir turno" de la barra fija abre el modal de apertura sin salir del panel; el turno es de la
+  // caja: no se elige quién atiende
+  const barra = page.getByRole("banner");
+  await expect(barra.getByRole("button", { name: "Cerrar turno" })).toBeVisible();
+  await barra.getByRole("button", { name: "Abrir turno" }).click();
+  const apertura = page.getByRole("dialog", { name: "Abrir turno" });
+  await expect(apertura.getByLabel("Efectivo inicial ($)")).toBeVisible();
+  await expect(apertura.getByLabel("Atiende")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(page).toHaveURL("/admin");
   await salir(page);
 });
 
 test("el cajero entra a la caja y no puede abrir el panel admin", async ({ page }) => {
   await ingresar(page, CAJERO);
   await expect(page).toHaveURL("/caja");
-  await expect(page.getByText("Cajero Demo")).toBeVisible();
+  await expect(page.getByText("Carlos Demo")).toBeVisible();
   await expect(page.getByRole("link", { name: "Panel admin" })).toHaveCount(0);
 
   await page.goto("/admin/usuarios");

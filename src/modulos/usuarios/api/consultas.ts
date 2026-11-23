@@ -10,8 +10,9 @@ export function useUsuarios() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("perfiles")
-        .select("id, nombre, email, rol, activo, creado_en")
+        .select("id, nombre, apellido, nombre_completo, email, rol, activo, creado_en")
         .order("activo", { ascending: false })
+        .order("apellido", { nullsFirst: true })
         .order("nombre");
       if (error) throw error;
       return data;

@@ -1,6 +1,6 @@
 begin;
 \ir _helpers.psql
-select plan(15);
+select plan(20);
 
 select * from pg_temp.escenario() \gset
 select pg_temp.crear_usuario('otro@test.local') as otro \gset
@@ -14,64 +14,74 @@ select pg_temp.como(:'admin');
 select lives_ok($$insert into cajas (nombre) values ('Caja nueva')$$, 'un admin crea cajas');
 reset role;
 
--- Abrir turno
+-- Abrir turno: solo el admin, de una caja (sin usuario), con efectivo inicial de la caja general
 select pg_temp.como(:'cajero');
-select lives_ok(format('select abrir_turno(%s)', :caja), 'el cajero abre turno en una caja libre');
-select isnt((select abierto_en from turnos where usuario_id = :'cajero'), null,
-  'se guarda la fecha y hora de apertura');
-select throws_ok(format('select abrir_turno(%s)', :caja2), 'P0001',
-  'Ya tenés un turno abierto; cerralo antes de abrir otro', 'un cajero no puede tener dos turnos');
+select throws_ok(format('select abrir_turno(%s, 100)', :caja), '42501', null,
+  'un cajero no abre turnos');
+reset role;
+select pg_temp.como(:'admin');
+select throws_ok(format('select abrir_turno(%s, 0)', :caja), '22023', null,
+  'el efectivo inicial debe ser mayor a cero');
+select throws_ok(format('select abrir_turno(%s, 100)', :caja), 'P0001', null,
+  'sin efectivo en la caja general no se abre (y no queda nada a medias)');
+select movimiento_efectivo('fondo_inicial', 1000, 'Fondo');
+select lives_ok(format('select abrir_turno(%s, 600)', :caja), 'el admin abre una caja libre');
+select is((select row(efectivo_inicial, abierto_por, usuario_id, abierto_en is not null)::text
+           from turnos where caja_id = :caja),
+  row(600.00, :'admin'::uuid, null::uuid, true)::text,
+  'se guardan efectivo inicial, quién lo abrió y la hora; el turno no tiene usuario asignado');
+select is((select saldo from caja_efectivo), 400.00::numeric, 'el efectivo inicial sale de la caja general');
+select throws_ok(format('select abrir_turno(%s, 100)', :caja), 'P0001',
+  'La caja "Caja Test" ya tiene un turno abierto', 'una caja no puede tener dos turnos abiertos');
 reset role;
 
-select pg_temp.como(:'otro');
-select throws_ok(format('select abrir_turno(%s)', :caja), 'P0001',
-  'La caja "Caja Test" ya tiene un turno abierto', 'una caja no puede tener dos turnos abiertos');
-select is((select count(*)::int from turnos), 0, 'un cajero no ve turnos ajenos');
-reset role;
+select id as turno from turnos where caja_id = :caja and cerrado_en is null \gset
 
 update cajas set activa = false where id = :caja2;
-select pg_temp.como(:'otro');
-select throws_ok(format('select abrir_turno(%s)', :caja2), '22023',
+select pg_temp.como(:'admin');
+select throws_ok(format('select abrir_turno(%s, 100)', :caja2), '22023',
   'La caja no existe o está desactivada', 'no se abre turno en una caja desactivada');
-select throws_ok('select cerrar_turno()', 'P0001', 'No tenés un turno abierto',
-  'no se cierra un turno inexistente');
 reset role;
 
--- Cerrar turno con totales
+-- Cerrar turno con totales: venden dos usuarios en la misma caja
 insert into certificados (nombre, hojas_por_unidad) values ('Hoja Test', 25);
 select pg_temp.como(:'cajero');
-select registrar_venta(:servicio, 'efectivo');
-select registrar_venta(:servicio, 'efectivo');
-select registrar_venta(:servicio, 'tarjeta');
-select registrar_venta(:servicio, 'transferencia');
-select registrar_gasto((select id from categorias_gasto where nombre = 'Comida'), 3000, 'efectivo', 'Almuerzo');
-select cerrar_turno('Todo en orden');
+select registrar_venta(:turno, :servicio, 'efectivo');
+select registrar_venta(:turno, :servicio, 'efectivo');
+select registrar_gasto((select id from categorias_gasto where nombre = 'Comida'), 3000, 'efectivo', 'Almuerzo',
+  :turno);
+reset role;
+select pg_temp.como(:'otro');
+select registrar_venta(:turno, :servicio, 'tarjeta');
+select registrar_venta(:turno, :servicio, 'transferencia');
+select throws_ok(format('select cerrar_turno(%s)', :turno), '42501', null,
+  'un cajero no cierra turnos');
+reset role;
+select is((select cerrado_en from turnos where id = :turno), null, 'el turno sigue abierto');
+
+select pg_temp.como(:'admin');
+select throws_ok('select cerrar_turno(null)', '22023', 'Elegí el turno que vas a cerrar',
+  'hay que indicar el turno a cerrar');
+select throws_ok('select cerrar_turno(999999999)', '22023', 'El turno no existe',
+  'no se cierra un turno inexistente');
+select lives_ok(format('select cerrar_turno(%s, %L)', :turno, 'Todo en orden'), 'el admin cierra el turno');
+select throws_ok(format('select cerrar_turno(%s)', :turno), 'P0001', 'El turno ya estaba cerrado',
+  'no se cierra dos veces');
 reset role;
 
 select is(
   (select row(cantidad_ventas, total_efectivo, total_tarjeta, total_transferencia, total_gastos)::text
-   from turnos where usuario_id = :'cajero'),
+   from turnos where id = :turno),
   row(4, 40000.00, 20000.00, 20000.00, 3000.00)::text,
-  'al cerrar se guardan cantidad, totales por medio de pago y gastos');
-select isnt((select cerrado_en from turnos where usuario_id = :'cajero'), null,
-  'se guarda la fecha y hora de cierre');
-select is((select observaciones from turnos where usuario_id = :'cajero'), 'Todo en orden',
+  'al cerrar se guardan cantidad, totales por medio de pago y gastos de todos los que vendieron');
+select is((select observaciones from turnos where id = :turno), 'Todo en orden',
   'se guardan las observaciones');
-
-select pg_temp.como(:'cajero');
-select lives_ok(format('select abrir_turno(%s)', :caja), 'cerrado el turno, la caja vuelve a estar libre');
-reset role;
-
--- Cierre por parte de un admin
-select id as turno_abierto from turnos where cerrado_en is null and caja_id = :caja \gset
-select pg_temp.como(:'otro');
-select throws_ok(format('select cerrar_turno(null, %s)', :turno_abierto),
-  '42501', 'Solo un administrador puede cerrar el turno de otro usuario',
-  'un cajero no cierra turnos ajenos');
-reset role;
+select is((select row(efectivo_cierre, (select saldo from caja_efectivo))::text
+           from turnos where id = :turno),
+  row(37600.00, 38000.00)::text,
+  'al cerrar, inicial + ventas en efectivo − gastos en efectivo vuelve a la caja general');
 select pg_temp.como(:'admin');
-select lives_ok(format('select cerrar_turno(%L, %s)', 'Cierre forzado', :turno_abierto),
-  'el admin puede cerrar el turno de otro usuario');
+select lives_ok(format('select abrir_turno(%s, 100)', :caja), 'cerrado el turno, la caja vuelve a estar libre');
 reset role;
 
 select * from finish();

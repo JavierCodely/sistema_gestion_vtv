@@ -5,7 +5,7 @@ import { ErrorFormulario } from "@/compartido/componentes/ErrorFormulario";
 import { propsError } from "@/compartido/lib/accesibilidad";
 import { mensajeDeError } from "@/compartido/lib/errores";
 import { formatearMoneda } from "@/compartido/lib/formato";
-import { LARGO_MAXIMO_NOTA } from "@/compartido/lib/validaciones";
+import { LARGO_MAXIMO_NOTA, validarMotivo } from "@/compartido/lib/validaciones";
 import { Button } from "@/compartido/ui/button";
 import {
   Dialog,
@@ -17,11 +17,28 @@ import {
 } from "@/compartido/ui/dialog";
 import { Input } from "@/compartido/ui/input";
 import { useAnularVenta, type Venta } from "@/modulos/caja/api/consultas";
+import { detallePagos, parteEnEfectivo } from "@/modulos/caja/lib/pagos";
 import { useEmitirNotaDeCredito } from "@/modulos/facturacion/api/consultas";
 import { nombreComprobante, numeroComprobante } from "@/modulos/facturacion/lib/formato";
-import { validarMotivo } from "../lib/validaciones";
 
-/** Anula una venta (solo admin). La hoja no vuelve al stock; el efectivo sale de la caja de cambio. */
+/** De dónde sale el efectivo al anular: todo el monto, o solo la parte en efectivo de un pago mixto. */
+function avisoEfectivo(venta: Venta): string | null {
+  const desde =
+    venta.turno_id === null
+      ? "sale de la caja de cambio."
+      : "sale de la caja del turno si sigue abierto, o de la caja de cambio.";
+  if (venta.medio_pago === "efectivo") return ` Como fue en efectivo, el monto ${desde}`;
+  const efectivo = venta.medio_pago === null ? parteEnEfectivo(venta) : 0;
+  if (efectivo > 0) {
+    return ` Fue un pago mixto (${detallePagos(venta.venta_pagos)}): la parte en efectivo (${formatearMoneda(efectivo)}) ${desde}`;
+  }
+  return null;
+}
+
+/**
+ * Anula una venta (solo admin). La hoja no vuelve al stock; el efectivo sale del turno abierto o de la
+ * caja de cambio (siempre de la caja de cambio en una venta con fecha pasada, que no tiene turno).
+ */
 export function DialogoAnularVenta({ venta, onCerrar }: { venta: Venta; onCerrar: () => void }) {
   const anular = useAnularVenta();
   const emitirNota = useEmitirNotaDeCredito();
@@ -77,8 +94,7 @@ export function DialogoAnularVenta({ venta, onCerrar }: { venta: Venta; onCerrar
           <DialogDescription>
             {venta.servicio_nombre} · {formatearMoneda(venta.precio)}. Deja de sumar en los totales
             y la hoja de certificado no vuelve al stock.
-            {venta.medio_pago === "efectivo" &&
-              " Como fue en efectivo, el monto sale de la caja de cambio."}
+            {avisoEfectivo(venta)}
           </DialogDescription>
         </DialogHeader>
         <form className="flex flex-col gap-4" onSubmit={(e) => void enviar(e)} noValidate>

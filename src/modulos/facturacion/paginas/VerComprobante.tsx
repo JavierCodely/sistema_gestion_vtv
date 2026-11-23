@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { Cargando } from "@/compartido/componentes/Cargando";
 import { mensajeDeError } from "@/compartido/lib/errores";
-import { formatearMoneda } from "@/compartido/lib/formato";
+import { formatearDia, formatearMoneda } from "@/compartido/lib/formato";
 import { Alert, AlertDescription, AlertTitle } from "@/compartido/ui/alert";
 import { Button } from "@/compartido/ui/button";
 import { type Comprobante, useComprobante } from "../api/consultas";
@@ -18,9 +18,7 @@ import {
 
 /** Las fechas de ARCA son días (YYYY-MM-DD): se muestran sin pasar por la zona horaria. */
 function dia(fecha: string | null): string {
-  if (!fecha) return "—";
-  const [a, m, d] = fecha.split("-");
-  return a && m && d ? `${d}/${m}/${a}` : fecha;
+  return fecha ? formatearDia(fecha) : "—";
 }
 
 function Dato({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
@@ -151,7 +149,7 @@ function Impreso({ c }: { c: Comprobante }) {
   );
 }
 
-/** Representación impresa de un comprobante (cajero: los de sus ventas; admin: todos). */
+/** Representación impresa de un comprobante (cajero: los de ventas de turnos abiertos; admin: todos). */
 export function VerComprobante() {
   const navegar = useNavigate();
   // Abierto directo (enlace o pestaña nueva): no hay a dónde volver, va al inicio del rol.

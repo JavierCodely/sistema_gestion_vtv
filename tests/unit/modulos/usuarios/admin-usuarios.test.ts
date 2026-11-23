@@ -5,7 +5,15 @@ const invoke = vi.fn();
 vi.mock("@/compartido/lib/supabase", () => ({ supabase: { functions: { invoke } } }));
 const { llamarAdminUsuarios } = await import("@/modulos/usuarios/api/admin-usuarios");
 
-const usuario = { id: "u1", nombre: "Ana", email: "ana@vtv.com", rol: "cajero", activo: true };
+const usuario = {
+  id: "u1",
+  nombre: "Ana",
+  apellido: "Pérez",
+  nombre_completo: "Ana Pérez",
+  email: "ana@vtv.com",
+  rol: "cajero",
+  activo: true,
+};
 
 describe("llamarAdminUsuarios", () => {
   beforeEach(() => {

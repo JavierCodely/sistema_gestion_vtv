@@ -33,7 +33,7 @@ export function Usuarios() {
   async function cambiarActivo(usuario: UsuarioAdmin, activo: boolean) {
     try {
       await accion.mutateAsync({ accion: "activar", id: usuario.id, activo });
-      toast.success(`${usuario.nombre} ${activo ? "activado" : "desactivado"}`);
+      toast.success(`${usuario.nombre_completo} ${activo ? "activado" : "desactivado"}`);
     } catch (e) {
       toast.error(mensajeDeError(e));
     }
@@ -64,7 +64,7 @@ export function Usuarios() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Nombre</TableHead>
+                <TableHead>Nombre y apellido</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Rol</TableHead>
                 <TableHead>Activo</TableHead>
@@ -77,8 +77,16 @@ export function Usuarios() {
                 return (
                   <TableRow key={u.id} data-testid={`usuario-${u.email ?? u.id}`}>
                     <TableCell className="font-medium">
-                      {u.nombre}
+                      {u.nombre_completo}
                       {esYo && <span className="text-muted-foreground"> (vos)</span>}
+                      {u.apellido === null && (
+                        <Badge
+                          variant="outline"
+                          className="ml-2 border-amber-500 text-amber-700 dark:text-amber-400"
+                        >
+                          Falta el apellido
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell>{u.email}</TableCell>
                     <TableCell>
@@ -90,7 +98,7 @@ export function Usuarios() {
                       <Switch
                         checked={u.activo}
                         disabled={esYo || accion.isPending}
-                        aria-label={`Usuario ${u.nombre} activo`}
+                        aria-label={`Usuario ${u.nombre_completo} activo`}
                         onCheckedChange={(activo) => void cambiarActivo(u, activo)}
                       />
                     </TableCell>
@@ -99,7 +107,7 @@ export function Usuarios() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          aria-label={`Editar ${u.nombre}`}
+                          aria-label={`Editar ${u.nombre_completo}`}
                           onClick={() => {
                             setEditando(u);
                           }}
@@ -110,7 +118,7 @@ export function Usuarios() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          aria-label={`Cambiar contraseña de ${u.nombre}`}
+                          aria-label={`Cambiar contraseña de ${u.nombre_completo}`}
                           onClick={() => {
                             setCambiandoPassword(u);
                           }}

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  LARGO_MAXIMO_PATENTE,
   montoComoTexto,
+  normalizarPatente,
   parsearEntero,
   validarNota,
   parsearMonto,
@@ -104,5 +106,12 @@ describe("validarNota", () => {
     expect(validarNota("  ")).toBe("Escribí una nota.");
     expect(validarNota("x".repeat(501))).toMatch(/500 caracteres/);
     expect(validarNota("Rotura")).toBeUndefined();
+  });
+});
+
+describe("normalizarPatente", () => {
+  it("saca espacios y pasa a mayúsculas, como la BD", () => {
+    expect(normalizarPatente(" ab 123\tcd ")).toBe("AB123CD");
+    expect(LARGO_MAXIMO_PATENTE).toBe(10);
   });
 });

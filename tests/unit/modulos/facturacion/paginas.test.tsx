@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authDePrueba, perfilDePrueba, renderRuta } from "@tests/soporte/render";
@@ -106,7 +106,7 @@ describe("ConfiguracionArca", () => {
     await userEvent.clear(razon);
     await userEvent.type(razon, "  Nueva   Razón SA ");
     await userEvent.click(screen.getByRole("button", { name: "Guardar datos" }));
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(argumentosDe("arca_configuracion", "update")?.[0]).toMatchObject({
         cuit: "30712345671",
         razon_social: "Nueva Razón SA",
@@ -145,7 +145,7 @@ describe("ConfiguracionArca", () => {
       new File(["-----BEGIN PRIVATE KEY-----"], "vtv.key"),
     );
     await userEvent.click(screen.getByRole("button", { name: "Guardar certificado" }));
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(invocarFuncion).toHaveBeenCalledWith("arca", {
         accion: "guardar_certificado",
         certificado: "-----BEGIN CERTIFICATE-----",
@@ -195,7 +195,7 @@ describe("Facturacion (admin)", () => {
     responder("arca_intentos", "select", { data: [] });
     renderRuta("/admin/facturacion", admin());
     await userEvent.click(await screen.findByRole("button", { name: "Ver más comprobantes" }));
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(argumentosDe("v_comprobantes", "select", "lt")).toEqual(["id", 151]);
     });
   });
@@ -252,7 +252,7 @@ describe("Facturacion (admin)", () => {
     await userEvent.click(
       within(fila).getByRole("button", { name: "Reintentar Factura B de la venta N° 82" }),
     );
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(invocarFuncion).toHaveBeenCalledWith("arca", { accion: "emitir", comprobante_id: 10 });
     });
 

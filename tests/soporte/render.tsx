@@ -3,6 +3,7 @@ import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { vi } from "vitest";
+import { ProveedorTema } from "@/compartido/componentes/ProveedorTema";
 import type { Perfil } from "@/compartido/tipos";
 import { AuthContext, type ValorAuth } from "@/modulos/auth/contexto";
 import { rutas } from "@/app/rutas";
@@ -10,7 +11,9 @@ import { rutas } from "@/app/rutas";
 export function perfilDePrueba(cambios: Partial<Perfil> = {}): Perfil {
   return {
     id: "00000000-0000-0000-0000-0000000000c1",
-    nombre: "Cajero Prueba",
+    nombre: "Cajero",
+    apellido: "Prueba",
+    nombre_completo: "Cajero Prueba",
     email: "cajero@prueba.local",
     rol: "cajero",
     activo: true,
@@ -38,11 +41,13 @@ export function renderRuta(ruta: string, auth: ValorAuth = authDePrueba()) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter(rutas, { initialEntries: [ruta] });
   const resultado = render(
-    <QueryClientProvider client={queryClient}>
-      <AuthContext.Provider value={auth}>
-        <RouterProvider router={router} />
-      </AuthContext.Provider>
-    </QueryClientProvider>,
+    <ProveedorTema>
+      <QueryClientProvider client={queryClient}>
+        <AuthContext.Provider value={auth}>
+          <RouterProvider router={router} />
+        </AuthContext.Provider>
+      </QueryClientProvider>
+    </ProveedorTema>,
   );
   return { ...resultado, router };
 }

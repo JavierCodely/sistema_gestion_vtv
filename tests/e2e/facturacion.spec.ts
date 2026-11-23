@@ -1,7 +1,18 @@
 import { writeFile } from "node:fs/promises";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import { generarCertificado } from "../arca/certificado.mjs";
-import { ADMIN, conFuncion, ingresar, unico } from "./utilidades";
+import {
+  abrirTurnoComoAdmin,
+  ADMIN,
+  cerrarTurnoDesdeBarra,
+  conFuncion,
+  esperarCaja,
+  ingresar,
+  ingresarEfectivo,
+  trabajarEnCaja,
+  unico,
+  venderEnCaja,
+} from "./utilidades";
 
 // Siempre contra el simulador de ARCA (webServer de playwright.config.ts): nunca ARCA real.
 
@@ -64,7 +75,8 @@ test("facturación ARCA: configurar, facturar B y A desde la caja, ver el compro
   await page.goto("/admin/usuarios");
   await page.getByRole("button", { name: "Nuevo usuario" }).click();
   const nuevoUsuario = page.getByRole("dialog", { name: "Nuevo usuario" });
-  await nuevoUsuario.getByLabel("Nombre").fill(`Cajero F ${sufijo}`);
+  await nuevoUsuario.getByLabel("Nombre").fill("Cajero F");
+  await nuevoUsuario.getByLabel("Apellido").fill(sufijo);
   await nuevoUsuario.getByLabel("Email").fill(cajero.email);
   await nuevoUsuario.getByLabel("Contraseña").fill(cajero.password);
   await conFuncion(page, "admin-usuarios", () =>
@@ -94,23 +106,19 @@ test("facturación ARCA: configurar, facturar B y A desde la caja, ver el compro
   await nuevoServicio.getByRole("button", { name: "Crear servicio" }).click();
   await expect(page.getByText(`Servicio “${servicio}” creado`)).toBeVisible();
 
-  // --- Cajero: abre turno y vende dos veces
+  // --- Admin abre la caja; el cajero vende dos veces en ella
+  await ingresarEfectivo(page, "1.000", `Cambio ${sufijo}`);
+  await abrirTurnoComoAdmin(page, { caja, efectivo: "1.000" });
   const contextoCajero = await browser.newContext();
   const pc = await contextoCajero.newPage();
   await ingresar(pc, cajero);
-  await expect(pc.getByRole("heading", { name: "Abrir turno" })).toBeVisible();
-  await pc.getByRole("radio", { name: new RegExp(caja) }).check();
-  await pc.getByRole("button", { name: "Abrir turno" }).click();
-  await expect(pc.getByRole("heading", { name: caja })).toBeVisible();
-  const formulario = pc.locator("form").filter({ hasText: "Medio de pago" });
+  await expect(pc).toHaveURL("/caja");
+  await trabajarEnCaja(pc, caja);
   for (const patente of ["AA111AA", "BB222BB"]) {
-    await elegir(pc, formulario, "Servicio", new RegExp(`^${servicio}`));
-    await formulario.getByText("Efectivo", { exact: true }).click();
-    await formulario.getByLabel("Patente (opcional)").fill(patente);
-    await formulario.getByRole("button", { name: "Registrar venta" }).click();
-    await expect(pc.getByText(new RegExp(`^Venta N° \\d+: ${servicio}`)).first()).toBeVisible();
+    await venderEnCaja(pc, { categoria, servicio, medio: "Efectivo", patente });
   }
-  const ventas = pc.getByRole("region", { name: "Ventas del turno" });
+  await pc.getByRole("tab", { name: "Historial" }).click();
+  const ventas = pc.getByRole("region", { name: "Ventas de la caja" });
   const ventaB = ventas.getByRole("row").filter({ hasText: "AA111AA" });
   const ventaA = ventas.getByRole("row").filter({ hasText: "BB222BB" });
 
@@ -154,7 +162,7 @@ test("facturación ARCA: configurar, facturar B y A desde la caja, ver el compro
   ).toBeVisible();
   await expect(impreso.getByText(/sin validez fiscal/)).toBeVisible();
   await pc.getByRole("button", { name: "Volver" }).click();
-  await expect(pc.getByRole("heading", { name: caja })).toBeVisible();
+  await esperarCaja(pc, caja);
 
   // --- Admin: anula la venta con Factura B y se emite la nota de crédito B
   await page.goto("/admin/ventas");
@@ -191,12 +199,9 @@ test("facturación ARCA: configurar, facturar B y A desde la caja, ver el compro
       .filter({ hasText: `punto de venta ${puntoVenta}:` }),
   ).toBeVisible();
 
-  // --- Cierre del turno del cajero
-  await pc.getByRole("button", { name: "Cerrar turno" }).click();
-  const cierre = pc.getByRole("dialog", { name: "Cerrar turno" });
-  await cierre.getByRole("button", { name: "Cerrar turno" }).click();
-  await expect(pc.getByText("Turno cerrado")).toBeVisible();
+  // --- El admin cierra el turno de la caja (el cajero no cierra turnos)
   await contextoCajero.close();
+  await cerrarTurnoDesdeBarra(page, { caja });
 });
 
 test("el cajero no entra a la configuración ni al log de ARCA", async ({ browser }) => {

@@ -1,84 +1,101 @@
-import { useState, type SubmitEvent } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState, type KeyboardEvent } from "react";
 import { toast } from "sonner";
-import { Campo } from "@/compartido/componentes/Campo";
 import { ErrorFormulario } from "@/compartido/componentes/ErrorFormulario";
-import { propsError } from "@/compartido/lib/accesibilidad";
+import { clavesDescuentos } from "@/compartido/lib/claves-descuentos";
 import { mensajeDeError } from "@/compartido/lib/errores";
-import { formatearMoneda, formatearNumero } from "@/compartido/lib/formato";
+import { formatearMoneda } from "@/compartido/lib/formato";
 import { cn } from "@/compartido/lib/utils";
+import { LARGO_MAXIMO_PATENTE } from "@/compartido/lib/validaciones";
 import { Button } from "@/compartido/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/compartido/ui/card";
 import { Input } from "@/compartido/ui/input";
+import { Label } from "@/compartido/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/compartido/ui/select";
+  useDescuentosParaServicio,
+  type DescuentoParaServicio,
+} from "@/modulos/descuentos/api/consultas";
 import type { Categoria, Servicio } from "@/modulos/servicios/api/consultas";
 import {
+  esPrecioCambiado,
+  esTurnoNoDisponible,
   MEDIOS_PAGO,
   MENSAJES_ERROR_VENTA,
-  useCertificadoDeServicio,
+  ORDEN_MEDIOS,
   useRegistrarVenta,
+  type CobroVenta,
   type MedioPago,
 } from "../api/consultas";
-import {
-  LARGO_MAXIMO_PATENTE,
-  validarVenta,
-  type ErroresVenta,
-  type FormularioVenta as Formulario,
-} from "../lib/validaciones";
+import { CAMPO_GRANDE } from "../lib/estilos";
+import { MONTOS_VACIOS, revisarPagoMixto, type MontosPagoMixto } from "../lib/pago-mixto";
+import { detallePagos } from "../lib/pagos";
+import { validarVenta } from "../lib/validaciones";
+import { calcularVuelto, limpiarPatente } from "../lib/vuelto";
+import { AvisoCertificado } from "./AvisoCertificado";
+import { BotonVolverPaso } from "./BotonVolverPaso";
+import { DatoVenta } from "./DatoVenta";
+import { ListaOpciones } from "./ListaOpciones";
+import { PasoEfectivo } from "./PasoEfectivo";
+import { PasoPagoMixto } from "./PasoPagoMixto";
+import { UltimaVentaRegistrada, type UltimaVenta } from "./UltimaVentaRegistrada";
 
-const VACIO: Formulario = { servicioId: "", medioPago: "", patente: "" };
-const ORDEN_MEDIOS: readonly MedioPago[] = ["efectivo", "transferencia", "tarjeta"];
+type Paso = "categoria" | "servicio" | "descuento" | "patente" | "medio" | "mixto" | "efectivo";
 
-/** Qué hoja de certificado se va a usar con el servicio elegido (la decide la BD). */
-function AvisoCertificado({ servicio }: { servicio: Servicio }) {
-  const certificado = useCertificadoDeServicio(servicio.requiere_certificado ? servicio.id : null);
-  if (!servicio.requiere_certificado) {
-    return <p className="text-sm text-muted-foreground">Este servicio no lleva certificado.</p>;
-  }
-  if (certificado.isPending) {
-    return <p className="text-sm text-muted-foreground">Buscando el certificado…</p>;
-  }
-  if (certificado.isError) {
-    return <p className="text-sm text-destructive">{mensajeDeError(certificado.error)}</p>;
-  }
-  if (certificado.data === null) {
-    return (
-      <p className="text-sm text-destructive" data-testid="aviso-certificado">
-        No hay un certificado configurado para este servicio. La venta se registra igual y se avisa
-        al administrador.
-      </p>
-    );
-  }
-  const { nombre, stock_hojas } = certificado.data;
-  return stock_hojas > 0 ? (
-    <p className="text-sm text-muted-foreground" data-testid="aviso-certificado">
-      Usa una hoja de “{nombre}” (quedan {formatearNumero(stock_hojas)}).
-    </p>
-  ) : (
-    <p className="text-sm text-destructive" data-testid="aviso-certificado">
-      No quedan hojas de “{nombre}”. La venta se registra igual y se avisa al administrador.
-    </p>
-  );
-}
+type OpcionMedio = MedioPago | "mixto";
 
+const OPCIONES_MEDIO: { valor: OpcionMedio; etiqueta: string }[] = [
+  ...ORDEN_MEDIOS.map((m) => ({ valor: m, etiqueta: MEDIOS_PAGO[m] })),
+  { valor: "mixto", etiqueta: "Mixto" },
+];
+
+/** Valor de la opción "Sin descuento" en la lista (los descuentos tienen id > 0). */
+const SIN_DESCUENTO = 0;
+
+const AVISO_DESCUENTO_NO_DISPONIBLE = "El descuento elegido ya no está disponible: elegí otro.";
+const AVISO_DESCUENTO_SIN_OTROS =
+  "El descuento elegido ya no está disponible y este servicio no tiene otros: la venta sigue sin descuento. Revisá el precio y confirmá.";
+
+/**
+ * Venta paso a paso, pensada para usar solo con el teclado y leer de lejos:
+ * categoría → servicio → (si el servicio tiene) descuento → patente → medio de pago →
+ * (mixto) monto de cada medio → (con efectivo) cuánto entregó y el vuelto.
+ * Números o flechas para marcar, Enter para seguir, Esc para volver.
+ *
+ * Los montos en pantalla son una vista previa (precio del servicio o precio final que calculó la BD
+ * en `descuentos_para_servicio`); lo que se cobra lo decide y lo devuelve `registrar_venta`. La venta
+ * manda el precio que ve el cajero (`p_precio_esperado`): si el admin lo cambió, la BD la rechaza, se
+ * relee el catálogo y el cajero vuelve al descuento (o a la patente) para ver el precio nuevo antes de
+ * confirmar otra vez. Nunca se reintenta sola, y un descuento elegido que dejó de existir nunca se
+ * cobra "sin descuento" sin que el cajero lo vea.
+ *
+ * La venta va al turno de la caja elegida (`turnoId`). Si ese turno ya se cerró, avisa con
+ * `onTurnoNoDisponible` para volver a elegir la caja.
+ */
 export function FormularioVenta({
+  turnoId,
   categorias,
   servicios,
+  onTurnoNoDisponible,
 }: {
+  turnoId: number;
   categorias: Categoria[];
   servicios: Servicio[];
+  onTurnoNoDisponible: (mensaje: string) => void;
 }) {
   const registrar = useRegistrarVenta();
-  const [formulario, setFormulario] = useState<Formulario>(VACIO);
-  const [errores, setErrores] = useState<ErroresVenta>({});
+  const queryClient = useQueryClient();
+  const [paso, setPaso] = useState<Paso>("categoria");
+  const [categoriaId, setCategoriaId] = useState<number | null>(null);
+  const [servicioId, setServicioId] = useState<number | null>(null);
+  const [descuentoId, setDescuentoId] = useState<number | null>(null);
+  const [patente, setPatente] = useState("");
+  const [medio, setMedio] = useState<OpcionMedio | null>(null);
+  const [montosMixto, setMontosMixto] = useState<MontosPagoMixto>(MONTOS_VACIOS);
+  const [erroresMixto, setErroresMixto] = useState(false);
+  const [recibido, setRecibido] = useState("");
+  const [errorRecibido, setErrorRecibido] = useState<string | null>(null);
   const [errorServidor, setErrorServidor] = useState<string | null>(null);
+  const [ultima, setUltima] = useState<UltimaVenta | null>(null);
+  const descuentos = useDescuentosParaServicio(servicioId);
 
   // Solo se ofrece lo que se puede vender: servicio activo de una categoría activa.
   const grupos = categorias
@@ -88,131 +105,450 @@ export function FormularioVenta({
       servicios: servicios.filter((s) => s.activo && s.categoria_id === categoria.id),
     }))
     .filter((g) => g.servicios.length > 0);
-  const servicio = servicios.find((s) => String(s.id) === formulario.servicioId);
+  const grupo = grupos.find((g) => g.categoria.id === categoriaId);
+  const servicio = servicios.find((s) => s.id === servicioId);
 
-  function cambiar<K extends keyof Formulario>(clave: K, valor: Formulario[K]) {
-    setFormulario((actual) => ({ ...actual, [clave]: valor }));
+  const opcionesDescuento = descuentos.data ?? [];
+  const hayDescuentos = opcionesDescuento.length > 0;
+  const descuento = opcionesDescuento.find((d) => d.id === descuentoId) ?? null;
+  // El elegido ya no se ofrece (el admin lo desactivó, lo quitó del servicio o cambió el precio y
+  // ahora redondea a $ 0): no se registra la venta sin él.
+  const descuentoPerdido = descuentoId !== null && descuento === null;
+  // Vista previa: el precio final de la BD con descuento; si no, el precio del servicio.
+  const precioFinal = descuento?.precio_final ?? servicio?.precio ?? 0;
+  const revisionMixto = revisarPagoMixto(montosMixto, precioFinal);
+  const efectivoMixto = revisionMixto.partes.find((p) => p.medio === "efectivo")?.monto ?? 0;
+
+  // Sin descuentos para el servicio (o si no se pudieron leer: la venta no se traba), el paso de
+  // descuento no existe y se sigue con la patente.
+  const sinPasoDescuento = descuentos.isError || (descuentos.isSuccess && !hayDescuentos);
+  const pasoVisible: Paso = paso === "descuento" && sinPasoDescuento ? "patente" : paso;
+
+  function irA(destino: Paso) {
+    setErrorServidor(null);
+    setErrorRecibido(null);
+    setErroresMixto(false);
+    setPaso(destino);
   }
 
-  async function enviar(evento: SubmitEvent<HTMLFormElement>) {
-    evento.preventDefault();
-    const resultado = validarVenta(formulario);
-    setErrores(resultado.errores ?? {});
-    if (!resultado.datos) return;
+  function reiniciar() {
+    setCategoriaId(null);
+    setServicioId(null);
+    setDescuentoId(null);
+    setPatente("");
+    setMedio(null);
+    setMontosMixto(MONTOS_VACIOS);
+    setRecibido("");
+    irA("categoria");
+  }
+
+  /**
+   * Vuelve al paso del descuento (o a la patente, si el servicio ya no tiene) con el mensaje a la
+   * vista: el precio final cambió y el reparto o lo entregado de antes ya no sirven.
+   */
+  function volverARevisar(mensaje: string, { sinDescuento }: { sinDescuento: boolean }) {
+    if (sinDescuento) setDescuentoId(null);
+    setMontosMixto(MONTOS_VACIOS);
+    setRecibido("");
+    irA("descuento");
+    setErrorServidor(mensaje);
+  }
+
+  /** Descuentos vigentes del servicio, ya releídos (`useRegistrarVenta` los invalida en onError). */
+  function descuentosVigentes(id: number): DescuentoParaServicio[] {
+    return (
+      queryClient.getQueryData<DescuentoParaServicio[]>(clavesDescuentos.paraServicio(id)) ?? []
+    );
+  }
+
+  async function confirmar(cobro: CobroVenta, montoRecibido: number | null) {
+    if (!servicio || registrar.isPending) return;
+    if (descuentoPerdido) {
+      volverARevisar(hayDescuentos ? AVISO_DESCUENTO_NO_DISPONIBLE : AVISO_DESCUENTO_SIN_OTROS, {
+        sinDescuento: true,
+      });
+      return;
+    }
+    const resultado = validarVenta({
+      servicioId: servicio.id,
+      cobro,
+      patente,
+      descuentoId: descuento?.id ?? null,
+      precioEsperado: precioFinal,
+    });
+    if (!resultado.datos) {
+      setErrorServidor(Object.values(resultado.errores).join(" "));
+      return;
+    }
     setErrorServidor(null);
     try {
-      const venta = await registrar.mutateAsync(resultado.datos);
+      const venta = await registrar.mutateAsync({ ...resultado.datos, turnoId });
+      // El efectivo cobrado sale de lo que devolvió la BD: el precio registrado o, en un pago mixto,
+      // la parte en efectivo que aceptó (si el precio hubiera cambiado, la BD rechaza el reparto).
+      const efectivo =
+        "medio" in cobro
+          ? cobro.medio === "efectivo"
+            ? venta.precio
+            : null
+          : (cobro.pagos.find((p) => p.medio === "efectivo")?.monto ?? null);
+      const nueva: UltimaVenta = {
+        id: venta.id,
+        servicio: venta.servicio_nombre,
+        precio: venta.precio,
+        descuento:
+          venta.descuento_nombre === null
+            ? null
+            : { nombre: venta.descuento_nombre, monto: venta.monto_descuento },
+        medio: "medio" in cobro ? MEDIOS_PAGO[cobro.medio] : "Mixto",
+        detallePagos: "medio" in cobro ? null : detallePagos(cobro.pagos),
+        efectivo,
+        recibido: montoRecibido,
+        sinStock: venta.sin_stock,
+      };
       const texto = `Venta N° ${String(venta.id)}: ${venta.servicio_nombre} · ${formatearMoneda(venta.precio)}`;
       if (venta.sin_stock) toast.warning(`${texto} (sin hoja de certificado)`);
       else toast.success(texto);
-      setFormulario(VACIO);
-      setErrores({});
+      const vuelto =
+        efectivo !== null && montoRecibido !== null
+          ? calcularVuelto(efectivo, montoRecibido)
+          : null;
+      if (vuelto !== null && vuelto < 0) {
+        toast.warning(
+          `Lo entregado no alcanza para lo registrado: faltan cobrar ${formatearMoneda(-vuelto)}.`,
+        );
+      }
+      setUltima(nueva);
+      reiniciar();
     } catch (e) {
-      setErrorServidor(mensajeDeError(e, MENSAJES_ERROR_VENTA));
+      const mensaje = mensajeDeError(e, MENSAJES_ERROR_VENTA);
+      if (esTurnoNoDisponible(e)) {
+        onTurnoNoDisponible(mensaje);
+        return;
+      }
+      if (!esPrecioCambiado(e)) {
+        setErrorServidor(mensaje);
+        return;
+      }
+      // El catálogo y los descuentos ya se releyeron: el cajero ve el precio nuevo y confirma de nuevo.
+      const vigentes = descuentosVigentes(servicio.id);
+      const sigue = descuentoId === null || vigentes.some((d) => d.id === descuentoId);
+      const aviso = vigentes.length > 0 ? AVISO_DESCUENTO_NO_DISPONIBLE : AVISO_DESCUENTO_SIN_OTROS;
+      volverARevisar(sigue ? mensaje : `${mensaje} ${aviso}`, { sinDescuento: !sigue });
     }
   }
 
+  function elegirMedio(opcion: OpcionMedio) {
+    setMedio(opcion);
+    if (opcion === "efectivo") {
+      setRecibido("");
+      irA("efectivo");
+    } else if (opcion === "mixto") {
+      irA("mixto");
+    } else {
+      void confirmar({ medio: opcion }, null);
+    }
+  }
+
+  function confirmarMixto() {
+    if (!revisionMixto.listo) {
+      setErroresMixto(true);
+      return;
+    }
+    if (efectivoMixto > 0) {
+      setRecibido("");
+      irA("efectivo");
+    } else {
+      void confirmar({ pagos: revisionMixto.partes }, null);
+    }
+  }
+
+  const esMixto = medio === "mixto";
+  const aCobrarEnEfectivo = esMixto ? efectivoMixto : precioFinal;
+  const cobroEnEfectivo: CobroVenta = esMixto
+    ? { pagos: revisionMixto.partes }
+    : { medio: "efectivo" };
+
+  function confirmarEfectivo() {
+    if (recibido === "") {
+      void confirmar(cobroEnEfectivo, null);
+      return;
+    }
+    const monto = Number(recibido);
+    const vuelto = calcularVuelto(aCobrarEnEfectivo, monto);
+    if (vuelto < 0) {
+      setErrorRecibido(`No alcanza: faltan ${formatearMoneda(-vuelto)}.`);
+      return;
+    }
+    void confirmar(cobroEnEfectivo, monto);
+  }
+
+  if (grupos.length === 0) {
+    return (
+      <p className="rounded-lg border p-8 text-center text-2xl text-muted-foreground">
+        No hay servicios para vender. Pedile al administrador que los cargue.
+      </p>
+    );
+  }
+
+  const volverDePatente = () => {
+    irA(hayDescuentos ? "descuento" : "servicio");
+  };
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          <h2>Nueva venta</h2>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {grupos.length === 0 ? (
-          <p className="text-muted-foreground">
-            No hay servicios para vender. Pedile al administrador que los cargue.
-          </p>
-        ) : (
-          <form className="flex flex-col gap-4" onSubmit={(e) => void enviar(e)} noValidate>
-            <Campo id="venta-servicio" etiqueta="Servicio" error={errores.servicioId}>
-              <Select
-                value={formulario.servicioId}
-                onValueChange={(valor) => {
-                  cambiar("servicioId", valor);
-                }}
-              >
-                <SelectTrigger
-                  id="venta-servicio"
-                  className="w-full"
-                  {...propsError("venta-servicio", errores.servicioId)}
-                >
-                  <SelectValue placeholder="Elegí un servicio" />
-                </SelectTrigger>
-                <SelectContent>
-                  {grupos.map(({ categoria, servicios: delGrupo }) => (
-                    <SelectGroup key={categoria.id}>
-                      <SelectLabel>{categoria.nombre}</SelectLabel>
-                      {delGrupo.map((s) => (
-                        <SelectItem key={s.id} value={String(s.id)}>
-                          {s.nombre} · {formatearMoneda(s.precio)}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  ))}
-                </SelectContent>
-              </Select>
-              {servicio && <AvisoCertificado servicio={servicio} />}
-            </Campo>
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]">
+      <section aria-label="Nueva venta" className="flex min-w-0 flex-col gap-4">
+        {pasoVisible === "categoria" && (
+          <ListaOpciones
+            key="categoria"
+            titulo="1. Categoría"
+            opciones={grupos.map((g) => ({ valor: g.categoria.id, etiqueta: g.categoria.nombre }))}
+            inicial={categoriaId ?? undefined}
+            onElegir={(id) => {
+              if (id !== categoriaId) {
+                setServicioId(null);
+                setDescuentoId(null);
+              }
+              setCategoriaId(id);
+              irA("servicio");
+            }}
+          />
+        )}
 
-            <fieldset
-              role="radiogroup"
-              className="flex flex-col gap-2"
-              {...propsError("venta-medio", errores.medioPago)}
-            >
-              <legend className="mb-2 text-sm font-medium">Medio de pago</legend>
-              <div className="grid grid-cols-3 gap-2">
-                {ORDEN_MEDIOS.map((medio) => (
-                  <label
-                    key={medio}
-                    className={cn(
-                      "flex cursor-pointer items-center justify-center gap-2 rounded-md border p-3 text-sm has-[:checked]:border-primary has-[:checked]:bg-accent has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
-                    )}
-                  >
-                    <input
-                      type="radio"
-                      name="medio-pago"
-                      className="sr-only"
-                      value={medio}
-                      checked={formulario.medioPago === medio}
-                      onChange={() => {
-                        cambiar("medioPago", medio);
-                      }}
-                    />
-                    {MEDIOS_PAGO[medio]}
-                  </label>
-                ))}
-              </div>
-              {errores.medioPago && (
-                <p id="venta-medio-error" className="text-sm text-destructive">
-                  {errores.medioPago}
-                </p>
-              )}
-            </fieldset>
+        {pasoVisible === "servicio" && grupo && (
+          <>
+            <BotonVolverPaso
+              onVolver={() => {
+                irA("categoria");
+              }}
+            />
+            <ListaOpciones
+              key={`servicio-${String(grupo.categoria.id)}`}
+              titulo={`2. Servicio · ${grupo.categoria.nombre}`}
+              opciones={grupo.servicios.map((s) => ({
+                valor: s.id,
+                etiqueta: s.nombre,
+                detalle: formatearMoneda(s.precio),
+              }))}
+              inicial={servicioId ?? undefined}
+              onElegir={(id) => {
+                if (id !== servicioId) setDescuentoId(null);
+                setServicioId(id);
+                irA("descuento");
+              }}
+              onVolver={() => {
+                irA("categoria");
+              }}
+            />
+          </>
+        )}
 
-            <Campo id="venta-patente" etiqueta="Patente (opcional)" error={errores.patente}>
-              <Input
-                id="venta-patente"
-                autoComplete="off"
-                className="uppercase"
-                maxLength={LARGO_MAXIMO_PATENTE + 4}
-                placeholder="Ej. AB123CD"
-                value={formulario.patente}
-                onChange={(e) => {
-                  cambiar("patente", e.target.value);
+        {pasoVisible === "descuento" && servicio && (
+          <>
+            <BotonVolverPaso
+              onVolver={() => {
+                irA("servicio");
+              }}
+            />
+            {descuentos.isPending ? (
+              <p className="text-2xl text-muted-foreground">Buscando descuentos…</p>
+            ) : (
+              <ListaOpciones
+                key={`descuento-${String(servicio.id)}`}
+                titulo={`Descuento (opcional) · ${servicio.nombre}`}
+                opciones={[
+                  {
+                    valor: SIN_DESCUENTO,
+                    etiqueta: "Sin descuento",
+                    detalle: formatearMoneda(servicio.precio),
+                  },
+                  ...opcionesDescuento.map((d) => ({
+                    valor: d.id,
+                    etiqueta: d.nombre,
+                    detalle: (
+                      <span className="flex flex-col items-end">
+                        <span className="text-lg">−{formatearMoneda(d.monto_descuento)}</span>
+                        <span>{formatearMoneda(d.precio_final)}</span>
+                      </span>
+                    ),
+                  })),
+                ]}
+                inicial={descuento?.id ?? SIN_DESCUENTO}
+                onElegir={(id) => {
+                  setDescuentoId(id === SIN_DESCUENTO ? null : id);
+                  irA("patente");
                 }}
-                {...propsError("venta-patente", errores.patente)}
+                onVolver={() => {
+                  irA("servicio");
+                }}
               />
-            </Campo>
+            )}
+          </>
+        )}
 
-            <ErrorFormulario mensaje={errorServidor} />
-            <Button type="submit" size="lg" disabled={registrar.isPending}>
-              {registrar.isPending ? "Registrando…" : "Registrar venta"}
+        {pasoVisible === "patente" && (
+          <form
+            className="flex flex-col gap-4"
+            noValidate
+            onSubmit={(e) => {
+              e.preventDefault();
+              irA("medio");
+            }}
+          >
+            <BotonVolverPaso onVolver={volverDePatente} />
+            <Label htmlFor="venta-patente" className="text-2xl font-semibold md:text-3xl">
+              3. Patente (opcional)
+            </Label>
+            <Input
+              id="venta-patente"
+              autoComplete="off"
+              autoCapitalize="characters"
+              spellCheck={false}
+              autoFocus
+              maxLength={LARGO_MAXIMO_PATENTE}
+              placeholder="AB123CD"
+              className={cn(CAMPO_GRANDE, "uppercase")}
+              value={patente}
+              onChange={(e) => {
+                setPatente(limpiarPatente(e.target.value));
+              }}
+              onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  volverDePatente();
+                }
+              }}
+            />
+            <p className="text-base text-muted-foreground">
+              Enter para seguir (vacía si no tiene) · Esc para volver
+            </p>
+            <Button type="submit" size="lg" className="h-14 self-start px-8 text-xl">
+              Continuar
             </Button>
           </form>
         )}
-      </CardContent>
-    </Card>
+
+        {pasoVisible === "medio" && (
+          <>
+            <BotonVolverPaso
+              onVolver={() => {
+                irA("patente");
+              }}
+            />
+            <ListaOpciones
+              key="medio"
+              titulo="4. Medio de pago"
+              horizontal
+              deshabilitada={registrar.isPending}
+              opciones={OPCIONES_MEDIO}
+              inicial={medio ?? undefined}
+              onElegir={elegirMedio}
+              onVolver={() => {
+                irA("patente");
+              }}
+            />
+          </>
+        )}
+
+        {pasoVisible === "mixto" && servicio && (
+          <PasoPagoMixto
+            montos={montosMixto}
+            revision={revisionMixto}
+            mostrarErrores={erroresMixto}
+            ocupado={registrar.isPending}
+            onCambiar={(medioPago, texto) => {
+              setErroresMixto(false);
+              setMontosMixto((actual) => ({ ...actual, [medioPago]: texto }));
+            }}
+            onConfirmar={confirmarMixto}
+            onVolver={() => {
+              irA("medio");
+            }}
+          />
+        )}
+
+        {pasoVisible === "efectivo" && servicio && (
+          <PasoEfectivo
+            aCobrar={aCobrarEnEfectivo}
+            mixto={esMixto}
+            recibido={recibido}
+            error={errorRecibido}
+            ocupado={registrar.isPending}
+            onCambiar={(texto) => {
+              setErrorRecibido(null);
+              setRecibido(texto);
+            }}
+            onConfirmar={confirmarEfectivo}
+            onPagoJusto={() => {
+              setRecibido("");
+              void confirmar(cobroEnEfectivo, null);
+            }}
+            onVolver={() => {
+              irA(esMixto ? "mixto" : "medio");
+            }}
+          />
+        )}
+
+        {registrar.isPending && pasoVisible === "medio" && (
+          <p className="text-2xl text-muted-foreground">Registrando…</p>
+        )}
+        <ErrorFormulario mensaje={errorServidor} />
+      </section>
+
+      <aside className="flex flex-col gap-4">
+        <section
+          aria-labelledby="titulo-venta-en-curso"
+          className="flex flex-col gap-4 rounded-lg border bg-card p-5"
+        >
+          <h2 id="titulo-venta-en-curso" className="text-xl font-semibold text-muted-foreground">
+            Venta en curso
+          </h2>
+          {servicio ? (
+            <dl className="flex flex-col gap-3">
+              <DatoVenta etiqueta="Servicio">{servicio.nombre}</DatoVenta>
+              <div className="flex flex-col">
+                <dt className="text-base text-muted-foreground">
+                  {descuento ? "Precio final" : "Precio"}
+                </dt>
+                <dd className="text-5xl font-bold tabular-nums md:text-6xl" data-testid="precio">
+                  {formatearMoneda(precioFinal)}
+                </dd>
+                {descuento && (
+                  <dd className="text-lg text-muted-foreground" data-testid="descuento-en-curso">
+                    {`Lista ${formatearMoneda(descuento.precio_lista)} · ${descuento.nombre} −${formatearMoneda(descuento.monto_descuento)}`}
+                  </dd>
+                )}
+              </div>
+              {descuentoPerdido && (
+                <p className="text-base text-destructive" data-testid="descuento-perdido">
+                  El descuento elegido ya no está disponible.
+                </p>
+              )}
+              {descuentos.isError && (
+                <p className="text-base text-destructive">
+                  No se pudieron cargar los descuentos: {mensajeDeError(descuentos.error)}
+                </p>
+              )}
+              {(pasoVisible === "medio" ||
+                pasoVisible === "mixto" ||
+                pasoVisible === "efectivo") && (
+                <DatoVenta etiqueta="Patente">{patente || "—"}</DatoVenta>
+              )}
+              {pasoVisible === "efectivo" && (
+                <DatoVenta etiqueta="Medio">
+                  {esMixto ? `Mixto: ${detallePagos(revisionMixto.partes)}` : "Efectivo"}
+                </DatoVenta>
+              )}
+              <AvisoCertificado servicio={servicio} />
+            </dl>
+          ) : (
+            <p className="text-xl text-muted-foreground">
+              {grupo ? `Categoría: ${grupo.categoria.nombre}` : "Elegí una categoría para empezar."}
+            </p>
+          )}
+        </section>
+
+        {ultima && <UltimaVentaRegistrada venta={ultima} />}
+      </aside>
+    </div>
   );
 }

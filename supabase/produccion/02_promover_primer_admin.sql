@@ -13,12 +13,13 @@
 
 do $$
 declare
-  v_email  text := 'admin@test.com';   -- <<< email del primer admin
-  v_nombre text := 'Administrador';             -- <<< nombre que se mostrará en la app
+  v_email  text := 'CAMBIAR@tu-dominio.com';   -- <<< email del primer admin
+  v_nombre   text := 'Nombre';    -- <<< nombre que se mostrará en la app
+  v_apellido text := 'Apellido';  -- <<< apellido
   v_id     uuid;
 begin
-  if v_email = 'CAMBIAR@tu-dominio.com' then
-    raise exception 'Reemplazá el email de ejemplo por el del usuario real';
+  if v_email = 'CAMBIAR@tu-dominio.com' or v_nombre = 'Nombre' or v_apellido = 'Apellido' then
+    raise exception 'Reemplazá el email, el nombre y el apellido de ejemplo por los del usuario real';
   end if;
 
   select id into v_id from auth.users where lower(email) = lower(btrim(v_email));
@@ -29,15 +30,16 @@ begin
   -- Rol en app_metadata (solo editable por el servidor, nunca por el usuario).
   update auth.users
   set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"rol": "admin"}'::jsonb,
-      raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('nombre', v_nombre)
+      raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('nombre', v_nombre, 'apellido', v_apellido)
   where id = v_id;
 
   -- El perfil lo crea un trigger; si el usuario se creó ANTES del esquema, lo creamos acá.
-  insert into public.perfiles (id, nombre, email, rol, activo)
-  values (v_id, v_nombre, lower(btrim(v_email)), 'admin', true)
-  on conflict (id) do update set rol = 'admin', activo = true, nombre = excluded.nombre;
+  insert into public.perfiles (id, nombre, apellido, email, rol, activo)
+  values (v_id, v_nombre, v_apellido, lower(btrim(v_email)), 'admin', true)
+  on conflict (id) do update
+    set rol = 'admin', activo = true, nombre = excluded.nombre, apellido = excluded.apellido;
 end;
 $$;
 
 -- Verificación: tiene que aparecer el usuario con rol admin y activo = true.
-select id, nombre, email, rol, activo from public.perfiles where rol = 'admin';
+select id, nombre, apellido, email, rol, activo from public.perfiles where rol = 'admin';

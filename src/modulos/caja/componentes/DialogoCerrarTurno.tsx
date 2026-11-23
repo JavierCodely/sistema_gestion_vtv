@@ -13,41 +13,55 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/compartido/ui/dialog";
-import { useCerrarTurno } from "../api/consultas";
+import { useCerrarTurno, type TurnoAbiertoResumen } from "../api/consultas";
 import { LARGO_MAXIMO_OBSERVACIONES, validarObservaciones } from "../lib/validaciones";
+import { ElegirTurnoAbierto } from "./ElegirTurnoAbierto";
 
-/**
- * Cierra un turno. Sin `turnoId` cierra el propio; con `turnoId` (admin) cierra el de otro.
- * No muestra totales: el cajero no los ve.
- */
+type Destino =
+  /** Cierra ese turno (ej. "Cerrar este turno" en el detalle). */
+  | { turnoId: number; turnos?: undefined }
+  /** Elige cuál de los turnos abiertos cierra (si hay uno solo, ya queda elegido). */
+  | { turnos: TurnoAbiertoResumen[]; turnoId?: undefined };
+
+/** Cierra el turno de una caja (solo admin): uno dado o uno elegido de la lista de turnos abiertos. */
 export function DialogoCerrarTurno({
-  turnoId,
   descripcion,
   onCerrado,
   onCerrar,
-}: {
-  turnoId?: number;
+  ...destino
+}: Destino & {
   descripcion: string;
   onCerrado?: () => void;
   onCerrar: () => void;
 }) {
   const cerrar = useCerrarTurno();
+  const turnos = destino.turnos;
+  const [elegido, setElegido] = useState<number | null>(() =>
+    turnos?.length === 1 && turnos[0] ? turnos[0].id : null,
+  );
   const [observaciones, setObservaciones] = useState("");
   const [error, setError] = useState<string | undefined>();
+  const [errorTurno, setErrorTurno] = useState<string | undefined>();
   const [errorServidor, setErrorServidor] = useState<string | null>(null);
+
+  // El elegido tiene que seguir en la lista (otro pudo cerrarlo mientras tanto).
+  const turnoElegido = turnos?.find((t) => t.id === elegido);
+  const turnoId = turnos ? turnoElegido?.id : destino.turnoId;
 
   async function enviar(evento: SubmitEvent<HTMLFormElement>) {
     evento.preventDefault();
     const problema = validarObservaciones(observaciones);
+    const faltaTurno =
+      turnos && turnoId === undefined ? "Elegí el turno que querés cerrar." : undefined;
     setError(problema);
-    if (problema) return;
+    setErrorTurno(faltaTurno);
+    if (problema || faltaTurno || turnoId === undefined) return;
     setErrorServidor(null);
     try {
-      await cerrar.mutateAsync({
-        observaciones: observaciones.trim(),
-        ...(turnoId !== undefined && { turnoId }),
-      });
-      toast.success("Turno cerrado");
+      await cerrar.mutateAsync({ observaciones: observaciones.trim(), turnoId });
+      toast.success(
+        turnoElegido ? `Turno de ${turnoElegido.caja_nombre} cerrado` : "Turno cerrado",
+      );
       onCerrado?.();
       onCerrar();
     } catch (e) {
@@ -59,7 +73,8 @@ export function DialogoCerrarTurno({
     <Dialog
       open
       onOpenChange={(abierto) => {
-        if (!abierto) onCerrar();
+        // Mientras cierra no se descarta: el resultado (o el error) se tiene que ver.
+        if (!abierto && !cerrar.isPending) onCerrar();
       }}
     >
       <DialogContent>
@@ -68,6 +83,17 @@ export function DialogoCerrarTurno({
           <DialogDescription>{descripcion}</DialogDescription>
         </DialogHeader>
         <form className="flex flex-col gap-4" onSubmit={(e) => void enviar(e)} noValidate>
+          {turnos && (
+            <ElegirTurnoAbierto
+              turnos={turnos}
+              elegido={turnoElegido?.id ?? null}
+              error={errorTurno}
+              onElegir={(id) => {
+                setElegido(id);
+                setErrorTurno(undefined);
+              }}
+            />
+          )}
           <Campo id="cierre-observaciones" etiqueta="Observaciones (opcional)" error={error}>
             <textarea
               id="cierre-observaciones"
@@ -83,7 +109,7 @@ export function DialogoCerrarTurno({
           </Campo>
           <ErrorFormulario mensaje={errorServidor} />
           <DialogFooter>
-            <Button type="submit" disabled={cerrar.isPending}>
+            <Button type="submit" disabled={cerrar.isPending || turnos?.length === 0}>
               {cerrar.isPending ? "Cerrando…" : "Cerrar turno"}
             </Button>
           </DialogFooter>

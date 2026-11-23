@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DialogoCompra } from "@/modulos/certificados/componentes/DialogoCompra";
@@ -55,7 +55,7 @@ describe("DialogoCompra", () => {
     await elegirFuente("Transferencia");
     await userEvent.type(screen.getByLabelText("Proveedor (opcional)"), "Imprenta Sur");
     await userEvent.click(screen.getByRole("button", { name: "Registrar compra" }));
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(onCerrar).toHaveBeenCalled();
     });
     expect(argumentosRpc("registrar_compra_certificado")).toEqual({
@@ -119,7 +119,7 @@ describe("DialogoCompra en modo edición", () => {
     await userEvent.clear(screen.getByLabelText("Proveedor (opcional)"));
     await userEvent.type(screen.getByLabelText("Motivo de la corrección"), " Era otra cantidad ");
     await userEvent.click(screen.getByRole("button", { name: "Guardar corrección" }));
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(onCerrar).toHaveBeenCalled();
     });
     expect(argumentosRpc("corregir_compra_certificado")).toEqual({

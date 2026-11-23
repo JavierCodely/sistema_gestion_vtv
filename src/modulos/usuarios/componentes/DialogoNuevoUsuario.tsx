@@ -25,7 +25,7 @@ import { useAccionUsuario } from "../api/consultas";
 import { validarUsuarioNuevo, type DatosUsuarioNuevo } from "../lib/validaciones";
 import { SelectorRol } from "./SelectorRol";
 
-const VACIO: DatosUsuarioNuevo = { nombre: "", email: "", password: "" };
+const VACIO: DatosUsuarioNuevo = { nombre: "", apellido: "", email: "", password: "" };
 
 export function DialogoNuevoUsuario({
   abierto,
@@ -58,7 +58,7 @@ export function DialogoNuevoUsuario({
     setErrorServidor(null);
     try {
       const usuario = await mutacion.mutateAsync({ accion: "crear", ...datos, rol });
-      toast.success(`Usuario ${usuario.nombre} creado`);
+      toast.success(`Usuario ${usuario.nombre_completo} creado`);
       cambiarAbierto(false);
     } catch (e) {
       setErrorServidor(mensajeDeError(e));
@@ -84,6 +84,9 @@ export function DialogoNuevoUsuario({
         <form className="flex flex-col gap-4" onSubmit={(e) => void enviar(e)} noValidate>
           <Campo id="nuevo-nombre" etiqueta="Nombre" error={errores.nombre}>
             <Input {...campo("nombre")} autoFocus maxLength={LARGO_MAXIMO_NOMBRE} />
+          </Campo>
+          <Campo id="nuevo-apellido" etiqueta="Apellido" error={errores.apellido}>
+            <Input {...campo("apellido")} maxLength={LARGO_MAXIMO_NOMBRE} />
           </Campo>
           <Campo id="nuevo-email" etiqueta="Email" error={errores.email}>
             <Input

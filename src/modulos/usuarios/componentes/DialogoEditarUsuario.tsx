@@ -18,6 +18,7 @@ import {
 import { Input } from "@/compartido/ui/input";
 import type { UsuarioAdmin } from "../api/admin-usuarios";
 import { useAccionUsuario } from "../api/consultas";
+import { validarApellido } from "../lib/validaciones";
 import { SelectorRol } from "./SelectorRol";
 
 export function DialogoEditarUsuario({
@@ -31,18 +32,28 @@ export function DialogoEditarUsuario({
 }) {
   const mutacion = useAccionUsuario();
   const [nombre, setNombre] = useState(usuario.nombre);
+  const [apellido, setApellido] = useState(usuario.apellido ?? "");
   const [rol, setRol] = useState<Rol>(usuario.rol);
   const [error, setError] = useState<string | undefined>();
+  const [errorApellido, setErrorApellido] = useState<string | undefined>();
   const [errorServidor, setErrorServidor] = useState<string | null>(null);
 
   async function enviar(evento: SubmitEvent<HTMLFormElement>) {
     evento.preventDefault();
     const errorNombre = validarNombre(nombre);
+    const errorDeApellido = validarApellido(apellido);
     setError(errorNombre);
-    if (errorNombre) return;
+    setErrorApellido(errorDeApellido);
+    if (errorNombre || errorDeApellido) return;
     setErrorServidor(null);
     try {
-      await mutacion.mutateAsync({ accion: "actualizar", id: usuario.id, nombre, rol });
+      await mutacion.mutateAsync({
+        accion: "actualizar",
+        id: usuario.id,
+        nombre,
+        apellido,
+        rol,
+      });
       toast.success("Cambios guardados");
       onCerrar();
     } catch (e) {
@@ -73,6 +84,17 @@ export function DialogoEditarUsuario({
                 setNombre(e.target.value);
               }}
               {...propsError("editar-nombre", error)}
+            />
+          </Campo>
+          <Campo id="editar-apellido" etiqueta="Apellido" error={errorApellido}>
+            <Input
+              id="editar-apellido"
+              maxLength={LARGO_MAXIMO_NOMBRE}
+              value={apellido}
+              onChange={(e) => {
+                setApellido(e.target.value);
+              }}
+              {...propsError("editar-apellido", errorApellido)}
             />
           </Campo>
           <Campo id="editar-rol" etiqueta="Rol">

@@ -14,10 +14,10 @@ select _arca_guardar_credenciales('CERT', 'CLAVE', '30712345671', 'CUIT 30712345
   now() + interval '1 year', :'admin');
 reset role;
 
-select pg_temp.como(:'cajero');
-select abrir_turno(:caja);
-select (registrar_venta(:servicio, 'efectivo')).id as v1 \gset
-select (registrar_venta(:servicio, 'efectivo')).id as v2 \gset
+reset role;
+select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja) as turno \gset
+select (registrar_venta(:turno, :servicio, 'efectivo')).id as v1 \gset
+select (registrar_venta(:turno, :servicio, 'efectivo')).id as v2 \gset
 select (preparar_factura(:v1, 5, 99::smallint, 0)).id as f1 \gset
 select (preparar_factura(:v2, 5, 99::smallint, 0)).id as f2 \gset
 reset role;

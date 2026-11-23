@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Cajas } from "@/modulos/cajas/paginas/Cajas";
@@ -45,7 +45,7 @@ describe("Cajas", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Nueva caja" }));
     await userEvent.type(screen.getByLabelText("Nombre"), "Caja 3");
     await userEvent.click(screen.getByRole("button", { name: "Crear caja" }));
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
     expect(argumentosDe("cajas", "insert")).toEqual([{ nombre: "Caja 3" }]);
