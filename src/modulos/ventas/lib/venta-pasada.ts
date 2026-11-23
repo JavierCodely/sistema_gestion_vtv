@@ -9,6 +9,12 @@ import type { MedioPago } from "@/modulos/caja/api/consultas";
 import type { DatosVentaPasada } from "../api/consultas";
 
 /** Igual que `registrar_venta_pasada`: no antes de esta fecha. */
+/**
+ * Hora que se usa si no se elige ninguna: el comienzo del día. La venta queda en el día de negocio
+ * elegido y, aunque sea hoy, siempre es anterior a este momento (lo exige la BD).
+ */
+export const HORA_SIN_ELEGIR = "00:00";
+
 export const FECHA_MINIMA_VENTA_PASADA = "2000-01-01";
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -46,7 +52,9 @@ export function validarVentaPasada(
   else if (formulario.fecha < FECHA_MINIMA_VENTA_PASADA)
     errores.fecha = "La fecha no puede ser anterior al 01/01/2000.";
 
-  if (!HORA.test(formulario.hora)) errores.hora = "Elegí la hora de la venta.";
+  // La hora es opcional: vacía = comienzo del día.
+  const hora = formulario.hora.trim() === "" ? HORA_SIN_ELEGIR : formulario.hora;
+  if (!HORA.test(hora)) errores.hora = "La hora no es válida.";
 
   const cajaId = idValido(formulario.cajaId);
   if (cajaId === undefined) errores.cajaId = "Elegí una caja.";
@@ -74,7 +82,7 @@ export function validarVentaPasada(
   return {
     datos: {
       fecha: formulario.fecha,
-      hora: formulario.hora,
+      hora,
       cajaId,
       servicioId,
       medioPago: formulario.medioPago,

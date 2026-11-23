@@ -29,7 +29,7 @@ describe("validarVentaPasada", () => {
     });
   });
 
-  it("todo es obligatorio salvo la patente", () => {
+  it("todo es obligatorio salvo la hora y la patente", () => {
     const { errores, datos } = validarVentaPasada(
       { fecha: "", hora: "", cajaId: "", servicioId: "", medioPago: "", precio: "", patente: "" },
       HOY,
@@ -37,7 +37,6 @@ describe("validarVentaPasada", () => {
     expect(datos).toBeUndefined();
     expect(errores).toEqual({
       fecha: "Elegí la fecha de la venta.",
-      hora: "Elegí la hora de la venta.",
       cajaId: "Elegí una caja.",
       servicioId: "Elegí un servicio.",
       medioPago: "Elegí el medio de pago.",
@@ -65,13 +64,18 @@ describe("validarVentaPasada", () => {
     );
   });
 
+  it("sin hora, la venta queda al comienzo del día (00:00)", () => {
+    expect(validarVentaPasada(completo({ hora: "" }), HOY).datos?.hora).toBe("00:00");
+    expect(validarVentaPasada(completo({ fecha: HOY, hora: "  " }), HOY).datos?.hora).toBe("00:00");
+  });
+
   it("hora mal formada y patente larga", () => {
     const { errores } = validarVentaPasada(
       completo({ hora: "25:00", patente: "ABC123456789" }),
       HOY,
     );
     expect(errores).toEqual({
-      hora: "Elegí la hora de la venta.",
+      hora: "La hora no es válida.",
       patente: "La patente no puede superar los 10 caracteres.",
     });
   });
