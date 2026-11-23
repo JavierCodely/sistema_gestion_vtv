@@ -33,12 +33,6 @@ export interface FiltroImpuestos {
   turnoId: number | null;
 }
 
-/** Turno para el filtro del reporte (caja y apertura). */
-export type TurnoDelPeriodo = Pick<
-  Database["public"]["Views"]["v_turnos"]["Row"],
-  "id" | "caja_nombre" | "abierto_en"
->;
-
 export const TIPOS_IMPUESTO: Record<TipoImpuesto, string> = {
   porcentaje: "Porcentaje",
   monto_fijo: "Monto fijo por venta",
@@ -113,23 +107,6 @@ export function useResumenImpuestos(filtro: FiltroImpuestos | null) {
         total: data.find((f) => f.agrupacion === "total") ?? null,
         porImpuesto: data.filter((f) => f.agrupacion === "impuesto"),
       };
-    },
-  });
-}
-
-/** Turnos abiertos (fecha de apertura) en el período, del más nuevo al más viejo. Solo admin. */
-export function useTurnosDelPeriodo(rango: RangoFechas) {
-  return useQuery({
-    queryKey: clavesImpuestos.turnosDelPeriodo(rango.desde, rango.hasta),
-    queryFn: async (): Promise<TurnoDelPeriodo[]> => {
-      const { data, error } = await supabase
-        .from("v_turnos")
-        .select("id, caja_nombre, abierto_en")
-        .gte("fecha_apertura", rango.desde)
-        .lte("fecha_apertura", rango.hasta)
-        .order("abierto_en", { ascending: false });
-      if (error) throw error;
-      return data;
     },
   });
 }

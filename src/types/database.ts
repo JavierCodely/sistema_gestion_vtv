@@ -1593,6 +1593,9 @@ isOneToOne: false
 "_validar_pagos_mixtos":
 { Args: { "p_pagos": Json }; Returns: Json
                            },
+"_validar_rango_reporte":
+{ Args: { "p_desde": string,"p_hasta": string }; Returns: undefined
+                           },
 "_verificar_pagos_venta":
 { Args: { "p_venta_id": number }; Returns: undefined
                            },
@@ -2065,6 +2068,11 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"resumen_dashboard":
+{ Args: { "p_desde"?: string,"p_hasta"?: string,"p_turno_id"?: number }; Returns: {
+              "agrupacion": string,"cantidad": number,"id": number,"nombre": string,"total": number,"total_descontado": number
+            }[]
+                           },
 "resumen_descuentos":
 { Args: { "p_desde"?: string,"p_hasta"?: string }; Returns: {
               "agrupacion": string,"cantidad_ventas": number,"id": number,"nombre": string,"total_descontado": number
@@ -2078,6 +2086,11 @@ isOneToOne: false
 "resumen_fondos":
 { Args: { "p_desde"?: string,"p_hasta"?: string }; Returns: {
               "cantidad_movimientos": number,"cuenta": Database["public"]['Enums']["cuenta_fondos"],"egresos": number,"ingresos": number,"neto": number,"saldo": number
+            }[]
+                           },
+"resumen_gastos":
+{ Args: { "p_desde"?: string,"p_hasta"?: string,"p_turno_id"?: number }; Returns: {
+              "agrupacion": string,"cantidad": number,"id": number,"nombre": string,"total": number
             }[]
                            },
 "resumen_impuestos":
@@ -2109,6 +2122,11 @@ isOneToOne: false
 "turnos_abiertos":
 { Args: Record<PropertyKey, never>; Returns: {
               "abierto_en": string,"caja_id": number,"caja_nombre": string,"id": number
+            }[]
+                           },
+"ventas_por_dia":
+{ Args: { "p_desde": string,"p_hasta": string }; Returns: {
+              "cantidad": number,"fecha": string,"total": number
             }[]
                            }
           }

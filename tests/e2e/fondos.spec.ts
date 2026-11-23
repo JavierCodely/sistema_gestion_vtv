@@ -105,7 +105,7 @@ test("fondos: ventas por transferencia, tarjeta y mixta, un gasto y un saldo ini
   await expect(page).toHaveURL("/admin/fondos?pestana=mixto");
   const mixtasAntes = await leer(page, "mixtas-cantidad");
 
-  // --- Cajero: una venta por transferencia, una con tarjeta y una mixta (transferencia + tarjeta)
+  // --- Cajero: una venta por transferencia, una con tarjeta y una mixta (efectivo + tarjeta: en la caja el mixto es efectivo + otro medio)
   const contextoCajero = await browser.newContext();
   const pc = await contextoCajero.newPage();
   await ingresar(pc, CAJERO);
@@ -133,14 +133,20 @@ test("fondos: ventas por transferencia, tarjeta y mixta, un gasto y un saldo ini
   await expect(pc.getByRole("listbox", { name: "4. Medio de pago" })).toBeFocused();
   await pc.keyboard.press("4");
   await pc.keyboard.press("Enter");
-  await pc.getByLabel("Transferencia ($)").fill("8.000");
-  await pc.getByLabel("Tarjeta ($)").fill("12.000");
-  await expect(pc.getByText("Cierra justo")).toBeVisible();
+  await expect(pc.getByLabel("5. Pago mixto: ¿cuánto paga en efectivo? ($)")).toBeFocused();
+  await pc.keyboard.type("8.000");
+  await expect(pc.getByTestId("resto-mixto")).toHaveText(/\$\s?12\.000,00/);
+  await pc.keyboard.press("Enter");
+  await expect(pc.getByRole("listbox", { name: "5. ¿Con qué paga el resto?" })).toBeFocused();
+  await pc.keyboard.press("2");
+  await pc.keyboard.press("Enter");
+  // Pagó justo el efectivo
+  await expect(pc.getByLabel("6. ¿Cuánto te entregó en efectivo? ($)")).toBeFocused();
   await pc.keyboard.press("Enter");
   // (Los avisos de las ventas anteriores pueden seguir en pantalla: se mira la "Última venta".)
   const ultima = pc.getByTestId("ultima-venta");
   await expect(ultima).toContainText(servicio);
-  await expect(ultima).toContainText(/Transferencia \$\s?8\.000,00 \+ Tarjeta \$\s?12\.000,00/);
+  await expect(ultima).toContainText(/Efectivo \$\s?8\.000,00 \+ Tarjeta \$\s?12\.000,00/);
   await contextoCajero.close();
 
   // --- Admin: un gasto por transferencia ($ 3.000) desde Gastos
@@ -169,20 +175,21 @@ test("fondos: ventas por transferencia, tarjeta y mixta, un gasto y un saldo ini
   await saldoInicial.getByRole("button", { name: "Guardar" }).click();
   await expect(page.getByText("Saldo inicial registrado en transferencias.")).toBeVisible();
 
-  // --- Totales: transferencia +20.000 (venta) +8.000 (mixta) +50.000 (saldo inicial) −3.000 (gasto)
+  // --- Totales: transferencia +20.000 (venta) +50.000 (saldo inicial) −3.000 (gasto); la parte en
+  // efectivo de la mixta queda en el cajón (entra a la cuenta efectivo al cerrar el turno)
   await esperarMonto(
     page,
     "resumen-transferencia-ingresos",
-    antes.transferenciaIngresos + 20_000 + 8_000 + 50_000,
+    antes.transferenciaIngresos + 20_000 + 50_000,
   );
   await esperarMonto(page, "resumen-transferencia-egresos", antes.transferenciaEgresos + 3_000);
-  await esperarMonto(page, "resumen-transferencia-saldo", antes.transferenciaSaldo + 75_000);
-  await esperarMonto(page, "saldo-transferencia", antes.transferenciaSaldo + 75_000);
+  await esperarMonto(page, "resumen-transferencia-saldo", antes.transferenciaSaldo + 67_000);
+  await esperarMonto(page, "saldo-transferencia", antes.transferenciaSaldo + 67_000);
   // Tarjeta: +20.000 (venta) +12.000 (mixta)
   await esperarMonto(page, "resumen-tarjeta-ingresos", antes.tarjetaIngresos + 32_000);
   await esperarMonto(page, "resumen-tarjeta-saldo", antes.tarjetaSaldo + 32_000);
 
-  // --- Libro de transferencias: cada movimiento con su signo y la mixta marcada
+  // --- Libro de transferencias: cada movimiento con su signo (la mixta no pasó por transferencia)
   await expect(page.getByTestId("periodo-libro-transferencia")).toHaveText(
     /^Del \d{2}\/\d{2}\/\d{4} al \d{2}\/\d{2}\/\d{4}$/,
   );
@@ -191,9 +198,7 @@ test("fondos: ventas por transferencia, tarjeta y mixta, un gasto y un saldo ini
   await expect(ventaTransferencia).toContainText("Venta");
   await expect(ventaTransferencia).toContainText(caja);
   await expect(ventaTransferencia).toContainText(/\+\$\s?20\.000,00/);
-  const ventaMixta = libro.getByRole("row").filter({ hasText: patenteMixta });
-  await expect(ventaMixta).toContainText("Mixto");
-  await expect(ventaMixta).toContainText(/\+\$\s?8\.000,00/);
+  await expect(libro.getByRole("row").filter({ hasText: patenteMixta })).toHaveCount(0);
   const filaGasto = libro.getByRole("row").filter({ hasText: notaGasto });
   await expect(filaGasto).toContainText("Gasto");
   await expect(filaGasto).toContainText(subcategoria);

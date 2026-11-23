@@ -56,6 +56,8 @@ export const claves = {
   resumen: (rango: RangoFechas) => ["turnos", "resumen", rango.desde, rango.hasta] as const,
   turno: (id: number) => ["turnos", "detalle", id] as const,
   ventasPasadas: ["turnos", "ventas-pasadas"] as const,
+  /** Turnos abiertos en un período, para los filtros de los reportes (impuestos, dashboard). */
+  delPeriodo: (rango: RangoFechas) => ["turnos", "periodo", rango.desde, rango.hasta] as const,
 };
 
 const COLUMNAS_TURNO =
@@ -207,5 +209,25 @@ export function useRegistrarVentaPasada() {
         queryClient.invalidateQueries({ queryKey: claveFondos }),
         queryClient.invalidateQueries({ queryKey: clavesImpuestos.resumenes }),
       ]),
+  });
+}
+
+/** Turno para elegir en un filtro: caja y apertura (sin dinero). */
+export type TurnoDelPeriodo = Pick<FilaTurno, "id" | "caja_nombre" | "abierto_en">;
+
+/** Turnos abiertos en el período (fecha de apertura), del más nuevo al más viejo (admin). */
+export function useTurnosDelPeriodo(rango: RangoFechas) {
+  return useQuery({
+    queryKey: claves.delPeriodo(rango),
+    queryFn: async (): Promise<TurnoDelPeriodo[]> => {
+      const { data, error } = await supabase
+        .from("v_turnos")
+        .select("id, caja_nombre, abierto_en")
+        .gte("fecha_apertura", rango.desde)
+        .lte("fecha_apertura", rango.hasta)
+        .order("abierto_en", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
   });
 }

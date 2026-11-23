@@ -469,61 +469,61 @@ describe("FormularioVenta: descuentos", () => {
 });
 
 describe("FormularioVenta: pago mixto", () => {
-  it("muestra cuánto falta o sobra y no confirma hasta que cierra", async () => {
-    renderFormulario();
-    await hastaElMedio("4");
-    const efectivo = await screen.findByLabelText("Efectivo ($)");
-    expect(efectivo).toHaveFocus();
-    expect(screen.getByText("Falta")).toBeInTheDocument();
-    expect(normal(screen.getByTestId("diferencia-mixto").textContent)).toBe("$ 30.000,00");
-
-    // Un solo medio no alcanza para un pago mixto
-    await userEvent.keyboard("30.000{Enter}");
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Cargá el monto de al menos dos medios de pago.",
-    );
-
-    await userEvent.clear(efectivo);
-    await userEvent.type(efectivo, "5.000");
-    await userEvent.type(screen.getByLabelText("Tarjeta ($)"), "13000");
-    expect(screen.getByText("Falta")).toBeInTheDocument();
-    expect(normal(screen.getByTestId("diferencia-mixto").textContent)).toBe("$ 12.000,00");
-    await userEvent.keyboard("{Enter}");
-    expect(screen.getByRole("alert")).toHaveTextContent("Los montos no llegan al precio.");
-
-    await userEvent.type(screen.getByLabelText("Transferencia ($)"), "12.500,50");
-    expect(screen.getByText("Sobra")).toBeInTheDocument();
-    expect(normal(screen.getByTestId("diferencia-mixto").textContent)).toBe("$ 500,50");
-    await userEvent.keyboard("{Enter}");
-    expect(screen.getByRole("alert")).toHaveTextContent("Los montos superan el precio.");
-
-    await userEvent.clear(screen.getByLabelText("Transferencia ($)"));
-    await userEvent.type(screen.getByLabelText("Transferencia ($)"), "1,2,3");
-    await userEvent.keyboard("{Enter}");
-    expect(screen.getByText("El monto no es válido.")).toBeInTheDocument();
-    expect(argumentosRpc("registrar_venta")).toBeUndefined();
-
-    // Esc vuelve al medio de pago
-    await userEvent.keyboard("{Escape}");
-    expect(await screen.findByRole("listbox", { name: "4. Medio de pago" })).toBeInTheDocument();
-  });
-
-  it("sin efectivo, cuando cierra registra la venta con las partes", async () => {
+  it("se escribe el efectivo, el resto se calcula solo y se elige con 1/2 o flechas", async () => {
     responderRpc("registrar_venta", { data: ventaRegistrada() });
     renderFormulario();
     await hastaElMedio("4");
-    await screen.findByLabelText("Efectivo ($)");
-    await userEvent.type(screen.getByLabelText("Transferencia ($)"), "10.000,50");
-    await userEvent.type(screen.getByLabelText("Tarjeta ($)"), "19999,50");
-    expect(screen.getByText("Cierra justo")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Registrar venta" })).toBeInTheDocument();
+    const efectivo = await screen.findByLabelText("5. Pago mixto: ¿cuánto paga en efectivo? ($)");
+    expect(efectivo).toHaveFocus();
+    expect(screen.getByTestId("resto-mixto")).toHaveTextContent("—");
+
+    // Sin efectivo, mal escrito o que cubre todo el precio: no sigue
+    await userEvent.keyboard("{Enter}");
+    expect(screen.getByRole("alert")).toHaveTextContent("Escribí cuánto paga en efectivo.");
+    await userEvent.keyboard("1,2,3{Enter}");
+    expect(screen.getByRole("alert")).toHaveTextContent("El monto no es válido.");
+    await userEvent.clear(efectivo);
+    await userEvent.keyboard("30.000{Enter}");
+    expect(normal(screen.getByRole("alert").textContent)).toBe(
+      "El efectivo tiene que ser menor que el precio ($ 30.000,00). Si paga todo en efectivo, volvé y elegí Efectivo.",
+    );
+
+    await userEvent.clear(efectivo);
+    await userEvent.keyboard("10.000,50");
+    expect(normal(screen.getByTestId("resto-mixto").textContent)).toBe("$ 19.999,50");
+    await userEvent.keyboard("{Enter}");
+
+    const resto = await screen.findByRole("listbox", { name: "5. ¿Con qué paga el resto?" });
+    expect(resto).toHaveFocus();
+    expect(opciones(resto)).toEqual(["1Transferencia$ 19.999,50", "2Débito / Crédito$ 19.999,50"]);
+    // Flechas y números marcan; Esc vuelve a corregir el efectivo con lo escrito
+    await userEvent.keyboard("{ArrowRight}");
+    expect(screen.getByRole("option", { name: /Débito/ })).toHaveAttribute("aria-selected", "true");
+    await userEvent.keyboard("1");
+    expect(screen.getByRole("option", { name: /Transferencia/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await userEvent.keyboard("{Escape}");
+    expect(
+      await screen.findByLabelText("5. Pago mixto: ¿cuánto paga en efectivo? ($)"),
+    ).toHaveValue("10.000,50");
+    await userEvent.keyboard("{Enter}");
+    await screen.findByRole("listbox", { name: "5. ¿Con qué paga el resto?" });
+    await userEvent.keyboard("2{Enter}");
+
+    // Después pide cuánto entregó en efectivo; pagó justo
+    expect(await screen.findByLabelText("6. ¿Cuánto te entregó en efectivo? ($)")).toHaveFocus();
+    expect(normal(screen.getByTestId("efectivo-a-cobrar").textContent)).toBe(
+      "Efectivo a cobrar: $ 10.000,50",
+    );
     await userEvent.keyboard("{Enter}");
     await waitFor(() => {
       expect(argumentosRpc("registrar_venta")).toEqual({
         p_turno_id: TURNO_ID,
         p_servicio_id: 1,
         p_pagos: [
-          { medio: "transferencia", monto: 10000.5 },
+          { medio: "efectivo", monto: 10000.5 },
           { medio: "tarjeta", monto: 19999.5 },
         ],
         p_precio_esperado: 30000,
@@ -531,27 +531,25 @@ describe("FormularioVenta: pago mixto", () => {
     });
     const ultima = normal((await screen.findByTestId("ultima-venta")).textContent);
     expect(ultima).toContain("Mixto");
-    expect(ultima).toContain("Transferencia $ 10.000,50 + Tarjeta $ 19.999,50");
-    expect(ultima).not.toContain("Vuelto");
+    expect(ultima).toContain("Efectivo $ 10.000,50 + Tarjeta $ 19.999,50");
   });
 
-  it("con parte en efectivo pide cuánto entregó y da el vuelto sobre esa parte", async () => {
+  it("con descuento: el resto sale del precio final y da el vuelto sobre el efectivo", async () => {
     responderRpc("descuentos_para_servicio", { data: [JUBILADOS] });
     responderRpc("registrar_venta", { data: ventaRegistrada(CON_JUBILADOS) });
     renderFormulario();
     await hastaElMedio("4", "2");
 
-    // El reparto se arma contra el precio final con descuento ($ 27.000)
-    await userEvent.type(await screen.findByLabelText("Efectivo ($)"), "5000");
-    await userEvent.type(screen.getByLabelText("Tarjeta ($)"), "22000");
-    expect(screen.getByText("Cierra justo")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Continuar al efectivo" }));
+    // Precio final con descuento: $ 27.000
+    await userEvent.type(
+      await screen.findByLabelText("5. Pago mixto: ¿cuánto paga en efectivo? ($)"),
+      "5000",
+    );
+    expect(normal(screen.getByTestId("resto-mixto").textContent)).toBe("$ 22.000,00");
+    await userEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    await userEvent.click(await screen.findByRole("option", { name: /Transferencia/ }));
 
     const recibido = await screen.findByLabelText("6. ¿Cuánto te entregó en efectivo? ($)");
-    expect(recibido).toHaveFocus();
-    expect(normal(screen.getByTestId("efectivo-a-cobrar").textContent)).toBe(
-      "Efectivo a cobrar: $ 5.000,00",
-    );
     await userEvent.keyboard("2000{Enter}");
     expect(normal(screen.getByText(/No alcanza/).textContent)).toBe(
       "No alcanza: faltan $ 3.000,00.",
@@ -559,21 +557,28 @@ describe("FormularioVenta: pago mixto", () => {
     await userEvent.clear(recibido);
     await userEvent.keyboard("10000");
     expect(normal(screen.getByTestId("vuelto").textContent)).toBe("$ 5.000,00");
+    // Esc vuelve a elegir el medio del resto, con el elegido marcado
+    await userEvent.keyboard("{Escape}");
+    expect(await screen.findByRole("option", { name: /Transferencia/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     await userEvent.keyboard("{Enter}");
+    await screen.findByLabelText("6. ¿Cuánto te entregó en efectivo? ($)");
+    await userEvent.keyboard("10000{Enter}");
     await waitFor(() => {
       expect(argumentosRpc("registrar_venta")).toEqual({
         p_turno_id: TURNO_ID,
         p_servicio_id: 1,
         p_pagos: [
           { medio: "efectivo", monto: 5000 },
-          { medio: "tarjeta", monto: 22000 },
+          { medio: "transferencia", monto: 22000 },
         ],
         p_descuento_id: 4,
         p_precio_esperado: 27000,
       });
     });
     const ultima = normal((await screen.findByTestId("ultima-venta")).textContent);
-    expect(ultima).toContain("Efectivo $ 5.000,00 + Tarjeta $ 22.000,00");
     expect(ultima).toContain("Vuelto $ 5.000,00");
   });
 
@@ -583,36 +588,13 @@ describe("FormularioVenta: pago mixto", () => {
     });
     renderFormulario();
     await hastaElMedio("4");
-    await screen.findByLabelText("Efectivo ($)");
-    await userEvent.type(screen.getByLabelText("Transferencia ($)"), "10000");
-    await userEvent.type(screen.getByLabelText("Tarjeta ($)"), "20000");
+    await screen.findByLabelText("5. Pago mixto: ¿cuánto paga en efectivo? ($)");
+    await userEvent.keyboard("10000{Enter}");
+    await screen.findByRole("listbox", { name: "5. ¿Con qué paga el resto?" });
+    await userEvent.keyboard("{Enter}");
+    await screen.findByLabelText("6. ¿Cuánto te entregó en efectivo? ($)");
     await userEvent.keyboard("{Enter}");
     expect(await screen.findByText("Los pagos no suman el precio de la venta")).toBeInTheDocument();
-  });
-});
-
-describe("FormularioVenta: Cierra justo", () => {
-  it("no dice “Cierra justo” si hay un monto mal escrito aunque el resto sume el precio", async () => {
-    renderFormulario();
-    await hastaElMedio("4");
-    await userEvent.type(await screen.findByLabelText("Efectivo ($)"), "1,2,3");
-    await userEvent.type(screen.getByLabelText("Transferencia ($)"), "10000");
-    await userEvent.type(screen.getByLabelText("Tarjeta ($)"), "20000");
-    expect(screen.queryByText("Cierra justo")).not.toBeInTheDocument();
-    expect(screen.getByText("Hay un monto mal escrito")).toBeInTheDocument();
-    expect(screen.getByTestId("diferencia-mixto")).toHaveTextContent("—");
-
-    // Corregido, recién ahí cierra
-    await userEvent.clear(screen.getByLabelText("Efectivo ($)"));
-    expect(await screen.findByText("Cierra justo")).toBeInTheDocument();
-  });
-
-  it("un solo medio que cubre el precio no “cierra”: falta otro medio", async () => {
-    renderFormulario();
-    await hastaElMedio("4");
-    await userEvent.type(await screen.findByLabelText("Tarjeta ($)"), "30000");
-    expect(screen.queryByText("Cierra justo")).not.toBeInTheDocument();
-    expect(screen.getByText("Falta otro medio")).toBeInTheDocument();
   });
 });
 
@@ -703,8 +685,14 @@ describe("FormularioVenta: precio esperado", () => {
     responderRpc("descuentos_para_servicio", { data: [JUBILADOS] });
     renderCaja();
     await hastaElMedio("4", "2");
-    await userEvent.type(await screen.findByLabelText("Transferencia ($)"), "7000");
-    await userEvent.type(screen.getByLabelText("Tarjeta ($)"), "20000");
+    await userEvent.type(
+      await screen.findByLabelText("5. Pago mixto: ¿cuánto paga en efectivo? ($)"),
+      "7000",
+    );
+    await userEvent.keyboard("{Enter}");
+    await screen.findByRole("listbox", { name: "5. ¿Con qué paga el resto?" });
+    await userEvent.keyboard("2{Enter}");
+    await screen.findByLabelText("6. ¿Cuánto te entregó en efectivo? ($)");
 
     // El admin cambió el precio: el mismo descuento ahora deja $ 27.900
     responder("servicios", "select", { data: conPrecio(31000) });
@@ -735,8 +723,11 @@ describe("FormularioVenta: precio esperado", () => {
     await userEvent.keyboard("{Enter}");
     await screen.findByRole("listbox", { name: "4. Medio de pago" });
     await userEvent.keyboard("4{Enter}");
-    expect(await screen.findByLabelText("Transferencia ($)")).toHaveValue("");
-    expect(normal(screen.getByTestId("diferencia-mixto").textContent)).toBe("$ 27.900,00");
+    expect(
+      await screen.findByLabelText("5. Pago mixto: ¿cuánto paga en efectivo? ($)"),
+    ).toHaveValue("");
+    await userEvent.keyboard("7000");
+    expect(normal(screen.getByTestId("resto-mixto").textContent)).toBe("$ 20.900,00");
     expect(ventasPedidas()).toBe(1);
   });
 

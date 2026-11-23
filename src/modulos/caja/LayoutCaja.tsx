@@ -17,11 +17,17 @@ export function LayoutCaja() {
       {/* Barra fija: el admin tiene abrir y cerrar turno siempre a mano al hacer scroll. El cajero no
           cierra turnos: la caja donde trabaja se ve (y se cambia) en la pantalla. */}
       <header className="sticky top-0 z-40 flex items-center gap-2 border-b bg-background px-4 py-2">
-        <div className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-baseline sm:gap-2">
-          <span className="truncate font-semibold">
-            Sistema VTV<span className="hidden sm:inline"> · Caja</span>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-xs font-medium text-muted-foreground">
+            Sistema VTV · Caja
           </span>
-          <span className="truncate text-sm text-muted-foreground">{perfil?.nombre_completo}</span>
+          {/* Quién atiende, bien grande: se lee de lejos y se ve enseguida si quedó otra sesión. */}
+          <span
+            className="truncate text-2xl leading-tight font-bold sm:text-3xl md:text-4xl"
+            data-testid="usuario-caja"
+          >
+            {perfil?.nombre_completo}
+          </span>
         </div>
         {esAdmin && <AccionesTurnoAdmin mostrarIrALaCaja={false} />}
         <div className="flex items-center gap-1">

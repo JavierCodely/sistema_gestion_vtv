@@ -1,5 +1,9 @@
-import { hoyEnArgentina } from "@/compartido/lib/formato";
-import type { RangoFechas } from "@/compartido/lib/rango-fechas";
+import { hoyEnArgentina } from "./formato";
+import type { RangoFechas } from "./rango-fechas";
+
+/**
+ * Períodos de los reportes (impuestos, dashboard): año entero o mes, y la semana actual.
+ */
 
 /** Período del reporte: un año entero (`mes` null) o un mes de un año (1 = enero). */
 export interface Periodo {
@@ -57,4 +61,32 @@ export function nombreDePeriodo({ anio, mes }: Periodo): string {
   return mes === null
     ? `Año ${String(anio)}`
     : `${NOMBRES_MESES[mes - 1] ?? ""} de ${String(anio)}`;
+}
+
+/** Nombres de los días, de lunes a domingo (la semana del negocio empieza el lunes). */
+export const DIAS_SEMANA = [
+  "Lunes",
+  "Martes",
+  "Miércoles",
+  "Jueves",
+  "Viernes",
+  "Sábado",
+  "Domingo",
+] as const;
+
+/** Suma días a una fecha YYYY-MM-DD (en UTC, sin husos horarios). */
+export function sumarDias(fecha: string, dias: number): string {
+  const [anio = PRIMER_ANIO, mes = 1, dia = 1] = fecha.split("-").map(Number);
+  const nueva = new Date(Date.UTC(anio, mes - 1, dia + dias));
+  return `${String(nueva.getUTCFullYear())}-${dosCifras(nueva.getUTCMonth() + 1)}-${dosCifras(nueva.getUTCDate())}`;
+}
+
+/** La semana en la que estamos (hora argentina): de lunes a domingo, días YYYY-MM-DD. */
+export function semanaActual(ahora: Date = new Date()): RangoFechas {
+  const hoy = hoyEnArgentina(ahora);
+  const [anio = PRIMER_ANIO, mes = 1, dia = 1] = hoy.split("-").map(Number);
+  // getUTCDay: 0 = domingo … 6 = sábado → días desde el lunes.
+  const desdeLunes = (new Date(Date.UTC(anio, mes - 1, dia)).getUTCDay() + 6) % 7;
+  const lunes = sumarDias(hoy, -desdeLunes);
+  return { desde: lunes, hasta: sumarDias(lunes, 6) };
 }

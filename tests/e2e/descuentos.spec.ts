@@ -164,15 +164,18 @@ test("descuentos: el admin crea uno y lo habilita para un servicio; el cajero ve
   await pc.keyboard.press("4");
   await pc.keyboard.press("Enter");
 
-  await expect(pc.getByLabel("Efectivo ($)")).toBeFocused();
+  const efectivoMixto = pc.getByLabel("5. Pago mixto: ¿cuánto paga en efectivo? ($)");
+  await expect(efectivoMixto).toBeFocused();
   await pc.keyboard.type("5.000");
-  await pc.getByLabel("Tarjeta ($)").fill("10.000");
-  await expect(pc.getByText("Falta", { exact: true })).toBeVisible();
-  await expect(pc.getByTestId("diferencia-mixto")).toHaveText(/\$\s?3\.000,00/);
+  await expect(pc.getByTestId("resto-mixto")).toHaveText(/\$\s?13\.000,00/);
   await pc.keyboard.press("Enter");
-  await expect(pc.getByText("Los montos no llegan al precio.")).toBeVisible();
-  await pc.getByLabel("Tarjeta ($)").fill("13.000");
-  await expect(pc.getByText("Cierra justo")).toBeVisible();
+  const resto = pc.getByRole("listbox", { name: "5. ¿Con qué paga el resto?" });
+  await expect(resto).toBeFocused();
+  await pc.keyboard.press("ArrowRight");
+  await expect(resto.getByRole("option", { name: /Débito \/ Crédito/ })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   await pc.keyboard.press("Enter");
 
   await expect(pc.getByLabel("6. ¿Cuánto te entregó en efectivo? ($)")).toBeFocused();

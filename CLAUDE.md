@@ -66,11 +66,11 @@ src/
   main.tsx                 entrada (Vite)
   app/                     composición: App (providers), rutas.tsx, diferidas.tsx (lazy), páginas genéricas, index.css
   compartido/              sin lógica de negocio de un módulo concreto
-    ui/                    componentes shadcn (npx shadcn@latest add <x> los deja acá)
-    componentes/           Cargando, Campo, ErrorFormulario, SelectorRango (Desde/Hasta de los reportes)…
-    lib/                   supabase, formato (ARS / hora AR / hoyEnArgentina), errores, validaciones, query-client, salud, claves-descuentos, claves-impuestos, paginacion, rango-fechas (mesActual, revisarRango)
+    ui/                    componentes shadcn (npx shadcn@latest add <x> los deja acá; `chart` = gráficos sobre Recharts)
+    componentes/           Cargando, Campo, ErrorFormulario, SelectorRango (Desde/Hasta de los reportes), FiltroPeriodo (Año + Mes + Turno)…
+    lib/                   supabase, formato (ARS / hora AR / hoyEnArgentina), errores, validaciones, query-client, salud, claves-descuentos, claves-impuestos, periodo (Año/Mes y semana actual), paginacion, rango-fechas (mesActual, revisarRango)
     tipos.ts               Rol, Perfil, Tablas, Enums (derivados de types/database.ts)
-  modulos/<modulo>/        una carpeta por área de negocio: auth, usuarios, panel-admin, caja, cajas, servicios, certificados, ventas, facturacion, gastos, fondos (caja de cambio + transferencia + crédito/débito), descuentos, impuestos
+  modulos/<modulo>/        una carpeta por área de negocio: auth, usuarios, panel-admin, caja, cajas, servicios, certificados, ventas, facturacion, gastos, fondos (caja de cambio + transferencia + crédito/débito), descuentos, impuestos, dashboard
     api/                   acceso a datos: llamadas RPC/Edge Functions + hooks TanStack Query
     componentes/           un componente por archivo
     lib/                   lógica pura del módulo (validaciones, mapeos)
@@ -99,11 +99,11 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
   `medio_pago` sin contemplar NULL.
 - **Venta en la caja** (`FormularioVenta`): categoría → servicio → descuento (solo si
   `descuentos_para_servicio` trae opciones; "Sin descuento" marcado; si no se pueden leer, se sigue sin
-  descuento y se avisa) → patente → medio (Efectivo, Transferencia, Tarjeta, **Mixto**) → en Mixto el
-  monto de cada medio con "Falta / Sobra / Cierra justo" (`revisarPagoMixto`, solo vista previa; no
-  sigue hasta que cierra; "Cierra justo" en verde **solo si `listo`**: con un monto mal escrito dice
-  "Hay un monto mal escrito" y con un solo medio "Falta otro medio") → si hay efectivo, cuánto entregó
-  y el vuelto **sobre la parte en efectivo**.
+  descuento y se avisa) → patente → medio (Efectivo, Transferencia, Tarjeta, **Mixto**) → en Mixto
+  (decisión 2026-11-23) el cajero escribe **solo el efectivo** (campo grande; > 0 y menor que el precio)
+  y el resto (precio final − efectivo, `revisarPagoMixto`, solo vista previa) se ve en grande; Enter →
+  "¿Con qué paga el resto?": Transferencia / Débito / Crédito (1/2 o flechas + Enter, `PasoRestoMixto`;
+  Esc vuelve al efectivo) → cuánto entregó y el vuelto **sobre la parte en efectivo**.
   La vista previa usa el precio final de `descuentos_para_servicio` (o el del servicio sin descuento);
   la "Última venta" usa el `precio` que devolvió `registrar_venta` y avisa si el vuelto da negativo.
   **Precio esperado**: `useRegistrarVenta` manda siempre `p_precio_esperado` = el precio final en
@@ -117,7 +117,7 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
   otros, lo avisa y sigue sin descuento a la vista del cajero).
 - Diálogos con una escritura en curso no se cierran (Esc, la X o clic afuera): `onOpenChange` ignora
   el cierre mientras la mutación está `isPending` (ej. `DialogoCerrarTurno`, `DialogoDisponibilidad`).
-  Los números de paso de patente (3), medio (4) y efectivo (5; 6 en un mixto) no cambian con el paso
+  Los números de paso de patente (3), medio (4), mixto (5) y efectivo (5; 6 en un mixto) no cambian con el paso
   de descuento (que no lleva número): los E2E los usan.
 - Listados con "Ver más": `useInfiniteQuery` con cursor sobre `id` (`order("id", desc)` + `lt("id", …)`,
   `siguienteCursor` y `TAMANO_PAGINA` de `compartido/lib/paginacion.ts`), nunca `range` por posición.
@@ -245,6 +245,7 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
 | 34 | `fondos` | Sección **Fondos** (solo admin): enums `cuenta_fondos` (efectivo, transferencia, tarjeta) y `tipo_mov_fondos` (fondo_inicial, ingreso, retiro); `cuentas_fondos` (una fila por cuenta, para el `for update` de los retiros); `movimientos_fondos` (manuales de transferencia/tarjeta, monto con signo, nota ≤ 500, CHECK anti-NaN y de signo); vista calculada `v_movimientos_fondos` (libro unificado de las tres cuentas, con reversos de anulaciones); `v_ventas_mixtas` (informativa); `movimiento_fondos()`, `resumen_fondos()`, `resumen_ventas_mixtas()` — decisiones 2026-11-22 |
 | 35 | `ventas_tiempo_real` | `v_turnos.fecha_apertura` (día de negocio de la apertura, al final de la vista); `resumen_turnos(p_desde, p_hasta)` (totales sumados de los turnos abiertos en el rango, solo admin); Realtime de `ventas`, `venta_pagos`, `gastos`, `turnos` y `comprobantes` (la RLS y los grants por columna de cada suscriptor filtran lo que llega: los costos nunca viajan) — decisión 2026-11-23 |
 | 36 | `impuestos` | Sección **Impuestos** (solo admin, es un reporte): enum `tipo_impuesto` (porcentaje, monto_fijo por venta); `impuestos` (nombre, tipo, valor, `medios medio_pago[]` —al menos uno, sin repetidos—, `todos_servicios`, activo; CRUD admin por columna), `impuesto_servicios`; foto `venta_impuestos` (una fila por venta, impuesto y medio) calculada por el trigger de sentencia `venta_pagos_impuestos` (interna `_calcular_impuestos_venta`); `fijar_servicios_impuesto()`, `resumen_impuestos()` — decisiones 2026-11-23 |
+| 37 | `dashboard` | Dashboard del admin (solo lectura): `ventas_por_dia(desde, hasta)` (un día por fila hasta hoy, máx. 366 días), `resumen_dashboard(desde, hasta, turno)` (total, servicio, categoría, descuento) y `resumen_gastos(desde, hasta, turno)` (total, compra de certificados, otros gastos, rubro, subcategoría); interna `_validar_rango_reporte` — decisiones 2026-11-23 |
 
 Reglas que no son obvias leyendo una sola tabla:
 - **Certificado a usar**: el activo más específico (servicio > categoría > global).
@@ -337,7 +338,7 @@ Reglas que no son obvias leyendo una sola tabla:
   En efectivo, **el monto entra a la caja de cambio** al cargarla; anularla lo saca de ahí. **No se
   facturan** (trigger en `comprobantes`).
 - **Pago mixto** (decisión del negocio, 2026-11-22): una venta con turno (cajero o admin atendiendo una
-  caja) se cobra con 2 o 3 medios **distintos**, cada parte > 0 (`_validar_monto`), que suman el precio
+  caja) se cobra con 2 o 3 medios **distintos** (la BD acepta los dos; la caja arma efectivo + transferencia o tarjeta), cada parte > 0 (`_validar_monto`), que suman el precio
   final. El cobro vive en `venta_pagos` (una fila por medio, también en las ventas simples, las pasadas
   y las anuladas); `ventas.medio_pago` es el medio si fue uno solo y **NULL si fue mixto** (no se agregó
   'mixto' al enum: `sql:produccion` corre todo en una transacción y un valor nuevo de enum no se puede
@@ -379,6 +380,18 @@ Reglas que no son obvias leyendo una sola tabla:
   las vistas. Al reconectarse vuelve a consultar todo. Arriba, el estado: "En vivo" / "Conectando…" /
   "Sin conexión en vivo" + botón "Actualizar". Los tests unitarios simulan Realtime con
   `emitirCambio(tabla)` y `cambiarEstadoCanales(estado)` de `tests/soporte/supabase-falso.ts`.
+- **Dashboard** (decisiones del negocio, 2026-11-23; solo admin, portada `/admin`, módulo `dashboard`,
+  todo con shadcn: Card, Chart sobre Recharts, Select, Table): arriba **"Ventas de esta semana"** en barras
+  de lunes a domingo (`semanaActual` de `compartido/lib/periodo.ts`, hora AR; "Del lunes dd/mm/aaaa al
+  domingo dd/mm/aaaa"): `ventas_por_dia` trae solo los días que ya pasaron, así que un lunes hay una sola
+  barra; abajo el día que más se vendió y cada día con total y cantidad. Después, con `FiltroPeriodo`
+  (**Año** + **Mes**, "Todo el año" = el año entero, o **Turno**; siempre muestra "Del dd/mm/aaaa al
+  dd/mm/aaaa" o el turno): ventas, total vendido y descuentos realizados; servicios y categorías más
+  vendidos (por cantidad); descuentos (ventas, cobrado, descontado); gastos (total, compra de
+  certificados, otros gastos) y en qué se gastó más (por rubro y por subcategoría). Cada gráfico es de
+  una serie, con tooltip y la tabla de los mismos números debajo. Las consultas se repiten cada vez que
+  se entra (`staleTime: 0`, `refetchOnMount: "always"`): no hace falta invalidarlas desde otras pantallas.
+  Ningún total se calcula en el frontend.
 - **Impuestos** (decisiones del negocio, 2026-11-23; solo admin, `/admin/impuestos`): **no cambian lo
   que paga el cliente** (precio, cobro, cajón, factura y Fondos siguen igual): de cada venta la BD
   calcula cuánto corresponde a cada impuesto y lo guarda como **foto** en `venta_impuestos` al
@@ -472,6 +485,9 @@ Todas requieren usuario autenticado y **activo**. Devuelven la fila afectada.
 | `movimiento_fondos(p_cuenta cuenta_fondos, p_tipo tipo_mov_fondos, p_monto numeric, p_nota text) → v_movimientos_fondos` | admin | Manual en cualquier cuenta (`efectivo` deriva en `movimiento_efectivo`). Monto > 0 (`_validar_monto`; el retiro resta), nota obligatoria ≤ 500. Un retiro no deja la cuenta en negativo (P0001). Devuelve la fila del libro |
 | `fijar_servicios_impuesto(p_impuesto_id bigint, p_todos boolean, p_servicio_ids bigint[]) → impuestos` | admin | `p_todos = true`: todos los servicios (también los futuros; la lista queda vacía). Si no, reemplaza la lista de una vez (`'{}'` = ninguno) |
 | `resumen_impuestos(p_desde date = null, p_hasta date = null, p_turno_id bigint = null) → setof (agrupacion, id, nombre, cantidad_ventas, total, total_efectivo, total_transferencia, total_tarjeta)` | admin | Sin anuladas; día de negocio de la venta y/o turno. `agrupacion` = `total` (siempre 1 fila, en 0 si no hay nada) · `impuesto` (nombre actual), de mayor a menor total |
+| `ventas_por_dia(p_desde date, p_hasta date) → setof (fecha, cantidad, total)` | admin | Ambas fechas obligatorias, máx. 366 días. Un día por fila (0 sin ventas) hasta `least(p_hasta, hoy)`: los días que no llegaron no vienen. Sin anuladas; día de negocio |
+| `resumen_dashboard(p_desde date = null, p_hasta date = null, p_turno_id bigint = null) → setof (agrupacion, id, nombre, cantidad, total, total_descontado)` | admin | Sin anuladas. `agrupacion` = `total` (siempre 1 fila) · `servicio` · `categoria` (nombres actuales) · `descuento`; cada grupo de más a menos ventas |
+| `resumen_gastos(p_desde date = null, p_hasta date = null, p_turno_id bigint = null) → setof (agrupacion, id, nombre, cantidad, total)` | admin | Sin anulados. `total`, `compra_certificados` y `otros_gastos` (1 fila cada uno, en 0 si no hay) · `rubro` · `subcategoria` ("Rubro › Sub"), de mayor a menor. Las compras, por su gasto automático (nunca tienen turno) |
 | `resumen_turnos(p_desde date = null, p_hasta date = null) → setof (cantidad_turnos, turnos_abiertos, ventas_cantidad, ventas_efectivo, ventas_transferencia, ventas_tarjeta, ventas_total, gastos_total, neto)` | admin | 1 fila: turnos con apertura (día de negocio, `v_turnos.fecha_apertura`) en el rango, totales en vivo sin anulados |
 | `resumen_fondos(p_desde date = null, p_hasta date = null) → setof (cuenta, saldo, ingresos, egresos, neto, cantidad_movimientos)` | admin | Una fila por cuenta (efectivo, transferencia, tarjeta; nunca "mixto"). `saldo` de todos los tiempos; el resto, filas del libro con `fecha_local` en el rango; `neto` = suma del libro en el rango |
 | `resumen_ventas_mixtas(p_desde date = null, p_hasta date = null) → setof (cantidad_ventas, total, total_efectivo, total_transferencia, total_tarjeta, incluido_en_cuentas)` | admin | 1 fila. Ventas mixtas no anuladas por día de venta. **Informativo**: ya incluido en las cuentas (`incluido_en_cuentas = true`), no sumar |
@@ -558,7 +574,8 @@ usuario puede leer por REST (revisar grants por columna antes de publicarla).
 
 ## 8. Agentes (`.claude/agents/`)
 
-`db-supabase` (migraciones, RPC, pgTAP), `frontend-react` (UI), `qa-tester` (escribe y corre
+`db-supabase` (migraciones, RPC, pgTAP), `frontend-react` (UI), `analisis-datos` (RPC de reportes y
+análisis con datos locales), `dashboard` (pantallas de dashboard con shadcn Chart), `qa-tester` (escribe y corre
 tests, reporta), `revisor-codigo` (revisión antes de commitear), `ciberseguridad` (auditoría de seguridad),
 `arca` (facturación electrónica ARCA: WSAA/WSFEv1, configuración fiscal, notas de crédito). Flujo por fase:
 agente de implementación → `qa-tester` → `revisor-codigo` → commit con todo en verde.
@@ -574,7 +591,7 @@ No se pasa de fase con tests en rojo.
 | 4 | (**hecha**) Caja: abrir turno, ventas, historial del turno (sin totales), cerrar turno; admin: turnos con totales, anular venta, cerrar turno ajeno |
 | 4b | (**hecha**) Facturación electrónica ARCA (agente `arca`): configuración en admin, facturar desde el historial, comprobante con QR, notas de crédito, log avanzado. Ver §9 |
 | 5 | (**hecha**) Gastos (admin y caja, con categorías) + caja de efectivo (solo admin); nombre y apellido de usuarios; barra superior fija con "Abrir turno" / "Cerrar turno" (2026-11-22); modo oscuro y tema verde de shadcn; turnos abiertos por el admin con efectivo inicial y efectivo del cajón al cerrar |
-| 6 | Dashboard, reportes, alertas en tiempo real |
+| 6 | Dashboard (**hecho**, migración 37), reportes, alertas en tiempo real |
 | 7 | Pulido: responsive, accesibilidad, estados vacíos/errores, rendimiento; E2E completo |
 
 Calidad exigida: TypeScript strict sin `any`, ESLint sin warnings, tests nuevos (unit + E2E del

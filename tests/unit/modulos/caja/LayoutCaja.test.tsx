@@ -23,6 +23,14 @@ beforeEach(() => {
 });
 
 describe("barra fija de la caja", () => {
+  it("muestra el nombre y apellido de quien atiende bien grande", async () => {
+    renderRuta("/caja", cajero());
+    await screen.findByRole("heading", { name: "Caja 1" });
+    const nombre = within(screen.getByRole("banner")).getByTestId("usuario-caja");
+    expect(nombre).toHaveTextContent("Cajero Prueba");
+    expect(nombre).toHaveClass("text-2xl", "sm:text-3xl", "md:text-4xl", "font-bold");
+  });
+
   it("el cajero no abre ni cierra turnos: la barra no tiene acciones de turno", async () => {
     renderRuta("/caja", cajero());
 

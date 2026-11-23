@@ -28,7 +28,12 @@ export const rutas: RouteObject[] = [
           </RutaProtegida>
         ),
         children: [
-          { index: true, element: <EnConstruccion titulo="Dashboard" fase={6} /> },
+          {
+            index: true,
+            lazy: async () => ({
+              Component: (await import("@/modulos/dashboard/paginas/Dashboard")).Dashboard,
+            }),
+          },
           {
             path: "ventas",
             lazy: async () => ({

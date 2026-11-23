@@ -67,7 +67,7 @@ describe("rutas protegidas", () => {
     expect(menu).toHaveTextContent("Fondos");
     expect(menu).not.toHaveTextContent("Caja de efectivo");
     expect(screen.getByRole("button", { name: /Activar modo (oscuro|claro)/ })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Dashboard", level: 1 })).toBeInTheDocument();
 
     // "Abrir turno" de la barra abre el modal de apertura dentro del panel (no navega); el turno es
     // de la caja: no se elige quién atiende.

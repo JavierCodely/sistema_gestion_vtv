@@ -12,7 +12,4 @@ export const clavesImpuestos = {
   resumenes: ["impuestos", "resumen"] as const,
   resumen: (desde: string, hasta: string, turnoId: number | null) =>
     ["impuestos", "resumen", desde, hasta, turnoId] as const,
-  /** Turnos abiertos en el período, para el filtro del reporte. */
-  turnosDelPeriodo: (desde: string, hasta: string) =>
-    ["impuestos", "turnos", desde, hasta] as const,
 };

@@ -4,49 +4,34 @@ import { cn } from "@/compartido/lib/utils";
 import { Button } from "@/compartido/ui/button";
 import { Input } from "@/compartido/ui/input";
 import { Label } from "@/compartido/ui/label";
-import { MEDIOS_PAGO, ORDEN_MEDIOS, type MedioPago } from "../api/consultas";
-import { CAMPO_MEDIANO } from "../lib/estilos";
-import type { MontosPagoMixto, RevisionPagoMixto } from "../lib/pago-mixto";
+import { CAMPO_GRANDE } from "../lib/estilos";
+import { MEDIOS_RESTO, type MedioResto, type RevisionPagoMixto } from "../lib/pago-mixto";
 import { BotonVolverPaso } from "./BotonVolverPaso";
+import { ListaOpciones } from "./ListaOpciones";
 
 /**
- * Pago mixto: el monto de cada medio (formato argentino, vacío = no se usa). Muestra en vivo cuánto
- * falta o sobra para llegar al precio final (vista previa: el reparto lo valida la BD) y no deja
- * seguir hasta que cierra. Si hay parte en efectivo, el paso siguiente pide cuánto entregó.
+ * Pago mixto, primera parte: cuánto paga en efectivo. El resto (precio final − efectivo) se calcula
+ * solo y se ve en grande mientras se escribe. Enter sigue a elegir con qué paga el resto.
  */
-export function PasoPagoMixto({
-  montos,
+export function PasoEfectivoMixto({
+  texto,
   revision,
-  mostrarErrores,
+  mostrarError,
   ocupado,
   onCambiar,
   onConfirmar,
   onVolver,
 }: {
-  montos: MontosPagoMixto;
+  texto: string;
   revision: RevisionPagoMixto;
-  /** Se marcan los errores recién al intentar seguir (no mientras se escribe). */
-  mostrarErrores: boolean;
+  /** El error se marca recién al intentar seguir (no mientras se escribe). */
+  mostrarError: boolean;
   ocupado: boolean;
-  onCambiar: (medio: MedioPago, texto: string) => void;
+  onCambiar: (texto: string) => void;
   onConfirmar: () => void;
   onVolver: () => void;
 }) {
-  const { diferencia, listo } = revision;
-  const malEscrito = Object.keys(revision.errores).length > 0;
-  // "Cierra justo" (en verde) solo si se puede confirmar: un monto mal escrito no cuenta en la suma,
-  // así que la diferencia sola podría dar 0 sin que el pago esté bien cargado.
-  const estado = listo
-    ? "Cierra justo"
-    : malEscrito
-      ? "Hay un monto mal escrito"
-      : diferencia > 0
-        ? "Falta"
-        : diferencia < 0
-          ? "Sobra"
-          : "Falta otro medio";
-  const conEfectivo = revision.partes.some((p) => p.medio === "efectivo");
-
+  const error = mostrarError ? revision.error : null;
   return (
     <form
       className="flex flex-col gap-4"
@@ -57,75 +42,101 @@ export function PasoPagoMixto({
       }}
     >
       <BotonVolverPaso onVolver={onVolver} />
-      <h2 className="text-2xl font-semibold md:text-3xl">5. Pago mixto</h2>
-      <p className="text-base text-muted-foreground">
-        Cargá cuánto paga con cada medio (al menos dos). Dejá vacío el que no use.
-      </p>
-      <div className="grid gap-4 md:grid-cols-3">
-        {ORDEN_MEDIOS.map((medio, indice) => {
-          const id = `venta-mixto-${medio}`;
-          const error = mostrarErrores ? revision.errores[medio] : undefined;
-          return (
-            <div key={medio} className="flex flex-col gap-2">
-              <Label htmlFor={id} className="text-xl font-semibold">
-                {MEDIOS_PAGO[medio]} ($)
-              </Label>
-              <Input
-                id={id}
-                inputMode="decimal"
-                autoComplete="off"
-                autoFocus={indice === 0}
-                maxLength={16}
-                placeholder="0"
-                className={CAMPO_MEDIANO}
-                value={montos[medio]}
-                disabled={ocupado}
-                aria-invalid={error ? true : undefined}
-                aria-describedby={error ? `${id}-error` : undefined}
-                onChange={(e) => {
-                  onCambiar(medio, e.target.value);
-                }}
-                onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
-                  if (e.key === "Escape") {
-                    e.preventDefault();
-                    onVolver();
-                  }
-                }}
-              />
-              {error && (
-                <p id={`${id}-error`} className="text-base font-semibold text-destructive">
-                  {error}
-                </p>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      <div
-        className={cn("rounded-lg border-2 p-5", listo ? "border-primary" : "border-destructive")}
-        aria-live="polite"
-        data-testid="estado-mixto"
-      >
+      <Label htmlFor="venta-mixto-efectivo" className="text-2xl font-semibold md:text-3xl">
+        5. Pago mixto: ¿cuánto paga en efectivo? ($)
+      </Label>
+      <Input
+        id="venta-mixto-efectivo"
+        inputMode="decimal"
+        autoComplete="off"
+        autoFocus
+        maxLength={16}
+        placeholder="0"
+        className={cn(CAMPO_GRANDE, "tabular-nums")}
+        value={texto}
+        disabled={ocupado}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? "venta-mixto-efectivo-error" : undefined}
+        onChange={(e) => {
+          onCambiar(e.target.value);
+        }}
+        onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            onVolver();
+          }
+        }}
+      />
+      {error && (
         <p
-          className={cn("text-xl", listo ? "font-semibold text-primary" : "text-muted-foreground")}
+          id="venta-mixto-efectivo-error"
+          role="alert"
+          className="text-2xl font-semibold text-destructive"
         >
-          {estado}
-        </p>
-        <p className="text-5xl font-bold tabular-nums md:text-6xl" data-testid="diferencia-mixto">
-          {malEscrito ? "—" : formatearMoneda(Math.abs(diferencia))}
-        </p>
-      </div>
-      {mostrarErrores && revision.problema && (
-        <p role="alert" className="text-2xl font-semibold text-destructive">
-          {revision.problema}
+          {error}
         </p>
       )}
+      <div
+        className={cn(
+          "rounded-lg border-2 p-5",
+          revision.resto !== null ? "border-primary" : "border-border",
+        )}
+        aria-live="polite"
+      >
+        <p className="text-xl text-muted-foreground">Resto (transferencia o débito/crédito)</p>
+        <p className="text-5xl font-bold tabular-nums md:text-6xl" data-testid="resto-mixto">
+          {revision.resto !== null ? formatearMoneda(revision.resto) : "—"}
+        </p>
+      </div>
       <p className="text-base text-muted-foreground">
-        Tab para pasar de un medio a otro · Enter para seguir · Esc para volver
+        Escribí el efectivo · Enter para elegir con qué paga el resto · Esc para volver
       </p>
       <Button type="submit" size="lg" className="h-14 self-start px-8 text-xl" disabled={ocupado}>
-        {ocupado ? "Registrando…" : conEfectivo ? "Continuar al efectivo" : "Registrar venta"}
+        Continuar
       </Button>
     </form>
+  );
+}
+
+/**
+ * Pago mixto, segunda parte: con qué paga el resto. Se elige con 1 / 2 o las flechas y Enter (o un
+ * clic); Esc vuelve a corregir el efectivo.
+ */
+export function PasoRestoMixto({
+  efectivo,
+  resto,
+  inicial,
+  ocupado,
+  onElegir,
+  onVolver,
+}: {
+  efectivo: number;
+  resto: number;
+  inicial?: MedioResto;
+  ocupado: boolean;
+  onElegir: (medio: MedioResto) => void;
+  onVolver: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <BotonVolverPaso onVolver={onVolver} />
+      <p className="text-2xl" data-testid="reparto-mixto">
+        Efectivo <span className="font-bold tabular-nums">{formatearMoneda(efectivo)}</span> · Resto{" "}
+        <span className="font-bold tabular-nums">{formatearMoneda(resto)}</span>
+      </p>
+      <ListaOpciones
+        titulo="5. ¿Con qué paga el resto?"
+        horizontal
+        deshabilitada={ocupado}
+        inicial={inicial}
+        opciones={MEDIOS_RESTO.map((m) => ({
+          valor: m.valor,
+          etiqueta: m.etiqueta,
+          detalle: formatearMoneda(resto),
+        }))}
+        onElegir={onElegir}
+        onVolver={onVolver}
+      />
+    </div>
   );
 }
