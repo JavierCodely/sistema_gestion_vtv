@@ -1,0 +1,37 @@
+import { describe, expect, it } from "vitest";
+import { describirMedio, detallePagos, parteEnEfectivo } from "@/modulos/caja/lib/pagos";
+
+const normal = (texto: string | null) => (texto ?? "").replace(/\s/g, " ");
+
+describe("medio de una venta en las listas", () => {
+  it("un solo medio se muestra tal cual, sin detalle", () => {
+    expect(
+      describirMedio({ medio_pago: "tarjeta", venta_pagos: [{ medio: "tarjeta", monto: 18000 }] }),
+    ).toEqual({ etiqueta: "Tarjeta", detalle: null });
+  });
+
+  it("un pago mixto es “Mixto” con el detalle por medio, en orden", () => {
+    const { etiqueta, detalle } = describirMedio({
+      medio_pago: null,
+      venta_pagos: [
+        { medio: "tarjeta", monto: 13000 },
+        { medio: "efectivo", monto: 5000 },
+      ],
+    });
+    expect(etiqueta).toBe("Mixto");
+    expect(normal(detalle)).toBe("Efectivo $ 5.000,00 + Tarjeta $ 13.000,00");
+  });
+
+  it("detalle con tres medios y la parte en efectivo", () => {
+    const pagos = [
+      { medio: "tarjeta" as const, monto: 1 },
+      { medio: "transferencia" as const, monto: 2 },
+      { medio: "efectivo" as const, monto: 3.5 },
+    ];
+    expect(normal(detallePagos(pagos))).toBe(
+      "Efectivo $ 3,50 + Transferencia $ 2,00 + Tarjeta $ 1,00",
+    );
+    expect(parteEnEfectivo({ venta_pagos: pagos })).toBe(3.5);
+    expect(parteEnEfectivo({ venta_pagos: [{ medio: "tarjeta", monto: 1 }] })).toBe(0);
+  });
+});

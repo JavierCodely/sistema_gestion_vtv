@@ -1,0 +1,52 @@
+import { describe, expect, it } from "vitest";
+import {
+  formatearFecha,
+  formatearFechaHora,
+  formatearMoneda,
+  formatearNumero,
+  hoyEnArgentina,
+} from "@/compartido/lib/formato";
+
+// Intl usa espacios no separables; normalizamos para comparar.
+const n = (s: string) => s.replace(/\s/g, " ");
+
+describe("formatearMoneda", () => {
+  it("formatea pesos argentinos con separador de miles y decimales", () => {
+    expect(n(formatearMoneda(20000))).toBe("$ 20.000,00");
+    expect(n(formatearMoneda(2000.5))).toBe("$ 2.000,50");
+  });
+
+  it("acepta strings numéricos y negativos (gastos)", () => {
+    expect(n(formatearMoneda("1500"))).toBe("$ 1.500,00");
+    expect(n(formatearMoneda(-1500))).toBe("-$ 1.500,00");
+  });
+
+  it("trata null, undefined y valores inválidos como cero", () => {
+    expect(n(formatearMoneda(null))).toBe("$ 0,00");
+    expect(n(formatearMoneda(undefined))).toBe("$ 0,00");
+    expect(n(formatearMoneda("abc"))).toBe("$ 0,00");
+  });
+});
+
+describe("fechas en hora argentina", () => {
+  it("convierte UTC a hora de Buenos Aires (UTC-3)", () => {
+    expect(n(formatearFechaHora("2026-11-19T02:30:00Z"))).toBe("18/11/2026, 23:30");
+    expect(formatearFecha("2026-11-19T02:30:00Z")).toBe("18/11/2026");
+  });
+});
+
+describe("formatearNumero", () => {
+  it("usa punto de miles y no muestra decimales", () => {
+    expect(formatearNumero(1250)).toBe("1.250");
+    expect(formatearNumero(-3)).toBe("-3");
+    expect(formatearNumero(0)).toBe("0");
+  });
+});
+
+describe("hoyEnArgentina", () => {
+  it("usa el día argentino, no el UTC", () => {
+    // 21/11 a las 01:00 UTC = 20/11 a las 22:00 en Argentina.
+    expect(hoyEnArgentina(new Date("2026-11-21T01:00:00Z"))).toBe("2026-11-20");
+    expect(hoyEnArgentina(new Date("2026-11-21T15:00:00Z"))).toBe("2026-11-21");
+  });
+});

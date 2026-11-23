@@ -1,0 +1,82 @@
+-- Helpers compartidos por los tests pgTAP. Se incluyen con: \ir _helpers.psql
+-- (la extensión .psql evita que pg_prove lo ejecute como test).
+-- Uso típico:
+--   select pg_temp.crear_usuario('a@test', 'admin') as admin \gset
+--   select pg_temp.como(:'admin');   -- actuar como ese usuario (rol authenticated)
+--   reset role;                      -- volver a postgres
+
+-- Crea un usuario en auth.users; el trigger le crea el perfil.
+create function pg_temp.crear_usuario(p_email text, p_rol text default 'cajero')
+returns uuid
+language sql
+as $$
+  insert into auth.users (id, instance_id, aud, role, email, raw_app_meta_data, raw_user_meta_data)
+  values (gen_random_uuid(), '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
+          p_email, jsonb_build_object('rol', p_rol), jsonb_build_object('nombre', 'Usuario ' || p_email))
+  returning id
+$$;
+
+-- Actúa como un usuario autenticado (como lo haría PostgREST con su JWT).
+create function pg_temp.como(p_uid uuid)
+returns void
+language plpgsql
+as $$
+begin
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', p_uid::text, 'role', 'authenticated')::text, true);
+  perform set_config('role', 'authenticated', true);
+end;
+$$;
+
+-- Abre el turno de una caja como lo hace el admin (migraciones 27 y 33): pone en la caja general el
+-- efectivo inicial (ingreso) y lo asigna al turno, así el saldo general queda igual. El turno es de la
+-- caja (sin usuario); termina actuando como p_usuario, que es quien va a trabajar en ella.
+-- Devuelve el id del turno (las ventas y gastos del turno lo reciben como p_turno_id).
+create function pg_temp.abrir_turno_para(p_admin uuid, p_usuario uuid, p_caja bigint,
+                                         p_efectivo numeric default 100)
+returns bigint
+language plpgsql
+as $$
+declare
+  v_id bigint;
+begin
+  -- Solo los claims del admin (sin cambiar de rol): las RPC leen auth.uid() de ahí.
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', p_admin::text, 'role', 'authenticated')::text, true);
+  perform public.movimiento_efectivo('ingreso', p_efectivo, 'Efectivo para el turno de prueba');
+  select (public.abrir_turno(p_caja, p_efectivo)).id into v_id;
+  perform pg_temp.como(p_usuario);
+  return v_id;
+end;
+$$;
+
+-- Actúa como visitante sin sesión.
+create function pg_temp.como_anonimo()
+returns void
+language plpgsql
+as $$
+begin
+  perform set_config('request.jwt.claims', json_build_object('role', 'anon')::text, true);
+  perform set_config('role', 'anon', true);
+end;
+$$;
+
+-- Escenario base: admin, cajero, caja, categoría y servicio con certificado.
+-- Devuelve los ids para usar con \gset.
+create function pg_temp.escenario()
+returns table (admin uuid, cajero uuid, caja bigint, caja2 bigint, categoria bigint, servicio bigint)
+language plpgsql
+as $$
+begin
+  admin  := pg_temp.crear_usuario('admin@test.local', 'admin');
+  cajero := pg_temp.crear_usuario('cajero@test.local', 'cajero');
+  insert into public.cajas (nombre) values ('Caja Test') returning id into caja;
+  insert into public.cajas (nombre) values ('Caja Test 2') returning id into caja2;
+  insert into public.categorias_servicio (nombre) values ('Categoría Test') returning id into categoria;
+  insert into public.servicios (nombre, categoria_id, precio, requiere_certificado)
+    values ('Servicio Test', categoria, 20000, true) returning id into servicio;
+  -- Aislar de los datos del seed: ningún certificado activo previo.
+  update public.certificados set activo = false;
+  return next;
+end;
+$$;

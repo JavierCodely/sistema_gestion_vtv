@@ -1,0 +1,403 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { clavesDescuentos } from "@/compartido/lib/claves-descuentos";
+import { clavesImpuestos } from "@/compartido/lib/claves-impuestos";
+import { supabase } from "@/compartido/lib/supabase";
+import type { Enums, Tablas } from "@/compartido/tipos";
+import { claveFondos } from "@/modulos/fondos/api/claves";
+import { claveEfectivo } from "@/modulos/fondos/api/efectivo";
+import { claveCategorias, claveServicios } from "@/modulos/servicios/api/consultas";
+import type { Database } from "@/types/database";
+import type { DatosAperturaTurno } from "../lib/validaciones";
+
+export type MedioPago = Enums["medio_pago"];
+
+/**
+ * Turno abierto de una caja, para elegir dónde trabajar (`v_turnos_abiertos`, sin dinero). El turno es
+ * de la caja: cualquier usuario activo trabaja en cualquier caja abierta (migración 33).
+ */
+export type CajaAbierta = {
+  [K in keyof Database["public"]["Views"]["v_turnos_abiertos"]["Row"]]: NonNullable<
+    Database["public"]["Views"]["v_turnos_abiertos"]["Row"][K]
+  >;
+};
+
+/** Mensaje si la vista devolviera una fila incompleta (los tipos de una vista salen anulables). */
+const ERROR_CAJA_ABIERTA = "No se pudieron leer las cajas abiertas. Recargá la página.";
+
+/**
+ * Turno abierto tal como lo lista el admin para elegir cuál cerrar (de `v_turnos`, sin totales).
+ * `atendido_por`: quienes vendieron o gastaron en él (vacío si todavía nadie).
+ */
+export type TurnoAbiertoResumen = Pick<
+  Database["public"]["Views"]["v_turnos"]["Row"],
+  "id" | "caja_nombre" | "abierto_en" | "atendido_por"
+>;
+
+/** Caja activa para abrir turno (`cajas_para_turno`, solo admin): libre u ocupada, sin persona. */
+export type CajaParaTurno = Database["public"]["Functions"]["cajas_para_turno"]["Returns"][number];
+
+/** Parte del cobro de una venta (`venta_pagos`): una por medio; dos o tres en un pago mixto. */
+export type PagoDeVenta = Pick<Tablas["venta_pagos"]["Row"], "medio" | "monto">;
+
+/**
+ * Venta tal como la ve quien la puede leer (RLS: las de los turnos abiertos o, el admin, todas). Sin
+ * costos. `usuario_id` = quién la hizo (el nombre se pide con `useNombreUsuario`).
+ * `precio` es lo cobrado; con descuento, `precio_lista` y `monto_descuento` son la foto de la venta.
+ * `medio_pago` NULL = pago mixto (el detalle está en `venta_pagos`).
+ */
+export type Venta = Pick<
+  Tablas["ventas"]["Row"],
+  | "id"
+  | "creado_en"
+  | "turno_id"
+  | "usuario_id"
+  | "servicio_nombre"
+  | "precio"
+  | "precio_lista"
+  | "monto_descuento"
+  | "descuento_nombre"
+  | "medio_pago"
+  | "patente"
+  | "sin_stock"
+  | "anulada"
+  | "anulada_motivo"
+  | "anulada_en"
+> & { venta_pagos: PagoDeVenta[] };
+
+/** Certificado que se usará al vender un servicio (`null`: no lleva o no hay configurado). */
+export type CertificadoDeVenta = Pick<
+  Tablas["certificados"]["Row"],
+  "id" | "nombre" | "stock_hojas"
+> | null;
+
+export const claves = {
+  cajasParaTurno: ["caja", "cajas-para-turno"] as const,
+  /**
+   * Bajo el prefijo `["turnos"]` (el de la lista del admin): los invalidan las mismas mutaciones
+   * (abrir, cerrar, vender, gastar, anular).
+   */
+  cajasAbiertas: ["turnos", "cajas-abiertas"] as const,
+  turnosAbiertos: ["turnos", "abiertos"] as const,
+  /** Historial de la caja: las ventas de un turno, de todos los que vendieron. */
+  ventasDeTurno: (turnoId: number) => ["caja", "ventas", turnoId] as const,
+  certificadoDeServicio: (servicioId: number) => ["caja", "certificado", servicioId] as const,
+  nombreUsuario: (usuarioId: string) => ["nombre-usuario", usuarioId] as const,
+};
+
+/** Columnas de `ventas` que se leen (nunca `*`: los costos no son legibles por columna). */
+export const COLUMNAS_VENTA =
+  "id, creado_en, turno_id, usuario_id, servicio_nombre, precio, precio_lista, monto_descuento, descuento_nombre, medio_pago, patente, sin_stock, anulada, anulada_motivo, anulada_en, venta_pagos(medio, monto)";
+
+export const MEDIOS_PAGO: Record<MedioPago, string> = {
+  efectivo: "Efectivo",
+  transferencia: "Transferencia",
+  tarjeta: "Tarjeta",
+};
+
+/** Orden en que se ofrecen y se muestran los medios de pago. */
+export const ORDEN_MEDIOS: readonly MedioPago[] = ["efectivo", "transferencia", "tarjeta"];
+
+export const MENSAJES_ERROR_VENTA = {
+  restricciones: { ventas_patente_largo: "La patente no puede superar los 10 caracteres." },
+};
+
+/** Cada cuánto se reconsultan las cajas abiertas en `/caja` (se abre una, se cierra la elegida). */
+export const INTERVALO_CAJAS_ABIERTAS_MS = 15_000;
+
+/** Cuánto se considera vigente el nombre de un usuario (cambia muy poco). */
+const VIGENCIA_NOMBRE_MS = 5 * 60_000;
+
+/**
+ * Cajas con turno abierto, por nombre (las leen todos los usuarios activos). `reconsultar`: cada 15 s,
+ * para que la pantalla de la caja se entere sola si el admin abre una o cierra la elegida.
+ */
+export function useCajasAbiertas({ reconsultar = false }: { reconsultar?: boolean } = {}) {
+  return useQuery({
+    queryKey: claves.cajasAbiertas,
+    refetchInterval: reconsultar ? INTERVALO_CAJAS_ABIERTAS_MS : false,
+    queryFn: async (): Promise<CajaAbierta[]> => {
+      const { data, error } = await supabase
+        .from("v_turnos_abiertos")
+        .select("id, caja_id, caja_nombre, abierto_en")
+        .order("caja_nombre", { ascending: true });
+      if (error) throw error;
+      // El esquema generado marca anulables todas las columnas de una vista; ninguna lo es.
+      return data.map(({ id, caja_id, caja_nombre, abierto_en }) => {
+        if (id === null || caja_id === null || caja_nombre === null || abierto_en === null) {
+          throw new Error(ERROR_CAJA_ABIERTA);
+        }
+        return { id, caja_id, caja_nombre, abierto_en };
+      });
+    },
+  });
+}
+
+/** Turnos abiertos de todas las cajas, del más viejo al más nuevo, con quiénes atendieron (admin). */
+export function useTurnosAbiertos() {
+  return useQuery({
+    queryKey: claves.turnosAbiertos,
+    queryFn: async (): Promise<TurnoAbiertoResumen[]> => {
+      const { data, error } = await supabase
+        .from("v_turnos")
+        .select("id, caja_nombre, abierto_en, atendido_por")
+        .eq("abierto", true)
+        .order("abierto_en", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+/** Solo admin (lo controla la RPC): cajas activas, libres u ocupadas, para abrir un turno. */
+export function useCajasParaTurno() {
+  return useQuery({
+    queryKey: claves.cajasParaTurno,
+    queryFn: async (): Promise<CajaParaTurno[]> => {
+      const { data, error } = await supabase.rpc("cajas_para_turno");
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+/**
+ * Nombre completo de quien hizo una venta (`nombre_usuario`: el cajero no lee perfiles ajenos; la BD
+ * le devuelve el de quien vendió o gastó en un turno abierto). `null` si no corresponde mostrarlo.
+ */
+export function useNombreUsuario(usuarioId: string) {
+  return useQuery({
+    queryKey: claves.nombreUsuario(usuarioId),
+    staleTime: VIGENCIA_NOMBRE_MS,
+    queryFn: async (): Promise<string | null> => {
+      const { data, error } = await supabase.rpc("nombre_usuario", { p_usuario_id: usuarioId });
+      if (error) throw error;
+      // El esquema generado la tipa como `string`, pero devuelve NULL si no corresponde mostrarlo.
+      return typeof data === "string" ? data : null;
+    },
+  });
+}
+
+/** Ventas de un turno, de todos los que vendieron. `turnoId` inválido (≤ 0): no se consulta. */
+export function useVentasDeTurno(turnoId: number) {
+  return useQuery({
+    queryKey: claves.ventasDeTurno(turnoId),
+    enabled: turnoId > 0,
+    queryFn: async (): Promise<Venta[]> => {
+      const { data, error } = await supabase
+        .from("ventas")
+        .select(COLUMNAS_VENTA)
+        .eq("turno_id", turnoId)
+        .order("id", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+/**
+ * `certificado_para_servicio` devuelve null cuando no hay certificado, pero el esquema generado
+ * la tipa como `number`: se valida el valor real en vez de confiar en el tipo.
+ */
+function idOpcional(valor: unknown): number | null {
+  return typeof valor === "number" ? valor : null;
+}
+
+export function useCertificadoDeServicio(servicioId: number | null) {
+  return useQuery({
+    queryKey: claves.certificadoDeServicio(servicioId ?? 0),
+    enabled: servicioId !== null,
+    queryFn: async (): Promise<CertificadoDeVenta> => {
+      const { data: id, error } = await supabase.rpc("certificado_para_servicio", {
+        p_servicio_id: servicioId ?? 0,
+      });
+      if (error) throw error;
+      const certificadoId = idOpcional(id);
+      if (certificadoId === null) return null;
+      const { data, error: errorCert } = await supabase
+        .from("certificados")
+        .select("id, nombre, stock_hojas")
+        .eq("id", certificadoId)
+        .single();
+      if (errorCert) throw errorCert;
+      return data;
+    },
+  });
+}
+
+/**
+ * Todo lo que cambia con un turno o una venta. `["caja"]` cubre cajas para turno, el historial de
+ * cada caja (ventas del turno) y el certificado de cada servicio; `["turnos"]` cubre `v_turnos`
+ * (lista, detalle y turnos abiertos) y las cajas abiertas de `/caja`; `["certificados"]`, el stock;
+ * `claveEfectivo`, la caja de cambio (de ahí sale el efectivo inicial y ahí vuelve al cerrar);
+ * `claveFondos`, saldos y libros de Fondos (ventas por transferencia/tarjeta, mixtas, anulaciones,
+ * apertura y cierre);
+ * `clavesDescuentos.resumenes`, las estadísticas de descuentos (una venta con descuento o su
+ * anulación las cambia); `clavesImpuestos.resumenes`, el reporte de impuestos (ídem).
+ */
+function useInvalidarCaja() {
+  const queryClient = useQueryClient();
+  return () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["caja"] }),
+      queryClient.invalidateQueries({ queryKey: ["turnos"] }),
+      queryClient.invalidateQueries({ queryKey: ["certificados"] }),
+      queryClient.invalidateQueries({ queryKey: claveEfectivo }),
+      queryClient.invalidateQueries({ queryKey: claveFondos }),
+      queryClient.invalidateQueries({ queryKey: clavesDescuentos.resumenes }),
+      queryClient.invalidateQueries({ queryKey: clavesImpuestos.resumenes }),
+    ]);
+}
+
+/**
+ * Lo de `useInvalidarCaja` más lo que el cajero usa para armar una venta: servicios, categorías y
+ * los descuentos de todos los servicios (`descuentos_para_servicio`). Así, si el admin cambió un
+ * precio, un descuento o desactivó algo, la próxima venta se arma con el catálogo actual.
+ */
+function useInvalidarVenta() {
+  const queryClient = useQueryClient();
+  const invalidarCaja = useInvalidarCaja();
+  return () =>
+    Promise.all([
+      invalidarCaja(),
+      queryClient.invalidateQueries({ queryKey: claveServicios }),
+      queryClient.invalidateQueries({ queryKey: claveCategorias }),
+      queryClient.invalidateQueries({ queryKey: clavesDescuentos.paraServicios }),
+    ]);
+}
+
+/**
+ * Solo admin (lo controla la RPC). El turno es de la caja (no se elige quién atiende): el efectivo
+ * inicial sale de la caja de cambio.
+ */
+export function useAbrirTurno() {
+  const invalidar = useInvalidarCaja();
+  return useMutation({
+    mutationFn: async ({ cajaId, efectivoInicial }: DatosAperturaTurno) => {
+      const { data, error } = await supabase.rpc("abrir_turno", {
+        p_caja_id: cajaId,
+        p_efectivo_inicial: efectivoInicial,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: invalidar,
+    // Si otro admin la abrió entre que se listó y se eligió, la lista tiene que reflejarlo.
+    onError: invalidar,
+  });
+}
+
+/** Solo admin (lo controla la RPC): cierra el turno de una caja; el efectivo vuelve a la caja de cambio. */
+export function useCerrarTurno() {
+  const invalidar = useInvalidarCaja();
+  return useMutation({
+    mutationFn: async ({ observaciones, turnoId }: { observaciones: string; turnoId: number }) => {
+      const { data, error } = await supabase.rpc("cerrar_turno", {
+        p_turno_id: turnoId,
+        ...(observaciones && { p_observaciones: observaciones }),
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: invalidar,
+    // Si otro admin ya lo cerró, la lista de turnos abiertos se actualiza.
+    onError: invalidar,
+  });
+}
+
+/** Un solo medio, o pago mixto (2 o 3 medios distintos que suman el precio final; lo valida la BD). */
+export type CobroVenta = { medio: MedioPago } | { pagos: PagoDeVenta[] };
+
+export interface DatosVenta {
+  servicioId: number;
+  cobro: CobroVenta;
+  patente: string | null;
+  /** Descuento elegido (activo y habilitado para el servicio: lo controla la BD). */
+  descuentoId: number | null;
+  /**
+   * Precio final que vio el cajero (el del descuento elegido o el del servicio). Si la BD calcula
+   * otro, rechaza la venta (`esPrecioCambiado`) en vez de cobrar un importe que el cajero no vio.
+   */
+  precioEsperado: number;
+}
+
+/** Mensajes de `_turno_para_trabajar` cuando el turno elegido ya no sirve para trabajar. */
+const MENSAJES_TURNO_NO_DISPONIBLE = [
+  "ya se cerró: elegí una caja abierta",
+  "El turno elegido no existe",
+] as const;
+
+/**
+ * `registrar_venta` / `registrar_gasto` rechazaron porque el turno de la caja elegida ya se cerró (o
+ * no existe): hay que volver a elegir la caja.
+ */
+export function esTurnoNoDisponible(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const { message } = error as { message?: unknown };
+  return (
+    typeof message === "string" && MENSAJES_TURNO_NO_DISPONIBLE.some((m) => message.includes(m))
+  );
+}
+
+/** Mensaje con el que `registrar_venta` rechaza una venta cuyo precio final no es el esperado. */
+const PREFIJO_PRECIO_CAMBIADO = "El precio cambió";
+
+/** `registrar_venta` rechazó la venta porque el precio final ya no es el que vio el cajero. */
+export function esPrecioCambiado(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const { code, message } = error as { code?: unknown; message?: unknown };
+  return (
+    code === "P0001" && typeof message === "string" && message.startsWith(PREFIJO_PRECIO_CAMBIADO)
+  );
+}
+
+/** `turnoId`: el turno de la caja elegida en `/caja` (la BD controla que siga abierto). */
+export function useRegistrarVenta() {
+  const invalidar = useInvalidarVenta();
+  return useMutation({
+    mutationFn: async ({
+      turnoId,
+      servicioId,
+      cobro,
+      patente,
+      descuentoId,
+      precioEsperado,
+    }: DatosVenta & { turnoId: number }) => {
+      const { data, error } = await supabase.rpc("registrar_venta", {
+        p_turno_id: turnoId,
+        p_servicio_id: servicioId,
+        ...("medio" in cobro
+          ? { p_medio_pago: cobro.medio }
+          : { p_pagos: cobro.pagos.map(({ medio, monto }) => ({ medio, monto })) }),
+        ...(patente && { p_patente: patente }),
+        ...(descuentoId !== null && { p_descuento_id: descuentoId }),
+        p_precio_esperado: precioEsperado,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: invalidar,
+    // El rechazo puede venir de un cambio ajeno (caja cerrada por el admin, servicio, categoría o
+    // descuento desactivados, precio cambiado): se vuelven a leer las cajas abiertas, las ventas, el
+    // catálogo y los descuentos para mostrar el estado real. onError se espera antes de que
+    // `mutateAsync` rechace: la pantalla ya tiene los datos nuevos cuando muestra el error.
+    onError: invalidar,
+  });
+}
+
+/** Solo admin (lo controla la RPC). Si fue en efectivo, sale del turno abierto o de la caja de cambio. */
+export function useAnularVenta() {
+  const invalidar = useInvalidarCaja();
+  return useMutation({
+    mutationFn: async ({ ventaId, motivo }: { ventaId: number; motivo: string }) => {
+      const { data, error } = await supabase.rpc("anular_venta", {
+        p_venta_id: ventaId,
+        p_motivo: motivo,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: invalidar,
+    // Ej. otro admin la anuló recién: el detalle se actualiza.
+    onError: invalidar,
+  });
+}
