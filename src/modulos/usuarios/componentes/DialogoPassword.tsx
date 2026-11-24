@@ -1,4 +1,5 @@
 import { useState, type SubmitEvent } from "react";
+import { InputPassword } from "@/compartido/componentes/InputPassword";
 import { toast } from "sonner";
 import { Campo } from "@/compartido/componentes/Campo";
 import { ErrorFormulario } from "@/compartido/componentes/ErrorFormulario";
@@ -14,7 +15,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/compartido/ui/dialog";
-import { Input } from "@/compartido/ui/input";
 import type { UsuarioAdmin } from "../api/admin-usuarios";
 import { useAccionUsuario } from "../api/consultas";
 
@@ -60,9 +60,8 @@ export function DialogoPassword({
         </DialogHeader>
         <form className="flex flex-col gap-4" onSubmit={(e) => void enviar(e)} noValidate>
           <Campo id="password-nueva" etiqueta="Nueva contraseña">
-            <Input
+            <InputPassword
               id="password-nueva"
-              type="password"
               autoComplete="new-password"
               autoFocus
               value={password}
@@ -72,9 +71,8 @@ export function DialogoPassword({
             />
           </Campo>
           <Campo id="password-confirmacion" etiqueta="Repetir contraseña" error={error}>
-            <Input
+            <InputPassword
               id="password-confirmacion"
-              type="password"
               autoComplete="new-password"
               value={confirmacion}
               onChange={(e) => {

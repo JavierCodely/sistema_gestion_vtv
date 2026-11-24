@@ -43,7 +43,7 @@ test("barra fija: el admin abre una caja (ya elegida, sin 'Atiende') y la cierra
   await nuevoUsuario.getByLabel("Nombre").fill("Cajero");
   await nuevoUsuario.getByLabel("Apellido").fill(sufijo);
   await nuevoUsuario.getByLabel("Email").fill(cajero.email);
-  await nuevoUsuario.getByLabel("Contraseña").fill(cajero.password);
+  await nuevoUsuario.getByLabel("Contraseña", { exact: true }).fill(cajero.password);
   await conFuncion(page, "admin-usuarios", () =>
     nuevoUsuario.getByRole("button", { name: "Crear usuario" }).click(),
   );

@@ -71,6 +71,8 @@ test("ventas en vivo: el admin ve aparecer la venta del cajero y los totales al 
   await expect(page.getByTestId("estado-en-vivo")).toHaveText("En vivo");
   const turno = await turnoAbiertoDe(page, caja);
   await expect(turno.getByTestId("vivo-Total ventas")).toHaveText(/\$\s0,00/);
+  // El efectivo del cajón, dentro de los totales: el efectivo inicial
+  await expect(turno.getByTestId("vivo-efectivo-en-caja")).toHaveText(/\$\s3\.000,00/);
   await expect(turno.getByText("Todavía no hay ventas en este turno.")).toBeVisible();
 
   // --- Cajero (otro navegador) vende en esa caja
@@ -85,6 +87,8 @@ test("ventas en vivo: el admin ve aparecer la venta del cajero y los totales al 
   await expect(turno.getByRole("cell", { name: "VI123VO" })).toBeVisible({ timeout: 15_000 });
   await expect(turno.getByTestId("vivo-Transferencia")).toHaveText(/15\.000,00/);
   await expect(turno.getByTestId("vivo-Total ventas")).toHaveText(/15\.000,00/);
+  // Por transferencia: el efectivo del cajón no cambia
+  await expect(turno.getByTestId("vivo-efectivo-en-caja")).toHaveText(/\$\s3\.000,00/);
   await expect(turno.getByText(/Atendieron: .*Carlos/)).toBeVisible();
 
   // --- Historial: el turno figura en el período de hoy (fecha de apertura) y no en otro

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { InputPassword } from "@/compartido/componentes/InputPassword";
 import { CircleAlert } from "lucide-react";
 import { useState, type SubmitEvent } from "react";
 import { Navigate, useLocation } from "react-router";
@@ -88,9 +89,8 @@ export function Login() {
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="password">Contraseña</Label>
-                <Input
+                <InputPassword
                   id="password"
-                  type="password"
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => {

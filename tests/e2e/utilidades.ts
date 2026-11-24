@@ -6,7 +6,7 @@ export const CAJERO = { email: "cajero@vtv.local", password: "cajero1234" };
 export async function ingresar(page: Page, credenciales: { email: string; password: string }) {
   await page.goto("/login");
   await page.getByLabel("Email").fill(credenciales.email);
-  await page.getByLabel("Contraseña").fill(credenciales.password);
+  await page.getByLabel("Contraseña", { exact: true }).fill(credenciales.password);
   await page.getByRole("button", { name: "Ingresar" }).click();
 }
 
