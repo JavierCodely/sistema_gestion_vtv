@@ -14,10 +14,15 @@ type FilaValorizada =
  * Stock con costos (solo admin). Dónde se usa: `todos_servicios` o las categorías enteras
  * (`categoria_ids`) y los servicios sueltos (`servicio_ids`); `aplica_a` es el texto para mostrar.
  */
-export type CertificadoConStock = Omit<FilaValorizada, "semaforo" | "dias_vuelta"> & {
+export type CertificadoConStock = Omit<
+  FilaValorizada,
+  "semaforo" | "dias_vuelta" | "costo_unidad"
+> & {
   semaforo: "ok" | "bajo" | "sin_stock";
   /** Solo en un certificado condicional (los tipos generados de una RPC no marcan los NULL). */
   dias_vuelta: number | null;
+  /** Costo vigente de una unidad de compra; NULL si nunca se cargó (migración 44). */
+  costo_unidad: number | null;
 };
 
 type FilaCompra = Database["public"]["Views"]["v_compras_certificado"]["Row"];

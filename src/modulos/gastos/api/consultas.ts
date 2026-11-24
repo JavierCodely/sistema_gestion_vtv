@@ -39,6 +39,8 @@ export type Gasto = { id: number } & Pick<
   | "anulada"
   | "motivo_anulacion"
   | "categoria_gasto_id"
+  | "reemplazado_por"
+  | "corrige_a"
 >;
 
 export interface DatosGasto {
@@ -56,7 +58,6 @@ export interface DatosCategoriaGasto {
 
 export const MENSAJES_ERROR_CATEGORIA_GASTO = {
   repetido: "Ya existe una categoría con ese nombre en ese rubro.",
-  enUso: "La categoría ya tiene gastos o subcategorías: desactivala en vez de borrarla.",
 };
 
 /** Prefijo de todo lo de gastos. Las mutaciones también invalidan `["turnos"]` (totales del admin). */
@@ -68,7 +69,7 @@ export const claves = {
 };
 
 const COLUMNAS_GASTO =
-  "id, fecha, turno_id, caja_nombre, usuario_nombre, concepto, detalle, medio, monto, nota, anulada, motivo_anulacion, categoria_gasto_id";
+  "id, fecha, turno_id, caja_nombre, usuario_nombre, concepto, detalle, medio, monto, nota, anulada, motivo_anulacion, categoria_gasto_id, reemplazado_por, corrige_a";
 const COLUMNAS_CATEGORIA = "id, nombre, padre_id, habilitada_caja, activa, sistema";
 
 /** Todas las categorías (rubros y subcategorías). Las leen todos los usuarios activos. */
@@ -185,6 +186,32 @@ export function useAnularGasto() {
   });
 }
 
+/**
+ * Corrección (solo admin, motivo obligatorio): la BD anula el original y registra el corregido con la
+ * misma fecha, turno y caja; en efectivo devuelve y vuelve a pagar con el cajón (turno abierto) o la
+ * caja de cambio. Devuelve el gasto corregido.
+ */
+export function useCorregirGasto() {
+  const invalidar = useInvalidarGastos();
+  return useMutation({
+    mutationFn: async ({ id, motivo, ...datos }: DatosGasto & { id: number; motivo: string }) => {
+      const { data, error } = await supabase.rpc("corregir_gasto", {
+        p_gasto_id: id,
+        p_categoria_id: datos.categoriaId,
+        p_monto: datos.monto,
+        p_fuente: datos.fuente,
+        p_nota: datos.nota,
+        p_motivo: motivo,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: invalidar,
+    // Ej. otro admin lo anuló recién o el efectivo no alcanza: la lista muestra el estado real.
+    onError: invalidar,
+  });
+}
+
 export function useCrearCategoriaGasto() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -225,5 +252,23 @@ export function useActualizarCategoriaGasto() {
       return data;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: claves.categorias }),
+  });
+}
+
+/**
+ * Elimina una subcategoría sin gastos o un rubro sin gastos (con sus subcategorías). Con gastos, la
+ * BD responde que hay que desactivarla: el historial no cambia.
+ */
+export function useEliminarCategoriaGasto() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number): Promise<CategoriaGasto> => {
+      const { data, error } = await supabase.rpc("eliminar_categoria_gasto", {
+        p_categoria_id: id,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: claves.categorias }),
   });
 }

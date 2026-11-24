@@ -261,14 +261,14 @@ isOneToOne: false
                   ]
                 },"certificados": {
                   Row: {
-                    "activo": boolean,"actualizado_en": string,"condicional": boolean,"costo_promedio": number,"creado_en": string,"dias_vuelta": number | null,"hojas_por_unidad": number,"id": number,"nombre": string,"stock_hojas": number,"stock_minimo": number,"todos_servicios": boolean,"unidad_compra": Database["public"]['Enums']["unidad_compra"]
+                    "activo": boolean,"actualizado_en": string,"condicional": boolean,"costo_promedio": number,"costo_unidad": number | null,"creado_en": string,"dias_vuelta": number | null,"hojas_por_unidad": number,"id": number,"nombre": string,"stock_hojas": number,"stock_minimo": number,"todos_servicios": boolean,"unidad_compra": Database["public"]['Enums']["unidad_compra"]
                   }
                   ComputedFields: never
                   Insert: {
-                    "activo"?: boolean,"actualizado_en"?: string,"condicional"?: boolean,"costo_promedio"?: number,"creado_en"?: string,"dias_vuelta"?: number | null,"hojas_por_unidad": number,"id"?: never,"nombre": string,"stock_hojas"?: number,"stock_minimo"?: number,"todos_servicios"?: boolean,"unidad_compra"?: Database["public"]['Enums']["unidad_compra"]
+                    "activo"?: boolean,"actualizado_en"?: string,"condicional"?: boolean,"costo_promedio"?: number,"costo_unidad"?: number | null,"creado_en"?: string,"dias_vuelta"?: number | null,"hojas_por_unidad": number,"id"?: never,"nombre": string,"stock_hojas"?: number,"stock_minimo"?: number,"todos_servicios"?: boolean,"unidad_compra"?: Database["public"]['Enums']["unidad_compra"]
                   }
                   Update: {
-                    "activo"?: boolean,"actualizado_en"?: string,"condicional"?: boolean,"costo_promedio"?: number,"creado_en"?: string,"dias_vuelta"?: number | null,"hojas_por_unidad"?: number,"id"?: never,"nombre"?: string,"stock_hojas"?: number,"stock_minimo"?: number,"todos_servicios"?: boolean,"unidad_compra"?: Database["public"]['Enums']["unidad_compra"]
+                    "activo"?: boolean,"actualizado_en"?: string,"condicional"?: boolean,"costo_promedio"?: number,"costo_unidad"?: number | null,"creado_en"?: string,"dias_vuelta"?: number | null,"hojas_por_unidad"?: number,"id"?: never,"nombre"?: string,"stock_hojas"?: number,"stock_minimo"?: number,"todos_servicios"?: boolean,"unidad_compra"?: Database["public"]['Enums']["unidad_compra"]
                   }
                   Relationships: [
                     
@@ -441,14 +441,14 @@ isOneToOne: false
                   ]
                 },"gastos": {
                   Row: {
-                    "anulado": boolean,"anulado_en": string | null,"anulado_motivo": string | null,"anulado_por": string | null,"caja_id": number | null,"categoria_id": number,"creado_en": string,"fuente": Database["public"]['Enums']["fuente_fondos"],"id": number,"monto": number,"nota": string,"turno_id": number | null,"usuario_id": string
+                    "anulado": boolean,"anulado_en": string | null,"anulado_motivo": string | null,"anulado_por": string | null,"caja_id": number | null,"categoria_id": number,"corrige_a": number | null,"creado_en": string,"fuente": Database["public"]['Enums']["fuente_fondos"],"id": number,"monto": number,"nota": string,"reemplazado_por": number | null,"turno_id": number | null,"usuario_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "anulado"?: boolean,"anulado_en"?: string | null,"anulado_motivo"?: string | null,"anulado_por"?: string | null,"caja_id"?: number | null,"categoria_id": number,"creado_en"?: string,"fuente": Database["public"]['Enums']["fuente_fondos"],"id"?: never,"monto": number,"nota": string,"turno_id"?: number | null,"usuario_id": string
+                    "anulado"?: boolean,"anulado_en"?: string | null,"anulado_motivo"?: string | null,"anulado_por"?: string | null,"caja_id"?: number | null,"categoria_id": number,"corrige_a"?: number | null,"creado_en"?: string,"fuente": Database["public"]['Enums']["fuente_fondos"],"id"?: never,"monto": number,"nota": string,"reemplazado_por"?: number | null,"turno_id"?: number | null,"usuario_id": string
                   }
                   Update: {
-                    "anulado"?: boolean,"anulado_en"?: string | null,"anulado_motivo"?: string | null,"anulado_por"?: string | null,"caja_id"?: number | null,"categoria_id"?: number,"creado_en"?: string,"fuente"?: Database["public"]['Enums']["fuente_fondos"],"id"?: never,"monto"?: number,"nota"?: string,"turno_id"?: number | null,"usuario_id"?: string
+                    "anulado"?: boolean,"anulado_en"?: string | null,"anulado_motivo"?: string | null,"anulado_por"?: string | null,"caja_id"?: number | null,"categoria_id"?: number,"corrige_a"?: number | null,"creado_en"?: string,"fuente"?: Database["public"]['Enums']["fuente_fondos"],"id"?: never,"monto"?: number,"nota"?: string,"reemplazado_por"?: number | null,"turno_id"?: number | null,"usuario_id"?: string
                   }
                   Relationships: [
                     {
@@ -481,6 +481,18 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "v_gastos_por_categoria"
       referencedColumns: ["rubro_id"]
+    },{
+      foreignKeyName: "gastos_corrige_a_fkey"
+      columns: ["corrige_a"]
+isOneToOne: true
+      referencedRelation: "gastos"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "gastos_reemplazado_por_fkey"
+      columns: ["reemplazado_por"]
+isOneToOne: false
+      referencedRelation: "gastos"
+      referencedColumns: ["id"]
     },{
       foreignKeyName: "gastos_turno_id_fkey"
       columns: ["turno_id"]
@@ -990,7 +1002,7 @@ isOneToOne: false
                   ]
                 },"v_movimientos_caja": {
                   Row: {
-                    "anulada": boolean | null,"caja_id": number | null,"caja_nombre": string | null,"categoria_gasto_id": number | null,"concepto": string | null,"descuento_nombre": string | null,"detalle": string | null,"fecha": string | null,"fecha_local": string | null,"id": number | null,"medio": string | null,"monto": number | null,"monto_descuento": number | null,"motivo_anulacion": string | null,"nota": string | null,"pagos": Json | null,"patente": string | null,"precio_lista": number | null,"servicio_id": number | null,"sin_stock": boolean | null,"tipo": string | null,"turno_id": number | null,"usuario_id": string | null,"usuario_nombre": string | null
+                    "anulada": boolean | null,"caja_id": number | null,"caja_nombre": string | null,"categoria_gasto_id": number | null,"concepto": string | null,"corrige_a": number | null,"descuento_nombre": string | null,"detalle": string | null,"fecha": string | null,"fecha_local": string | null,"id": number | null,"medio": string | null,"monto": number | null,"monto_descuento": number | null,"motivo_anulacion": string | null,"nota": string | null,"pagos": Json | null,"patente": string | null,"precio_lista": number | null,"reemplazado_por": number | null,"servicio_id": number | null,"sin_stock": boolean | null,"tipo": string | null,"turno_id": number | null,"usuario_id": string | null,"usuario_nombre": string | null
                   }
                   ComputedFields: never
                   Relationships: [
@@ -1544,11 +1556,13 @@ isOneToOne: false
 "anulado_por": string | null,
 "caja_id": number | null,
 "categoria_id": number,
+"corrige_a": number | null,
 "creado_en": string,
 "fuente": Database["public"]['Enums']["fuente_fondos"],
 "id": number,
 "monto": number,
 "nota": string,
+"reemplazado_por": number | null,
 "turno_id": number | null,
 "usuario_id": string
             }
@@ -1693,11 +1707,13 @@ isOneToOne: false
 "anulado_por": string | null,
 "caja_id": number | null,
 "categoria_id": number,
+"corrige_a": number | null,
 "creado_en": string,
 "fuente": Database["public"]['Enums']["fuente_fondos"],
 "id": number,
 "monto": number,
 "nota": string,
+"reemplazado_por": number | null,
 "turno_id": number | null,
 "usuario_id": string
             }
@@ -1810,6 +1826,30 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"corregir_gasto":
+{ Args: { "p_categoria_id": number,"p_fuente": Database["public"]['Enums']["fuente_fondos"],"p_gasto_id": number,"p_monto": number,"p_motivo": string,"p_nota": string }; Returns: {
+              "anulado": boolean,
+"anulado_en": string | null,
+"anulado_motivo": string | null,
+"anulado_por": string | null,
+"caja_id": number | null,
+"categoria_id": number,
+"corrige_a": number | null,
+"creado_en": string,
+"fuente": Database["public"]['Enums']["fuente_fondos"],
+"id": number,
+"monto": number,
+"nota": string,
+"reemplazado_por": number | null,
+"turno_id": number | null,
+"usuario_id": string
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "gastos"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
 "cuit_valido":
 { Args: { "p_cuit": string }; Returns: boolean
                            },
@@ -1818,6 +1858,22 @@ isOneToOne: false
               "id": number,"monto_descuento": number,"nombre": string,"precio_final": number,"precio_lista": number,"tipo": Database["public"]['Enums']["tipo_descuento"],"valor": number
             }[]
                            },
+"eliminar_categoria_gasto":
+{ Args: { "p_categoria_id": number }; Returns: {
+              "activa": boolean,
+"creado_en": string,
+"habilitada_caja": boolean,
+"id": number,
+"nombre": string,
+"padre_id": number | null,
+"sistema": string | null
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "categorias_gasto"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
 "es_admin":
 { Args: Record<PropertyKey, never>; Returns: boolean
                            },
@@ -2042,11 +2098,13 @@ isOneToOne: false
 "anulado_por": string | null,
 "caja_id": number | null,
 "categoria_id": number,
+"corrige_a": number | null,
 "creado_en": string,
 "fuente": Database["public"]['Enums']["fuente_fondos"],
 "id": number,
 "monto": number,
 "nota": string,
+"reemplazado_por": number | null,
 "turno_id": number | null,
 "usuario_id": string
             }
@@ -2177,7 +2235,7 @@ isOneToOne: false
                            },
 "stock_certificados_valorizado":
 { Args: Record<PropertyKey, never>; Returns: {
-              "activo": boolean,"aplica_a": string,"categoria_ids": (number)[],"condicional": boolean,"costo_promedio": number,"dias_vuelta": number,"hojas_por_unidad": number,"id": number,"nombre": string,"semaforo": string,"servicio_ids": (number)[],"stock_hojas": number,"stock_minimo": number,"todos_servicios": boolean,"unidad_compra": Database["public"]['Enums']["unidad_compra"],"valor_stock": number
+              "activo": boolean,"aplica_a": string,"categoria_ids": (number)[],"condicional": boolean,"costo_promedio": number,"costo_unidad": number,"dias_vuelta": number,"hojas_por_unidad": number,"id": number,"nombre": string,"semaforo": string,"servicio_ids": (number)[],"stock_hojas": number,"stock_minimo": number,"todos_servicios": boolean,"unidad_compra": Database["public"]['Enums']["unidad_compra"],"valor_stock": number
             }[]
                            },
 "turno_abierto":
@@ -2200,7 +2258,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "ambiente_arca": "homologacion"|"produccion","cuenta_fondos": "efectivo"|"transferencia"|"tarjeta","estado_comprobante": "pendiente"|"procesando"|"autorizado"|"rechazado"|"cancelado","fuente_fondos": "efectivo"|"transferencia","medio_pago": "efectivo"|"transferencia"|"tarjeta","rol_usuario": "admin"|"cajero","tipo_alerta": "venta_sin_stock"|"stock_bajo","tipo_comprobante": "factura"|"nota_credito","tipo_descuento": "porcentaje"|"monto_fijo","tipo_impuesto": "porcentaje"|"monto_fijo","tipo_mov_certificado": "compra"|"venta"|"ajuste"|"anulacion_compra","tipo_mov_efectivo": "fondo_inicial"|"ingreso"|"retiro"|"venta"|"anulacion_venta"|"gasto"|"anulacion_gasto"|"apertura_turno"|"cierre_turno","tipo_mov_fondos": "fondo_inicial"|"ingreso"|"retiro","unidad_compra": "caja"|"libreta"|"unidad"
+            "ambiente_arca": "homologacion"|"produccion","cuenta_fondos": "efectivo"|"transferencia"|"tarjeta","estado_comprobante": "pendiente"|"procesando"|"autorizado"|"rechazado"|"cancelado","fuente_fondos": "efectivo"|"transferencia","medio_pago": "efectivo"|"transferencia"|"tarjeta","rol_usuario": "admin"|"cajero","tipo_alerta": "venta_sin_stock"|"stock_bajo","tipo_comprobante": "factura"|"nota_credito","tipo_descuento": "porcentaje"|"monto_fijo","tipo_impuesto": "porcentaje"|"monto_fijo","tipo_mov_certificado": "compra"|"venta"|"ajuste"|"anulacion_compra"|"revaluacion","tipo_mov_efectivo": "fondo_inicial"|"ingreso"|"retiro"|"venta"|"anulacion_venta"|"gasto"|"anulacion_gasto"|"apertura_turno"|"cierre_turno","tipo_mov_fondos": "fondo_inicial"|"ingreso"|"retiro","unidad_compra": "caja"|"libreta"|"unidad"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -2320,7 +2378,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "ambiente_arca": ["homologacion", "produccion"],"cuenta_fondos": ["efectivo", "transferencia", "tarjeta"],"estado_comprobante": ["pendiente", "procesando", "autorizado", "rechazado", "cancelado"],"fuente_fondos": ["efectivo", "transferencia"],"medio_pago": ["efectivo", "transferencia", "tarjeta"],"rol_usuario": ["admin", "cajero"],"tipo_alerta": ["venta_sin_stock", "stock_bajo"],"tipo_comprobante": ["factura", "nota_credito"],"tipo_descuento": ["porcentaje", "monto_fijo"],"tipo_impuesto": ["porcentaje", "monto_fijo"],"tipo_mov_certificado": ["compra", "venta", "ajuste", "anulacion_compra"],"tipo_mov_efectivo": ["fondo_inicial", "ingreso", "retiro", "venta", "anulacion_venta", "gasto", "anulacion_gasto", "apertura_turno", "cierre_turno"],"tipo_mov_fondos": ["fondo_inicial", "ingreso", "retiro"],"unidad_compra": ["caja", "libreta", "unidad"]
+            "ambiente_arca": ["homologacion", "produccion"],"cuenta_fondos": ["efectivo", "transferencia", "tarjeta"],"estado_comprobante": ["pendiente", "procesando", "autorizado", "rechazado", "cancelado"],"fuente_fondos": ["efectivo", "transferencia"],"medio_pago": ["efectivo", "transferencia", "tarjeta"],"rol_usuario": ["admin", "cajero"],"tipo_alerta": ["venta_sin_stock", "stock_bajo"],"tipo_comprobante": ["factura", "nota_credito"],"tipo_descuento": ["porcentaje", "monto_fijo"],"tipo_impuesto": ["porcentaje", "monto_fijo"],"tipo_mov_certificado": ["compra", "venta", "ajuste", "anulacion_compra", "revaluacion"],"tipo_mov_efectivo": ["fondo_inicial", "ingreso", "retiro", "venta", "anulacion_venta", "gasto", "anulacion_gasto", "apertura_turno", "cierre_turno"],"tipo_mov_fondos": ["fondo_inicial", "ingreso", "retiro"],"unidad_compra": ["caja", "libreta", "unidad"]
           }
         }
 } as const

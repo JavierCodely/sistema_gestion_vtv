@@ -148,4 +148,14 @@ describe("DialogoCompra en modo edición", () => {
       "Solo se puede editar la última compra de un certificado",
     );
   });
+
+  it("una compra nueva propone el costo vigente del certificado", () => {
+    renderConQuery(
+      <DialogoCompra
+        certificado={certificadoDePrueba({ unidad_compra: "libreta", costo_unidad: 3700 })}
+        onCerrar={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText("Costo por libreta ($)")).toHaveValue("3700");
+  });
 });

@@ -269,6 +269,8 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
 | 40 | `condicionales` | **Condicionales** y búsqueda por patente: `servicios.condicional_de` (servicio aprobado) + `dias_vuelta` (1–365; trigger `servicios_condicional`: sin cadenas); foto en la venta (`ventas.condicional_servicio_id`, `condicional_vence` = día de negocio + días, trigger `ventas_condicional`); `ventas.vuelta_de` (una vuelta sin anular por condicional, índice `ventas_una_vuelta_por_condicional`); `registrar_venta` detecta la vuelta por patente y servicio y la registra a $ 0 descontando la hoja del aprobado; una condicional con vuelta no se anula (trigger `ventas_condicional_anulada`); `condicionales_vigentes()` (la reemplaza la 41), `ventas_por_patente()` (admin), interna `_normalizar_patente` — decisiones 2026-11-23. **Aplicada en la nube**: no se edita |
 | 41 | `condicional_mitad` | **Condicional al 50%**: `ventas.condicional_saldo` (lo que falta pagar al volver; 0 si se pagó entera, y así quedan las vendidas con la 40); `registrar_venta(..., p_condicional_mitad)` (sin descuento) cobra round(precio / 2, 2); la vuelta cobra el saldo ($ 0 o la otra mitad), sin descuento; CHECK `ventas_precio_cobrado` (precio = lista − descuento − saldo; reemplaza `ventas_precio_con_descuento` y `ventas_vuelta_sin_cargo`); `condicionales_de_patente()` (vigentes y vencidas, con pagado y saldo; reemplaza `condicionales_vigentes`); `_calcular_impuestos_venta` reparte el monto fijo entre condicional y vuelta; `ventas_por_patente` con `condicional_saldo` — decisiones 2026-11-23 |
 | 42 | `certificados_condicionales` | **La condicional es un certificado**: `certificados.condicional` + `dias_vuelta` (1–365; CHECK condicional ⇔ días; grant por columna al admin); `certificado_destinos.condicional` (copia por el trigger `certificados_destinos_activo`, ahora también al cambiar el tipo); índices `certificados_un_global_activo`, `certificados_uno_por_categoria` y `certificados_uno_por_servicio` por tipo; `_validar_destinos_certificado(…, p_condicional)`; interna `_certificado_para(servicio, condicional)`, `certificado_para_servicio` (el de siempre) y `certificado_condicional_para_servicio()`; `v_stock_certificados` y `stock_certificados_valorizado()` con `condicional`, `dias_vuelta`; `registrar_venta(..., p_condicional)` pone la foto de la condicional (sin trigger `ventas_condicional`); `condicionales_de_patente` sin `condicional_id` (`condicional_nombre` = el certificado entregado); se quitan `servicios.condicional_de`, `dias_vuelta` y su trigger (las condicionales configuradas se pasan solas) — decisiones 2026-11-23 |
+| 43 | `gastos_eliminar_corregir` | `eliminar_categoria_gasto()` (solo admin: subcategoría sin gastos, o rubro sin gastos con sus subcategorías; ni la del sistema ni su rubro; se quita el DELETE directo sobre `categorias_gasto`); `corregir_gasto()` (solo admin, motivo: anula el original y registra el corregido en una transacción); `gastos.reemplazado_por` / `corrige_a`; `v_movimientos_caja` con `reemplazado_por`, `corrige_a` al final — decisiones 2026-11-24 |
+| 44 | `certificados_costo_unidad` | `certificados.costo_unidad` (costo vigente de la libreta/caja/hoja; grant insert/update por columna, sin select); trigger `certificados_costo_unidad`: al cargarlo o cambiar las hojas por unidad fija `costo_promedio` = costo / hojas (todo el stock); `certificados_revaluacion` lo anota en el kardex (`tipo_mov_certificado` + `revaluacion`, 0 hojas, `costo_total` = cuánto cambió el valor del stock); `stock_certificados_valorizado()` con `costo_unidad` al final — decisión 2026-11-24 |
 
 Reglas que no son obvias leyendo una sola tabla:
 - **Certificado a usar**: el activo más específico (servicio > categoría > todos los servicios).
@@ -317,6 +319,13 @@ Reglas que no son obvias leyendo una sola tabla:
 - **Compra**: suma hojas (`unidades × hojas_por_unidad`), recalcula costo promedio ponderado
   y crea automáticamente un gasto en la categoría con `sistema = 'compra_certificados'`
   (Insumos › Compra de certificados), que no se carga a mano ni se anula.
+- **Costo de la unidad** (decisión 2026-11-24, migración 44): al crear o editar un certificado el admin
+  carga opcionalmente el "Costo por libreta/caja/hoja ($)"; la BD fija el costo por hoja de **todo el
+  stock** = costo / hojas por unidad (ej. libreta de 25 hojas a $ 3.700 → $ 148; 300 hojas valen
+  $ 44.400) y lo anota en el kardex ("Cambio de costo"). El diálogo muestra la vista previa
+  (`costoPorHoja`, "Cada hoja: $ 148,00 · las 300 hojas en stock valen …"). Las compras siguen
+  promediando y no tocan `costo_unidad` ("Registrar compra" lo propone); un cambio de costo después de
+  una compra hace que esa compra ya no se pueda editar. Vaciar el costo no cambia el costo por hoja.
 - **Ajuste de stock**: valuado al costo promedio vigente, no lo modifica, no genera gasto.
 - **Compra de un certificado desactivado**: se rechaza (hay que activarlo antes). El ajuste sí se permite.
 - **Editar una compra** (solo admin, motivo obligatorio): solo la **última** del certificado, sin ventas,
@@ -334,7 +343,16 @@ Reglas que no son obvias leyendo una sola tabla:
 - **Anular venta** (solo admin): la hoja NO vuelve al stock; si fue en efectivo, el monto sale del
   cajón si el turno sigue abierto, o de la caja de cambio si ya cerró (si no alcanza, se rechaza).
 - **Gastos**: siempre a una subcategoría activa de un rubro activo; `habilitada_caja` solo existe en
-  subcategorías. El cajero necesita turno abierto y categoría habilitada y paga con el cajón (si no
+  subcategorías. **Eliminar** un rubro o subcategoría (solo admin, `eliminar_categoria_gasto`, migración
+  43; decisión 2026-11-24) solo si no tiene gastos (el rubro se va con sus subcategorías vacías); con
+  gastos la BD lo rechaza ("…desactivala en vez de eliminarla") y el historial nunca cambia; la del
+  sistema y su rubro no tienen "Eliminar". **Corregir** un gasto (solo admin, motivo obligatorio,
+  `corregir_gasto`, como la corrección de compras): se anula el original (queda tachado como
+  "Corregido" con el motivo, `reemplazado_por`) y se registra el corregido ("Corrección", `corrige_a`)
+  con subcategoría, monto, fuente y nota nuevos y **la misma fecha, turno, caja y quién lo cargó**. En
+  efectivo, el original vuelve y el corregido se paga con el cajón si el turno sigue abierto o con la
+  caja de cambio si no (si no alcanza, no cambia nada). Puede quedar la subcategoría del original
+  aunque esté desactivada. Los gastos de compras de certificados se corrigen desde la compra. El cajero necesita turno abierto y categoría habilitada y paga con el cajón (si no
   alcanza, se rechaza sin decirle montos). El admin desde `/admin/gastos` paga con la caja de cambio y
   el gasto no queda en ningún turno; desde `/caja` (`p_turno_id` de la caja donde trabaja) paga con ese
   cajón. El cajero siempre pasa `p_turno_id` (la caja elegida). Las compras
@@ -547,6 +565,8 @@ Todas requieren usuario autenticado y **activo**. Devuelven la fila afectada.
 | `anular_venta(p_venta_id bigint, p_motivo text) → ventas` | admin | Motivo obligatorio |
 | `registrar_gasto(p_categoria_id bigint, p_monto numeric, p_fuente fuente_fondos, p_nota text, p_turno_id bigint = null) → gastos` | todos | Nota obligatoria. Cajero: `p_turno_id` obligatorio (turno abierto, mismas validaciones que `registrar_venta`) + categoría habilitada; paga con ese cajón. Admin: con `p_turno_id` paga con el cajón de esa caja; sin él, caja de cambio y sin turno |
 | `anular_gasto(p_gasto_id bigint, p_motivo text) → gastos` | admin | No aplica a gastos de compra de certificados |
+| `corregir_gasto(p_gasto_id bigint, p_categoria_id bigint, p_monto numeric, p_fuente fuente_fondos, p_nota text, p_motivo text) → gastos` | admin | Devuelve el corregido (misma fecha, turno, caja y usuario que el original, `corrige_a`); el original queda anulado con el motivo y `reemplazado_por`. Rechaza anulados y gastos de compras |
+| `eliminar_categoria_gasto(p_categoria_id bigint) → categorias_gasto` | admin | Subcategoría sin gastos, o rubro sin gastos (con sus subcategorías). Con gastos → P0001 "…desactivala/desactivalo en vez de eliminarla/o"; la del sistema → 42501. Es el único DELETE de `categorias_gasto` |
 | `registrar_compra_certificado(p_certificado_id bigint, p_unidades int, p_costo_unidad numeric, p_fuente fuente_fondos, p_proveedor text = null) → compras_certificado` | admin | Para la UI: hojas = `unidades × hojas_por_unidad`, costo/hoja = `costo_unidad / hojas_por_unidad` |
 | `corregir_compra_certificado(p_compra_id bigint, p_unidades int, p_costo_unidad numeric, p_fuente fuente_fondos, p_proveedor text, p_motivo text) → compras_certificado` | admin | Devuelve la compra corregida. Rechaza si no es el último movimiento del certificado o ya fue corregida |
 | `ajustar_stock_certificado(p_certificado_id bigint, p_hojas int, p_nota text) → movimientos_certificado` | admin | `p_hojas` con signo, ≠ 0 |
@@ -570,7 +590,7 @@ Todas requieren usuario autenticado y **activo**. Devuelven la fila afectada.
 | `nombre_usuario(p_usuario_id uuid) → text` | todos | Nombre completo para mostrar quién hizo un movimiento: el admin, de cualquiera; los demás, el propio o el de quien vendió/gastó en un turno abierto (si no, NULL). La usa `v_movimientos_caja` |
 | `preparar_factura(p_venta_id bigint, p_condicion_iva_id int, p_doc_tipo smallint, p_doc_nro bigint, p_receptor_nombre text = null) → comprobantes` | todos | Cajero: cualquier venta de un turno abierto (sea de quien sea). Crea o corrige la factura pendiente/rechazada (clase, importes, cliente); no emite. Al corregir guarda `actualizado_por` = quien corrigió |
 | `puede_emitir_comprobante(p_comprobante_id bigint) → comprobantes` | todos | Lo llama la Edge Function `arca` antes de emitir: cajero solo facturas de ventas de un turno abierto y 5 s entre intentos; NC solo admin |
-| `stock_certificados_valorizado() → setof (… columnas de v_stock_certificados, costo_promedio, valor_stock)` | admin | Stock con valuación |
+| `stock_certificados_valorizado() → setof (… columnas de v_stock_certificados, costo_promedio, valor_stock, …, costo_unidad)` | admin | Stock con valuación; `costo_unidad` al final (migración 44, NULL si no se cargó) |
 | `resumen_diario(p_desde date = null, p_hasta date = null) → setof (fecha, cantidad_ventas, total_*, total_gastos, flujo_neto, costo_certificados, margen_bruto, ventas_sin_stock)` | admin | Reporte por día (hora AR), sin anulados; rango opcional |
 | `rol_actual() → rol_usuario`, `es_admin() → boolean` | todos | `null`/`false` si el usuario está desactivado |
 
@@ -600,7 +620,7 @@ se registra antes del `FECAESolicitar`; si no hubo respuesta, el siguiente `emit
 
 | Vista | Uso |
 |---|---|
-| `v_movimientos_caja` | Ventas + gastos juntos, con quién hizo cada uno (`usuario_id`, `usuario_nombre` —también para el cajero cuando lo hizo un compañero, vía `nombre_usuario`—). `tipo` = venta/gasto; **gastos con `monto` negativo** (fila roja); `anulada` para tacharlas (excluirlas de totales). `medio` = `'mixto'` en un pago mixto y `pagos` = detalle `[{medio, monto}]` (NULL en gastos); `descuento_nombre`, `monto_descuento`, `precio_lista` (NULL en gastos; `monto` es lo cobrado). Filtrar por `turno_id`, `caja_id`, `fecha_local`, etc. |
+| `v_movimientos_caja` | Ventas + gastos juntos, con quién hizo cada uno (`usuario_id`, `usuario_nombre` —también para el cajero cuando lo hizo un compañero, vía `nombre_usuario`—). `tipo` = venta/gasto; **gastos con `monto` negativo** (fila roja); `anulada` para tacharlas (excluirlas de totales). `medio` = `'mixto'` en un pago mixto y `pagos` = detalle `[{medio, monto}]` (NULL en gastos); `descuento_nombre`, `monto_descuento`, `precio_lista` (NULL en gastos; `monto` es lo cobrado); al final `reemplazado_por`, `corrige_a` (correcciones de gastos, migración 43). Filtrar por `turno_id`, `caja_id`, `fecha_local`, etc. |
 | `v_turnos` | **Solo admin** (RLS de `turnos`; al cajero, 0 filas). Turnos con caja (sin cajero: el turno es de la caja), `abierto_por`/`abierto_por_nombre` (admin que lo abrió), `atendido_por` (text[]: quienes vendieron o gastaron, más el cajero asignado de los turnos anteriores a la 33), `abierto`, totales en vivo por medio (desde `venta_pagos`: una venta mixta suma en cada medio su parte), gastos y neto, y efectivo del cajón (`efectivo_inicial`, `gastos_efectivo`, `efectivo_en_caja` —en vivo si está abierto, foto del cierre si no—, `efectivo_cierre`); `fecha_apertura` = día de negocio de la apertura (filtro del historial) |
 | `v_turnos_abiertos` | `id`, `caja_id`, `caja_nombre`, `abierto_en` de los turnos abiertos, **sin dinero**: para que el usuario elija la caja donde trabaja. Envuelve `turnos_abiertos()` (security definer) porque el cajero no lee `turnos`; sin relación embebible con `cajas` |
 | `v_stock_certificados` | Stock en hojas, `semaforo` (ok/bajo/sin_stock), `todos_servicios`, `categoria_ids`, `servicio_ids`, `aplica_a` (texto) y al final `condicional`, `dias_vuelta`. **Sin costos** (el admin usa `stock_certificados_valorizado()`) |

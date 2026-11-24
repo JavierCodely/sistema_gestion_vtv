@@ -1,4 +1,4 @@
-import { Ban, Plus } from "lucide-react";
+import { Ban, Pencil, Plus } from "lucide-react";
 import { useState } from "react";
 import { Cargando } from "@/compartido/componentes/Cargando";
 import { mensajeDeError } from "@/compartido/lib/errores";
@@ -10,11 +10,11 @@ import { DialogoAnularGasto } from "../componentes/DialogoAnularGasto";
 import { DialogoGasto } from "../componentes/DialogoGasto";
 import { TablaGastos } from "../componentes/TablaGastos";
 
-/** Gastos del negocio (admin): carga sin turno, anulación y categorías. */
+/** Gastos del negocio (admin): carga sin turno, corrección, anulación y categorías. */
 export function Gastos() {
   const gastos = useGastos();
   const categorias = useCategoriasGasto();
-  // Los gastos automáticos (compra de certificados) no se anulan a mano.
+  // Los gastos automáticos (compra de certificados) no se anulan ni se corrigen a mano.
   const automaticas = new Set(
     (categorias.data ?? []).filter((c) => c.sistema !== null).map((c) => c.id),
   );
@@ -25,6 +25,7 @@ export function Gastos() {
     !automaticas.has(gasto.categoria_gasto_id);
   const [cargando, setCargando] = useState(false);
   const [anulando, setAnulando] = useState<Gasto | null>(null);
+  const [corrigiendo, setCorrigiendo] = useState<Gasto | null>(null);
 
   return (
     <section className="flex flex-col gap-6">
@@ -58,17 +59,30 @@ export function Gastos() {
               vacio="Todavía no hay gastos registrados."
               acciones={(gasto) =>
                 anulable(gasto) && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`Anular gasto ${String(gasto.id)}`}
-                    onClick={() => {
-                      setAnulando(gasto);
-                    }}
-                  >
-                    <Ban aria-hidden />
-                    Anular
-                  </Button>
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`Corregir gasto ${String(gasto.id)}`}
+                      onClick={() => {
+                        setCorrigiendo(gasto);
+                      }}
+                    >
+                      <Pencil aria-hidden />
+                      Corregir
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`Anular gasto ${String(gasto.id)}`}
+                      onClick={() => {
+                        setAnulando(gasto);
+                      }}
+                    >
+                      <Ban aria-hidden />
+                      Anular
+                    </Button>
+                  </div>
                 )
               }
             />
@@ -99,6 +113,20 @@ export function Gastos() {
           descripcion="Se registra a tu nombre y no queda en ningún turno. Si es en efectivo, sale de la caja de cambio."
           onCerrar={() => {
             setCargando(false);
+          }}
+        />
+      )}
+      {corrigiendo && (
+        <DialogoGasto
+          soloCaja={false}
+          gasto={corrigiendo}
+          descripcion={
+            corrigiendo.medio === "efectivo"
+              ? "El original queda tachado con el motivo y se registra el corregido con la misma fecha. El efectivo vuelve y se paga de nuevo con la caja del turno si sigue abierto, o con la caja de cambio."
+              : "El original queda tachado con el motivo y se registra el corregido con la misma fecha."
+          }
+          onCerrar={() => {
+            setCorrigiendo(null);
           }}
         />
       )}

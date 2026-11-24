@@ -78,7 +78,15 @@ export function TablaGastos({
                   {formatearMoneda(Math.abs(gasto.monto ?? 0))}
                 </TableCell>
                 <TableCell>
-                  {gasto.anulada && <Badge variant="destructive">Anulado</Badge>}
+                  {gasto.anulada &&
+                    (gasto.reemplazado_por !== null ? (
+                      <Badge variant="outline">Corregido</Badge>
+                    ) : (
+                      <Badge variant="destructive">Anulado</Badge>
+                    ))}
+                  {!gasto.anulada && gasto.corrige_a !== null && (
+                    <Badge variant="secondary">Corrección</Badge>
+                  )}
                   {gasto.anulada && gasto.motivo_anulacion && (
                     <div className="text-xs text-muted-foreground">{gasto.motivo_anulacion}</div>
                   )}

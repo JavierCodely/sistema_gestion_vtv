@@ -1,4 +1,4 @@
-import { FolderPlus, Pencil, Plus } from "lucide-react";
+import { FolderPlus, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Cargando } from "@/compartido/componentes/Cargando";
@@ -17,15 +17,21 @@ import {
 } from "../api/consultas";
 import { agruparPorRubro } from "../lib/categorias";
 import { DialogoCategoriaGasto, type ModoCategoria } from "./DialogoCategoriaGasto";
+import { DialogoEliminarCategoriaGasto } from "./DialogoEliminarCategoriaGasto";
 
 /**
- * Rubros y subcategorías de gasto (solo admin). Las que ya se usaron no se borran: se desactivan.
- * Las del sistema (compra de certificados) solo se pueden renombrar.
+ * Rubros y subcategorías de gasto (solo admin). Se eliminan solo si no tienen gastos (un rubro, con
+ * sus subcategorías); las que ya se usaron se desactivan. Las del sistema (compra de certificados)
+ * solo se pueden renombrar: ni ellas ni su rubro tienen "Eliminar".
  */
 export function CategoriasGasto() {
   const categorias = useCategoriasGasto();
   const actualizar = useActualizarCategoriaGasto();
   const [modo, setModo] = useState<ModoCategoria | null>(null);
+  const [eliminando, setEliminando] = useState<{
+    categoria: CategoriaGasto;
+    subcategorias: CategoriaGasto[];
+  } | null>(null);
 
   async function cambiar(categoria: CategoriaGasto, cambios: CambiosCategoriaGasto, aviso: string) {
     try {
@@ -76,6 +82,18 @@ export function CategoriasGasto() {
                 >
                   <Pencil aria-hidden />
                 </Button>
+                {subcategorias.every((s) => s.sistema === null) && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Eliminar ${rubro.nombre}`}
+                    onClick={() => {
+                      setEliminando({ categoria: rubro, subcategorias });
+                    }}
+                  >
+                    <Trash2 aria-hidden />
+                  </Button>
+                )}
                 <Switch
                   checked={rubro.activa}
                   disabled={actualizar.isPending}
@@ -153,6 +171,18 @@ export function CategoriasGasto() {
                     >
                       <Pencil aria-hidden />
                     </Button>
+                    {sub.sistema === null && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Eliminar ${sub.nombre}`}
+                        onClick={() => {
+                          setEliminando({ categoria: sub, subcategorias: [] });
+                        }}
+                      >
+                        <Trash2 aria-hidden />
+                      </Button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -171,6 +201,15 @@ export function CategoriasGasto() {
           </Card>
         ))}
       </div>
+      {eliminando && (
+        <DialogoEliminarCategoriaGasto
+          categoria={eliminando.categoria}
+          subcategorias={eliminando.subcategorias}
+          onCerrar={() => {
+            setEliminando(null);
+          }}
+        />
+      )}
       {modo && (
         <DialogoCategoriaGasto
           modo={modo}

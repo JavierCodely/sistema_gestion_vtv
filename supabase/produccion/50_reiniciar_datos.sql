@@ -1,6 +1,6 @@
 
   -- Reinicia los datos (ventas, turnos, gastos, Fondos…) sin tocar el esquema ni los usuarios.
-  -- Requiere las migraciones hasta la 42 (condicional como certificado). Ver LEEME.md.
+  -- Requiere las migraciones hasta la 44 (costo de la unidad del certificado). Ver LEEME.md.
   begin;
 
   do $$
@@ -35,7 +35,7 @@
         'public.venta_impuestos, public.venta_pagos, public.ventas, '
         -- Facturación ARCA
       || 'public.comprobantes, public.arca_intentos, public.arca_tokens, '
-        -- Gastos (los cargados a mano y los automáticos de las compras de certificados)
+        -- Gastos (los cargados a mano, sus correcciones y los automáticos de las compras de certificados)
       || 'public.gastos, '
         -- Certificados: compras y kardex (stock)
       || 'public.compras_certificado, public.movimientos_certificado, '

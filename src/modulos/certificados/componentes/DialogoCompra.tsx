@@ -49,8 +49,21 @@ import {
 const esFuente = (valor: string): valor is FuenteFondos =>
   valor === "efectivo" || valor === "transferencia";
 
-function formularioInicial(original?: Compra): FormularioCorreccion {
-  if (!original) return { unidades: "", costoUnidad: "", fuente: "", proveedor: "", motivo: "" };
+/** Compra nueva: propone el costo vigente del certificado. Corrección: los datos de la original. */
+function formularioInicial(
+  original?: Compra,
+  certificado?: CertificadoConStock,
+): FormularioCorreccion {
+  if (!original) {
+    const costo = certificado?.costo_unidad ?? null;
+    return {
+      unidades: "",
+      costoUnidad: costo === null ? "" : montoComoTexto(costo),
+      fuente: "",
+      proveedor: "",
+      motivo: "",
+    };
+  }
   return {
     unidades: String(original.unidades),
     costoUnidad: montoComoTexto(original.costo_unidad),
@@ -73,7 +86,7 @@ export function DialogoCompra({ certificado, original, onCerrar }: Props) {
   const registrar = useRegistrarCompra();
   const corregir = useCorregirCompra();
   const saldo = useSaldoEfectivo();
-  const [formulario, setFormulario] = useState(() => formularioInicial(original));
+  const [formulario, setFormulario] = useState(() => formularioInicial(original, certificado));
   const [errores, setErrores] = useState<ErroresCorreccion>({});
   const [errorServidor, setErrorServidor] = useState<string | null>(null);
   const enviando = registrar.isPending || corregir.isPending;

@@ -21,6 +21,7 @@ export function certificadoDePrueba(
     activo: true,
     condicional: false,
     dias_vuelta: null,
+    costo_unidad: null,
     ...cambios,
   };
 }

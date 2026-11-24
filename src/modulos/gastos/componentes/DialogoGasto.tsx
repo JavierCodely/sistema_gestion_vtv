@@ -6,7 +6,7 @@ import { ErrorFormulario } from "@/compartido/componentes/ErrorFormulario";
 import { propsError } from "@/compartido/lib/accesibilidad";
 import { mensajeDeError } from "@/compartido/lib/errores";
 import { formatearMoneda } from "@/compartido/lib/formato";
-import { LARGO_MAXIMO_NOTA } from "@/compartido/lib/validaciones";
+import { LARGO_MAXIMO_NOTA, montoComoTexto, validarMotivo } from "@/compartido/lib/validaciones";
 import { Button } from "@/compartido/ui/button";
 import {
   Dialog,
@@ -29,13 +29,29 @@ import {
 import {
   FUENTES,
   useCategoriasGasto,
+  useCorregirGasto,
   useRegistrarGasto,
   type FuenteFondos,
+  type Gasto,
 } from "../api/consultas";
 import { categoriasParaCargar } from "../lib/categorias";
 import { validarGasto, type ErroresGasto, type FormularioGasto } from "../lib/validaciones";
 
 const VACIO: FormularioGasto = { categoriaId: "", monto: "", fuente: "", nota: "" };
+
+function esFuente(medio: string | null): medio is FuenteFondos {
+  return medio !== null && medio in FUENTES;
+}
+
+/** El formulario de una corrección arranca con los datos del gasto. */
+function formularioDe(gasto: Gasto): FormularioGasto {
+  return {
+    categoriaId: gasto.categoria_gasto_id === null ? "" : String(gasto.categoria_gasto_id),
+    monto: montoComoTexto(Math.abs(gasto.monto ?? 0)),
+    fuente: esFuente(gasto.medio) ? gasto.medio : "",
+    nota: gasto.nota ?? "",
+  };
+}
 
 /**
  * Carga de un gasto (la BD vuelve a controlar todo).
@@ -43,22 +59,32 @@ const VACIO: FormularioGasto = { categoriaId: "", monto: "", fuente: "", nota: "
  * - `turnoId` (pantalla de caja: el turno de la caja elegida): queda en ese turno y, si es en
  *   efectivo, se paga con su cajón. Sin `turnoId` (Gastos del admin) sale de la caja de cambio y no
  *   queda en ningún turno.
+ * - `gasto` (Gastos del admin): corrige ese gasto con motivo (`corregir_gasto`). Puede quedar su
+ *   subcategoría aunque hoy esté desactivada.
  */
 export function DialogoGasto({
   soloCaja,
   turnoId,
+  gasto,
   descripcion,
   onCerrar,
 }: {
   soloCaja: boolean;
   turnoId?: number;
+  gasto?: Gasto;
   descripcion: string;
   onCerrar: () => void;
 }) {
-  const delTurno = turnoId !== undefined;
+  const delTurno = turnoId !== undefined || (gasto !== undefined && gasto.turno_id !== null);
   const categorias = useCategoriasGasto();
   const registrar = useRegistrarGasto();
-  const [formulario, setFormulario] = useState<FormularioGasto>(VACIO);
+  const corregir = useCorregirGasto();
+  const enCurso = registrar.isPending || corregir.isPending;
+  const [formulario, setFormulario] = useState<FormularioGasto>(() =>
+    gasto ? formularioDe(gasto) : VACIO,
+  );
+  const [motivo, setMotivo] = useState("");
+  const [errorMotivo, setErrorMotivo] = useState<string | undefined>();
   const [errores, setErrores] = useState<ErroresGasto>({});
   const [errorServidor, setErrorServidor] = useState<string | null>(null);
 
@@ -70,29 +96,49 @@ export function DialogoGasto({
     evento.preventDefault();
     const resultado = validarGasto(formulario);
     setErrores(resultado.errores ?? {});
-    if (!resultado.datos) return;
+    const errorDelMotivo = gasto ? validarMotivo(motivo) : undefined;
+    setErrorMotivo(errorDelMotivo);
+    if (!resultado.datos || errorDelMotivo) return;
     setErrorServidor(null);
     try {
-      const gasto = await registrar.mutateAsync({ ...resultado.datos, turnoId: turnoId ?? null });
-      toast.success(`Gasto de ${formatearMoneda(gasto.monto)} registrado`);
+      if (gasto) {
+        const corregido = await corregir.mutateAsync({
+          ...resultado.datos,
+          id: gasto.id,
+          motivo: motivo.trim(),
+        });
+        toast.success(`Gasto corregido: ${formatearMoneda(corregido.monto)}`);
+      } else {
+        const registrado = await registrar.mutateAsync({
+          ...resultado.datos,
+          turnoId: turnoId ?? null,
+        });
+        toast.success(`Gasto de ${formatearMoneda(registrado.monto)} registrado`);
+      }
       onCerrar();
     } catch (e) {
       setErrorServidor(mensajeDeError(e));
     }
   }
 
-  const rubros = categorias.data ? categoriasParaCargar(categorias.data, { soloCaja }) : [];
+  const rubros = categorias.data
+    ? categoriasParaCargar(categorias.data, {
+        soloCaja,
+        incluir: gasto?.categoria_gasto_id ?? undefined,
+      })
+    : [];
 
   return (
     <Dialog
       open
       onOpenChange={(abierto) => {
-        if (!abierto) onCerrar();
+        // Con la escritura en curso no se cierra.
+        if (!abierto && !enCurso) onCerrar();
       }}
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Registrar gasto</DialogTitle>
+          <DialogTitle>{gasto ? "Corregir gasto" : "Registrar gasto"}</DialogTitle>
           <DialogDescription>{descripcion}</DialogDescription>
         </DialogHeader>
         {categorias.isPending ? (
@@ -189,10 +235,25 @@ export function DialogoGasto({
                 {...propsError("gasto-nota", errores.nota)}
               />
             </Campo>
+            {gasto && (
+              <Campo id="gasto-motivo" etiqueta="Motivo de la corrección" error={errorMotivo}>
+                <Input
+                  id="gasto-motivo"
+                  autoComplete="off"
+                  maxLength={LARGO_MAXIMO_NOTA}
+                  placeholder="Ej. El monto era otro"
+                  value={motivo}
+                  onChange={(e) => {
+                    setMotivo(e.target.value);
+                  }}
+                  {...propsError("gasto-motivo", errorMotivo)}
+                />
+              </Campo>
+            )}
             <ErrorFormulario mensaje={errorServidor} />
             <DialogFooter>
-              <Button type="submit" disabled={registrar.isPending}>
-                {registrar.isPending ? "Guardando…" : "Registrar gasto"}
+              <Button type="submit" disabled={enCurso}>
+                {enCurso ? "Guardando…" : gasto ? "Guardar corrección" : "Registrar gasto"}
               </Button>
             </DialogFooter>
           </form>

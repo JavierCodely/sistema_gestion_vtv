@@ -4,7 +4,8 @@ import { Campo } from "@/compartido/componentes/Campo";
 import { ErrorFormulario } from "@/compartido/componentes/ErrorFormulario";
 import { propsError } from "@/compartido/lib/accesibilidad";
 import { mensajeDeError } from "@/compartido/lib/errores";
-import { LARGO_MAXIMO_NOMBRE } from "@/compartido/lib/validaciones";
+import { formatearMoneda, formatearNumero } from "@/compartido/lib/formato";
+import { LARGO_MAXIMO_NOMBRE, montoComoTexto } from "@/compartido/lib/validaciones";
 import { Button } from "@/compartido/ui/button";
 import {
   Dialog,
@@ -31,6 +32,7 @@ import {
   type CertificadoConStock,
 } from "../api/consultas";
 import {
+  costoPorHoja,
   DIAS_VUELTA_MAXIMO,
   DIAS_VUELTA_POR_DEFECTO,
   UNIDADES,
@@ -49,6 +51,7 @@ function formularioInicial(certificado?: CertificadoConStock): FormularioCertifi
       stockMinimo: "0",
       condicional: false,
       diasVuelta: DIAS_VUELTA_POR_DEFECTO,
+      costoUnidad: "",
     };
   }
   return {
@@ -59,6 +62,7 @@ function formularioInicial(certificado?: CertificadoConStock): FormularioCertifi
     condicional: certificado.condicional,
     diasVuelta:
       certificado.dias_vuelta === null ? DIAS_VUELTA_POR_DEFECTO : String(certificado.dias_vuelta),
+    costoUnidad: certificado.costo_unidad === null ? "" : montoComoTexto(certificado.costo_unidad),
   };
 }
 
@@ -84,6 +88,14 @@ export function DialogoCertificado({
   const [errores, setErrores] = useState<ErroresCertificado>({});
   const [errorServidor, setErrorServidor] = useState<string | null>(null);
   const guardando = crear.isPending || actualizar.isPending;
+  const porHoja = costoPorHoja(
+    formulario.costoUnidad,
+    formulario.unidadCompra,
+    formulario.hojasPorUnidad,
+  );
+  const nombreUnidad =
+    formulario.unidadCompra === "unidad" ? "hoja" : UNIDADES[formulario.unidadCompra].singular;
+  const stock = certificado?.stock_hojas ?? 0;
 
   function cambiar<K extends keyof FormularioCertificado>(
     clave: K,
@@ -182,6 +194,34 @@ export function DialogoCertificado({
               />
             </Campo>
           </div>
+
+          <Campo
+            id="certificado-costo"
+            etiqueta={`Costo por ${nombreUnidad} ($)`}
+            error={errores.costoUnidad}
+          >
+            <Input
+              id="certificado-costo"
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder="Ej. 3.700"
+              value={formulario.costoUnidad}
+              onChange={(e) => {
+                cambiar("costoUnidad", e.target.value);
+              }}
+              {...propsError("certificado-costo", errores.costoUnidad)}
+            />
+            <p className="text-xs text-muted-foreground" data-testid="costo-por-hoja">
+              {porHoja === undefined
+                ? "Con el costo y las hojas por unidad se calcula cuánto vale cada hoja del stock."
+                : `Cada hoja: ${formatearMoneda(porHoja)}` +
+                  (stock > 0
+                    ? ` · las ${formatearNumero(stock)} hojas en stock valen ${formatearMoneda(
+                        Math.round(stock * porHoja * 100) / 100,
+                      )}`
+                    : "")}
+            </p>
+          </Campo>
 
           <Campo
             id="certificado-minimo"

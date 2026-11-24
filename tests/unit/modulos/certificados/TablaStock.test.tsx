@@ -96,6 +96,16 @@ describe("TablaStock", () => {
     expect(onAccion).toHaveBeenCalledWith("destinos", expect.objectContaining({ id: 5 }));
   });
 
+  it("'Se usa en' con muchos destinos no ensancha la tabla: corta el texto y lo muestra entero al pasar el mouse", () => {
+    const largo = `Categoría Autos, ${Array.from({ length: 40 }, (_, i) => `Servicio ${i + 1}`).join(", ")}`;
+    renderTabla([
+      certificadoDePrueba({ todos_servicios: false, servicio_ids: [7], aplica_a: largo }),
+    ]);
+    const texto = screen.getByTitle(largo);
+    expect(texto).toHaveTextContent(largo);
+    expect(texto).toHaveClass("max-w-64", "truncate");
+  });
+
   it("un certificado desactivado no permite registrar compras", () => {
     renderTabla([certificadoDePrueba({ activo: false })]);
     expect(screen.getByRole("button", { name: "Registrar compra de Hoja VTV" })).toBeDisabled();

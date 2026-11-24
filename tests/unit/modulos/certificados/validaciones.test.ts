@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  costoPorHoja,
   describirPresentacion,
   textoCondicional,
   validarAjuste,
@@ -16,6 +17,7 @@ const certificado: FormularioCertificado = {
   stockMinimo: "30",
   condicional: false,
   diasVuelta: "30",
+  costoUnidad: "",
 };
 
 describe("validarCertificado", () => {
@@ -28,8 +30,32 @@ describe("validarCertificado", () => {
         stock_minimo: 30,
         condicional: false,
         dias_vuelta: null,
+        costo_unidad: null,
       },
     });
+  });
+
+  it("el costo de la unidad es opcional y se valida como un monto", () => {
+    expect(validarCertificado({ ...certificado, costoUnidad: "3.700" }).datos?.costo_unidad).toBe(
+      3700,
+    );
+    expect(
+      validarCertificado({ ...certificado, costoUnidad: "  " }).datos?.costo_unidad,
+    ).toBeNull();
+    expect(validarCertificado({ ...certificado, costoUnidad: "0" }).errores).toHaveProperty(
+      "costoUnidad",
+    );
+    expect(validarCertificado({ ...certificado, costoUnidad: "abc" }).errores).toHaveProperty(
+      "costoUnidad",
+    );
+  });
+
+  it("costoPorHoja: libreta de 25 hojas a $ 3.700 → $ 148 la hoja", () => {
+    expect(costoPorHoja("3.700", "libreta", "25")).toBe(148);
+    expect(costoPorHoja("1.000", "caja", "3")).toBe(333.3333);
+    expect(costoPorHoja("250,50", "unidad", "")).toBe(250.5);
+    expect(costoPorHoja("", "libreta", "25")).toBeUndefined();
+    expect(costoPorHoja("3.700", "libreta", "0")).toBeUndefined();
   });
 
   it("un certificado condicional lleva los días para volver (1 a 365)", () => {
