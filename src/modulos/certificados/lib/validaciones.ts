@@ -15,6 +15,10 @@ export const MAXIMO_HOJAS_POR_UNIDAD = 10_000;
 export const MAXIMO_STOCK_MINIMO = 1_000_000;
 export const MAXIMO_UNIDADES_COMPRA = 100_000;
 export const MAXIMO_HOJAS_AJUSTE = 100_000;
+/** Plazo para volver de una condicional (mismo CHECK que la BD, migración 42). */
+export const DIAS_VUELTA_MINIMO = 1;
+export const DIAS_VUELTA_MAXIMO = 365;
+export const DIAS_VUELTA_POR_DEFECTO = "30";
 
 export type UnidadCompra = Enums["unidad_compra"];
 
@@ -38,16 +42,29 @@ export interface FormularioCertificado {
   unidadCompra: UnidadCompra;
   hojasPorUnidad: string;
   stockMinimo: string;
+  /** Certificado de condicional: la caja lo ofrece como alternativa al de siempre del servicio. */
+  condicional: boolean;
+  diasVuelta: string;
+  /** Cuánto cuesta una unidad de compra (la libreta, la caja o la hoja); vacío = sin cargar. */
+  costoUnidad: string;
 }
 
 export type DatosCertificado = Required<
   Pick<
     Tablas["certificados"]["Insert"],
-    "nombre" | "unidad_compra" | "hojas_por_unidad" | "stock_minimo"
+    | "nombre"
+    | "unidad_compra"
+    | "hojas_por_unidad"
+    | "stock_minimo"
+    | "condicional"
+    | "dias_vuelta"
+    | "costo_unidad"
   >
 >;
 
-export type ErroresCertificado = Errores<"nombre" | "hojasPorUnidad" | "stockMinimo">;
+export type ErroresCertificado = Errores<
+  "nombre" | "hojasPorUnidad" | "stockMinimo" | "diasVuelta" | "costoUnidad"
+>;
 
 export function validarCertificado(
   formulario: FormularioCertificado,
@@ -76,6 +93,25 @@ export function validarCertificado(
   });
   if (minimo.error !== undefined) errores.stockMinimo = minimo.error;
 
+  let diasVuelta: number | null = null;
+  if (formulario.condicional) {
+    const dias = parsearEntero(formulario.diasVuelta, {
+      minimo: DIAS_VUELTA_MINIMO,
+      maximo: DIAS_VUELTA_MAXIMO,
+      nombre: "los días para volver",
+    });
+    if (dias.error !== undefined) errores.diasVuelta = dias.error;
+    else diasVuelta = dias.valor;
+  }
+
+  // Opcional; si se carga, mismas reglas que un monto (CHECK certificados_costo_unidad_valido).
+  let costoUnidad: number | null = null;
+  if (formulario.costoUnidad.trim() !== "") {
+    const costo = parsearMonto(formulario.costoUnidad, { nombre: "costo" });
+    if (costo.error !== undefined) errores.costoUnidad = costo.error;
+    else costoUnidad = costo.valor;
+  }
+
   if (hojas.valor === undefined || minimo.valor === undefined || Object.keys(errores).length > 0) {
     return { errores };
   }
@@ -85,8 +121,38 @@ export function validarCertificado(
       unidad_compra: formulario.unidadCompra,
       hojas_por_unidad: hojas.valor,
       stock_minimo: minimo.valor,
+      condicional: formulario.condicional,
+      dias_vuelta: diasVuelta,
+      costo_unidad: costoUnidad,
     },
   };
+}
+
+/**
+ * Vista previa del costo por hoja (la BD lo calcula al guardar: costo de la unidad / hojas, a 4
+ * decimales). `undefined` si falta un dato o no es válido.
+ */
+export function costoPorHoja(
+  costoUnidad: string,
+  unidad: UnidadCompra,
+  hojasPorUnidad: string,
+): number | undefined {
+  const costo = parsearMonto(costoUnidad, { nombre: "costo" });
+  const hojas =
+    unidad === "unidad"
+      ? { valor: 1 }
+      : parsearEntero(hojasPorUnidad, {
+          minimo: 1,
+          maximo: MAXIMO_HOJAS_POR_UNIDAD,
+          nombre: "las hojas por unidad",
+        });
+  if (costo.valor === undefined || hojas.valor === undefined) return undefined;
+  return Math.round((costo.valor / hojas.valor) * 10_000) / 10_000;
+}
+
+/** "Condicional · vuelve dentro de 30 días". */
+export function textoCondicional(dias: number): string {
+  return `Condicional · vuelve dentro de ${String(dias)} ${dias === 1 ? "día" : "días"}`;
 }
 
 // ---------------------------------------------------------------- Compra

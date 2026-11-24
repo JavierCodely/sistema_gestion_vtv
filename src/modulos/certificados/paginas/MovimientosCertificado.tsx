@@ -23,6 +23,7 @@ const TIPOS: Record<Movimiento["tipo"], string> = {
   venta: "Venta",
   ajuste: "Ajuste",
   anulacion_compra: "Compra corregida",
+  revaluacion: "Cambio de costo",
 };
 
 function detalle(m: Movimiento): string {

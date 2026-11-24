@@ -29,16 +29,18 @@ function cajasAbiertas(cajas: (typeof CAJA_1)[]) {
   responder("v_turnos_abiertos", "select", { data: cajas });
 }
 
-/** Recorre la venta con el teclado hasta el medio de pago y elige tarjeta (3). */
+/** Recorre la venta con el teclado: patente, categoría, servicio, tarjeta (3) y confirma. */
 async function venderConTarjeta() {
-  await screen.findByRole("listbox", { name: "1. Categoría" });
-  await userEvent.keyboard("{Enter}");
-  await screen.findByRole("listbox", { name: "2. Servicio · Autos" });
-  await userEvent.keyboard("{Enter}");
-  await screen.findByLabelText("3. Patente");
+  await screen.findByLabelText("1. Patente");
   await userEvent.keyboard("AA111AA{Enter}");
+  await screen.findByRole("listbox", { name: "2. Categoría" });
+  await userEvent.keyboard("{Enter}");
+  await screen.findByRole("listbox", { name: "3. Servicio · Autos" });
+  await userEvent.keyboard("{Enter}");
   await screen.findByRole("listbox", { name: "4. Medio de pago" });
   await userEvent.keyboard("3{Enter}");
+  await screen.findByTestId("paso-confirmar");
+  await userEvent.keyboard("{Enter}");
 }
 
 beforeEach(() => {
@@ -47,6 +49,7 @@ beforeEach(() => {
   responder("v_comprobantes", "select", { data: [] });
   responder("v_movimientos_caja", "select", { data: [] });
   responder("ventas", "select", { data: [] });
+  responderRpc("condicionales_de_patente", { data: [] });
   responder("categorias_servicio", "select", { data: [{ id: 1, nombre: "Autos", activa: true }] });
   responder("servicios", "select", {
     data: [
@@ -57,6 +60,8 @@ beforeEach(() => {
         precio: 30000,
         requiere_certificado: false,
         activo: true,
+        condicional_de: null,
+        dias_vuelta: null,
       },
     ],
   });
@@ -100,7 +105,7 @@ describe("Caja: elegir en qué caja se trabaja", () => {
         .map((t) => t.textContent),
     ).toEqual(["Ventas", "Historial", "Gastos"]);
     expect(screen.getByRole("tab", { name: "Ventas" })).toHaveAttribute("aria-selected", "true");
-    expect(await screen.findByRole("listbox", { name: "1. Categoría" })).toHaveFocus();
+    expect(await screen.findByLabelText("1. Patente")).toHaveFocus();
   });
 
   it("con varias, el usuario elige; la venta va a esa caja y puede cambiar con el selector", async () => {
@@ -185,7 +190,7 @@ describe("Caja: elegir en qué caja se trabaja", () => {
     });
     renderRuta("/caja", cajero());
     await screen.findByRole("heading", { name: "Caja 1" });
-    await screen.findByRole("listbox", { name: "1. Categoría" });
+    await screen.findByLabelText("1. Patente");
     // El admin la cerró mientras tanto: al rechazarse la venta se vuelve a leer la lista.
     cajasAbiertas([]);
     await venderConTarjeta();

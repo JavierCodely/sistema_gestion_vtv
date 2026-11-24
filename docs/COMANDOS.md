@@ -190,7 +190,7 @@ migración nueva. Para registrar la 029 y aplicar las siguientes:
 
 ```bash
 npx supabase migration repair --linked --status applied 20261121000029
-npx supabase migration list --linked     # deben faltar solo las nuevas (030 a 039)
+npx supabase migration list --linked     # deben faltar solo las nuevas (030 a 044)
 npx supabase db push
 npx supabase functions deploy admin-usuarios   # si cambió desde la última publicación
 ```

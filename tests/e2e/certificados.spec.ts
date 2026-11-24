@@ -257,6 +257,72 @@ test("el admin edita la última compra: se revierte la original y se registra la
   await expect(movimientos.nth(3)).toContainText("+50");
 });
 
+test("costo de la libreta: cada hoja del stock vale costo / hojas y cambiarlo revalúa el stock", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const nombre = `Libreta ${unico()}`;
+  await ingresar(page, ADMIN);
+  await expect(page).toHaveURL("/admin");
+  await page.goto("/admin/certificados");
+
+  // Libreta de 25 hojas a $ 3.700 → $ 148 por hoja
+  await page.getByRole("button", { name: "Nuevo certificado" }).click();
+  const nuevo = page.getByRole("dialog", { name: "Nuevo certificado" });
+  await nuevo.getByLabel("Nombre").fill(nombre);
+  await elegir(page, nuevo, "Se compra por", "Libreta");
+  await nuevo.getByLabel("Hojas por unidad").fill("25");
+  await nuevo.getByLabel("Costo por libreta ($)").fill("3.700");
+  await expect(nuevo.getByTestId("costo-por-hoja")).toHaveText("Cada hoja: $ 148,00");
+  await nuevo.getByRole("button", { name: "Crear certificado" }).click();
+  await expect(page.getByText(`Certificado “${nombre}” creado`)).toBeVisible();
+  // Sin destinos: no hace falta para valuar el stock
+  const destinos = page.getByRole("dialog", { name: `Dónde se usa “${nombre}”` });
+  await page.keyboard.press("Escape");
+  await expect(destinos).toBeHidden();
+
+  // 300 hojas cargadas con un ajuste se valúan a $ 148: $ 44.400
+  const fila = page.getByTestId(`certificado-${nombre}`);
+  await expect(fila.locator('[data-columna="costo"]')).toHaveText("$ 148,00");
+  await fila.getByRole("button", { name: `Ajuste de stock de ${nombre}` }).click();
+  const ajuste = page.getByRole("dialog", { name: "Ajustar stock" });
+  await elegir(page, ajuste, "Tipo de ajuste", "Sumar hojas");
+  await ajuste.getByLabel("Cantidad de hojas").fill("300");
+  await ajuste.getByLabel("Motivo").fill("Stock inicial");
+  await ajuste.getByRole("button", { name: "Ajustar stock" }).click();
+  await expect(fila.locator('[data-columna="stock"]')).toHaveText("300");
+  await expect(fila.locator('[data-columna="valor"]')).toHaveText("$ 44.400,00");
+
+  // Cambiar el costo: la vista previa y la tabla muestran el valor nuevo del stock
+  await fila.getByRole("button", { name: `Editar certificado ${nombre}` }).click();
+  const edicion = page.getByRole("dialog", { name: "Editar certificado" });
+  await expect(edicion.getByLabel("Costo por libreta ($)")).toHaveValue("3700");
+  await edicion.getByLabel("Costo por libreta ($)").fill("4.000");
+  await expect(edicion.getByTestId("costo-por-hoja")).toHaveText(
+    "Cada hoja: $ 160,00 · las 300 hojas en stock valen $ 48.000,00",
+  );
+  await edicion.getByRole("button", { name: "Guardar" }).click();
+  await expect(page.getByText("Cambios guardados")).toBeVisible();
+  await expect(fila.locator('[data-columna="costo"]')).toHaveText("$ 160,00");
+  await expect(fila.locator('[data-columna="valor"]')).toHaveText("$ 48.000,00");
+
+  // La compra propone el costo vigente
+  await fila.getByRole("button", { name: `Registrar compra de ${nombre}` }).click();
+  const compra = page.getByRole("dialog", { name: "Registrar compra" });
+  await expect(compra.getByLabel("Costo por libreta ($)")).toHaveValue("4000");
+  await page.keyboard.press("Escape");
+  await expect(compra).toBeHidden();
+
+  // El kardex explica el cambio
+  await fila.getByRole("link", { name: `Movimientos de ${nombre}` }).click();
+  const movimientos = page.locator('[data-testid^="movimiento-"]');
+  await expect(movimientos).toHaveCount(2);
+  await expect(movimientos.nth(0)).toContainText("Cambio de costo");
+  await expect(movimientos.nth(0)).toContainText("Costo por libreta: $ 4.000,00 (25 hojas)");
+  await expect(movimientos.nth(0)).toContainText("$ 3.600,00");
+  await expect(movimientos.nth(1)).toContainText("Ajuste");
+});
+
 test("un id de certificado inexistente muestra un aviso", async ({ page }) => {
   await ingresar(page, ADMIN);
   await expect(page).toHaveURL("/admin");

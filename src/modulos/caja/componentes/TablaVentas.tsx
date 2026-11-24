@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { formatearFechaHora, formatearMoneda } from "@/compartido/lib/formato";
+import { formatearDia, formatearFechaHora, formatearMoneda } from "@/compartido/lib/formato";
 import { cn } from "@/compartido/lib/utils";
 import { Badge } from "@/compartido/ui/badge";
 import {
@@ -80,6 +80,19 @@ export function TablaVentas({
                   <div className="flex flex-wrap items-center gap-1">
                     {venta.anulada && <Badge variant="destructive">Anulada</Badge>}
                     {venta.sin_stock && <Badge variant="outline">Sin certificado</Badge>}
+                    {venta.vuelta_de !== null && (
+                      <Badge variant="secondary">Vuelta de condicional</Badge>
+                    )}
+                    {venta.condicional_vence !== null && (
+                      <Badge variant="outline">
+                        Condicional hasta {formatearDia(venta.condicional_vence)}
+                      </Badge>
+                    )}
+                    {(venta.condicional_saldo ?? 0) > 0 && (
+                      <Badge variant="outline">
+                        Al 50%: al volver paga {formatearMoneda(venta.condicional_saldo ?? 0)}
+                      </Badge>
+                    )}
                   </div>
                   {venta.anulada && venta.anulada_motivo && (
                     <div className="text-xs text-muted-foreground">{venta.anulada_motivo}</div>

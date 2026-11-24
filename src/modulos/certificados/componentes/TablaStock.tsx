@@ -18,7 +18,7 @@ import {
   useActualizarCertificado,
   type CertificadoConStock,
 } from "../api/consultas";
-import { describirPresentacion } from "../lib/validaciones";
+import { describirPresentacion, textoCondicional } from "../lib/validaciones";
 import { BadgeSemaforo } from "./BadgeSemaforo";
 
 export type AccionCertificado = "comprar" | "ajustar" | "editar" | "destinos";
@@ -69,6 +69,11 @@ export function TablaStock({
             <TableRow key={c.id} data-testid={`certificado-${c.nombre}`}>
               <TableCell>
                 <div className="font-medium">{c.nombre}</div>
+                {c.condicional && c.dias_vuelta !== null && (
+                  <div className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                    {textoCondicional(c.dias_vuelta)}
+                  </div>
+                )}
                 {!c.activo && (
                   <div className="text-xs text-muted-foreground">
                     Desactivado: activalo para registrar compras.
@@ -80,11 +85,15 @@ export function TablaStock({
                 </div>
               </TableCell>
               <TableCell data-columna="destinos">
-                {c.aplica_a}
+                {/* Ancho fijo: con muchos destinos el texto se corta con "…" (completo al pasar
+                    el mouse) y la tabla no se ensancha. */}
+                <div className="max-w-64 truncate" title={c.aplica_a}>
+                  {c.aplica_a}
+                </div>
                 {!c.todos_servicios &&
                   c.categoria_ids.length === 0 &&
                   c.servicio_ids.length === 0 && (
-                    <div className="text-xs text-muted-foreground">
+                    <div className="max-w-64 text-xs whitespace-normal text-muted-foreground">
                       No se usa en ninguna venta: elegí dónde con “Se usa en”.
                     </div>
                   )}

@@ -18,7 +18,7 @@ insert into servicios (nombre, categoria_id, precio, requiere_certificado)
 select ok(has_function_privilege('authenticated', 'public.fijar_destinos_certificado(bigint, boolean, bigint[], bigint[])', 'execute')
   and not has_function_privilege('anon', 'public.fijar_destinos_certificado(bigint, boolean, bigint[], bigint[])', 'execute'),
   'authenticated ejecuta fijar_destinos_certificado (el control es _exigir_admin); anon no');
-select ok(not has_function_privilege('authenticated', 'public._validar_destinos_certificado(bigint, boolean, bigint[], bigint[])', 'execute')
+select ok(not has_function_privilege('authenticated', 'public._validar_destinos_certificado(bigint, boolean, bigint[], bigint[], boolean)', 'execute')
   and not has_function_privilege('authenticated', 'public.tg_certificados_destinos_activo()', 'execute'),
   'la validación y el trigger son internos');
 select ok(not has_table_privilege('authenticated', 'public.certificado_destinos', 'insert')

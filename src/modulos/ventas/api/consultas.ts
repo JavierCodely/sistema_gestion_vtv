@@ -58,6 +58,8 @@ export const claves = {
   ventasPasadas: ["turnos", "ventas-pasadas"] as const,
   /** Turnos abiertos en un período, para los filtros de los reportes (impuestos, dashboard). */
   delPeriodo: (rango: RangoFechas) => ["turnos", "periodo", rango.desde, rango.hasta] as const,
+  /** Ventas de una patente (bajo `["turnos"]`: vender, anular y cargar ventas pasadas las invalidan). */
+  porPatente: (patente: string) => ["turnos", "patente", patente] as const,
 };
 
 const COLUMNAS_TURNO =
@@ -226,6 +228,42 @@ export function useTurnosDelPeriodo(rango: RangoFechas) {
         .gte("fecha_apertura", rango.desde)
         .lte("fecha_apertura", rango.hasta)
         .order("abierto_en", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+/**
+ * Venta de una patente (`ventas_por_patente`, solo admin): servicio, certificado entregado y la
+ * relación condicional ↔ vuelta (migración 40). `medio` = "mixto" en un pago mixto. Sin costos.
+ */
+type FilaVentaDePatente = Database["public"]["Functions"]["ventas_por_patente"]["Returns"][number];
+/** Columnas que la RPC devuelve en NULL (el esquema generado las marca como no nulas). */
+type ColumnasAnulables =
+  | "certificado_nombre"
+  | "condicional_vence"
+  | "condicional_saldo"
+  | "condicional_servicio"
+  | "vuelta_de"
+  | "vuelta_venta_id";
+export type VentaDePatente = Omit<FilaVentaDePatente, ColumnasAnulables> & {
+  [K in ColumnasAnulables]: FilaVentaDePatente[K] | null;
+};
+
+/** Mínimo de caracteres para buscar (mismo control que la BD). */
+export const MINIMO_BUSQUEDA_PATENTE = 3;
+
+/**
+ * Ventas cuya patente empieza con `patente` (ya normalizada), de la más nueva a la más vieja (hasta
+ * 500). Con menos de 3 caracteres no consulta.
+ */
+export function useVentasPorPatente(patente: string) {
+  return useQuery({
+    queryKey: claves.porPatente(patente),
+    enabled: patente.length >= MINIMO_BUSQUEDA_PATENTE,
+    queryFn: async (): Promise<VentaDePatente[]> => {
+      const { data, error } = await supabase.rpc("ventas_por_patente", { p_patente: patente });
       if (error) throw error;
       return data;
     },

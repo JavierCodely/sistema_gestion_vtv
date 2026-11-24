@@ -4,7 +4,8 @@ import { Campo } from "@/compartido/componentes/Campo";
 import { ErrorFormulario } from "@/compartido/componentes/ErrorFormulario";
 import { propsError } from "@/compartido/lib/accesibilidad";
 import { mensajeDeError } from "@/compartido/lib/errores";
-import { LARGO_MAXIMO_NOMBRE } from "@/compartido/lib/validaciones";
+import { formatearMoneda, formatearNumero } from "@/compartido/lib/formato";
+import { LARGO_MAXIMO_NOMBRE, montoComoTexto } from "@/compartido/lib/validaciones";
 import { Button } from "@/compartido/ui/button";
 import {
   Dialog,
@@ -15,6 +16,7 @@ import {
   DialogTitle,
 } from "@/compartido/ui/dialog";
 import { Input } from "@/compartido/ui/input";
+import { Label } from "@/compartido/ui/label";
 import {
   Select,
   SelectContent,
@@ -22,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/compartido/ui/select";
+import { Switch } from "@/compartido/ui/switch";
 import {
   MENSAJES_ERROR_CERTIFICADO,
   useActualizarCertificado,
@@ -29,6 +32,9 @@ import {
   type CertificadoConStock,
 } from "../api/consultas";
 import {
+  costoPorHoja,
+  DIAS_VUELTA_MAXIMO,
+  DIAS_VUELTA_POR_DEFECTO,
   UNIDADES,
   validarCertificado,
   type ErroresCertificado,
@@ -43,6 +49,9 @@ function formularioInicial(certificado?: CertificadoConStock): FormularioCertifi
       unidadCompra: "caja",
       hojasPorUnidad: "",
       stockMinimo: "0",
+      condicional: false,
+      diasVuelta: DIAS_VUELTA_POR_DEFECTO,
+      costoUnidad: "",
     };
   }
   return {
@@ -50,6 +59,10 @@ function formularioInicial(certificado?: CertificadoConStock): FormularioCertifi
     unidadCompra: certificado.unidad_compra,
     hojasPorUnidad: String(certificado.hojas_por_unidad),
     stockMinimo: String(certificado.stock_minimo),
+    condicional: certificado.condicional,
+    diasVuelta:
+      certificado.dias_vuelta === null ? DIAS_VUELTA_POR_DEFECTO : String(certificado.dias_vuelta),
+    costoUnidad: certificado.costo_unidad === null ? "" : montoComoTexto(certificado.costo_unidad),
   };
 }
 
@@ -75,6 +88,14 @@ export function DialogoCertificado({
   const [errores, setErrores] = useState<ErroresCertificado>({});
   const [errorServidor, setErrorServidor] = useState<string | null>(null);
   const guardando = crear.isPending || actualizar.isPending;
+  const porHoja = costoPorHoja(
+    formulario.costoUnidad,
+    formulario.unidadCompra,
+    formulario.hojasPorUnidad,
+  );
+  const nombreUnidad =
+    formulario.unidadCompra === "unidad" ? "hoja" : UNIDADES[formulario.unidadCompra].singular;
+  const stock = certificado?.stock_hojas ?? 0;
 
   function cambiar<K extends keyof FormularioCertificado>(
     clave: K,
@@ -175,6 +196,34 @@ export function DialogoCertificado({
           </div>
 
           <Campo
+            id="certificado-costo"
+            etiqueta={`Costo por ${nombreUnidad} ($)`}
+            error={errores.costoUnidad}
+          >
+            <Input
+              id="certificado-costo"
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder="Ej. 3.700"
+              value={formulario.costoUnidad}
+              onChange={(e) => {
+                cambiar("costoUnidad", e.target.value);
+              }}
+              {...propsError("certificado-costo", errores.costoUnidad)}
+            />
+            <p className="text-xs text-muted-foreground" data-testid="costo-por-hoja">
+              {porHoja === undefined
+                ? "Con el costo y las hojas por unidad se calcula cuánto vale cada hoja del stock."
+                : `Cada hoja: ${formatearMoneda(porHoja)}` +
+                  (stock > 0
+                    ? ` · las ${formatearNumero(stock)} hojas en stock valen ${formatearMoneda(
+                        Math.round(stock * porHoja * 100) / 100,
+                      )}`
+                    : "")}
+            </p>
+          </Campo>
+
+          <Campo
             id="certificado-minimo"
             etiqueta="Stock mínimo (hojas)"
             error={errores.stockMinimo}
@@ -193,6 +242,48 @@ export function DialogoCertificado({
               Cuando una venta deja el stock en este número o menos, se genera una alerta.
             </p>
           </Campo>
+
+          <div className="flex flex-col gap-3 rounded-md border p-3">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label htmlFor="certificado-condicional">Es un certificado de condicional</Label>
+                <p className="text-xs text-muted-foreground">
+                  En la caja, el servicio ofrece este certificado o el de siempre. Se cobra el
+                  precio del servicio, entero o al 50%; si vuelve dentro del plazo y aprueba, paga
+                  lo que falta y se entrega el certificado de siempre.
+                </p>
+              </div>
+              <Switch
+                id="certificado-condicional"
+                checked={formulario.condicional}
+                onCheckedChange={(valor) => {
+                  cambiar("condicional", valor);
+                }}
+              />
+            </div>
+            {formulario.condicional && (
+              <Campo
+                id="certificado-dias-vuelta"
+                etiqueta="Días para volver"
+                error={errores.diasVuelta}
+              >
+                <Input
+                  id="certificado-dias-vuelta"
+                  value={formulario.diasVuelta}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={String(DIAS_VUELTA_MAXIMO).length}
+                  onChange={(e) => {
+                    cambiar("diasVuelta", e.target.value);
+                  }}
+                  {...propsError("certificado-dias-vuelta", errores.diasVuelta)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Cambiarlo no modifica las condicionales ya vendidas.
+                </p>
+              </Campo>
+            )}
+          </div>
 
           <ErrorFormulario mensaje={errorServidor} />
           <DialogFooter>

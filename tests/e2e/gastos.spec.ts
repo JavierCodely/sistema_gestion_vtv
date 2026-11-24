@@ -185,3 +185,111 @@ test("gastos: el admin habilita una categoría, el cajero carga un gasto y el ad
   // --- El admin cierra la caja (no queda abierta para otras pruebas)
   await cerrarTurnoDesdeBarra(page, { caja });
 });
+
+test("gastos: el admin corrige un gasto del historial y elimina categorías sin uso", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const sufijo = unico();
+  const rubro = `Rubro ${sufijo}`;
+  const usada = `Usada ${sufijo}`;
+  const libre = `Libre ${sufijo}`;
+  const nota = `Corregible ${sufijo}`;
+
+  await ingresar(page, ADMIN);
+  await expect(page).toHaveURL("/admin");
+  await page.goto("/admin/gastos");
+
+  // Rubro con dos subcategorías
+  await page.getByRole("button", { name: "Nuevo rubro" }).click();
+  const nuevoRubro = page.getByRole("dialog", { name: "Nuevo rubro" });
+  await nuevoRubro.getByLabel("Nombre").fill(rubro);
+  await nuevoRubro.getByRole("button", { name: "Guardar" }).click();
+  await expect(page.getByText(`Categoría «${rubro}» creada`)).toBeVisible();
+  const tarjeta = page.getByTestId(`rubro-${rubro}`);
+  for (const nombre of [usada, libre]) {
+    await tarjeta.getByRole("button", { name: "Subcategoría" }).click();
+    const nuevaSub = page.getByRole("dialog", { name: "Nueva subcategoría" });
+    await nuevaSub.getByLabel("Nombre").fill(nombre);
+    await nuevaSub.getByRole("button", { name: "Guardar" }).click();
+    await expect(page.getByText(`Categoría «${nombre}» creada`)).toBeVisible();
+  }
+
+  // Un gasto por transferencia en "usada"
+  await page.getByRole("button", { name: "Registrar gasto" }).click();
+  const registrar = page.getByRole("dialog", { name: "Registrar gasto" });
+  await elegir(page, registrar, "Categoría", usada);
+  await registrar.getByLabel("Monto ($)").fill("1.000");
+  await elegir(page, registrar, "Pagado con", "Transferencia");
+  await registrar.getByLabel("Nota").fill(nota);
+  await registrar.getByRole("button", { name: "Registrar gasto" }).click();
+  await expect(page.getByText(/^Gasto de \$\s?1\.000,00 registrado$/)).toBeVisible();
+
+  // Corregir: otro monto, con motivo
+  const filas = page.getByRole("row").filter({ hasText: nota });
+  await expect(filas).toHaveCount(1);
+  await filas.getByRole("button", { name: /^Corregir gasto/ }).click();
+  const corregir = page.getByRole("dialog", { name: "Corregir gasto" });
+  await expect(corregir.getByLabel("Monto ($)")).toHaveValue("1000");
+  await corregir.getByLabel("Monto ($)").fill("1.350,25");
+  await corregir.getByRole("button", { name: "Guardar corrección" }).click();
+  await expect(corregir.getByText("Escribí el motivo.")).toBeVisible();
+  await corregir.getByLabel("Motivo de la corrección").fill("Era con IVA");
+  await corregir.getByRole("button", { name: "Guardar corrección" }).click();
+  await expect(page.getByText(/^Gasto corregido: \$\s?1\.350,25$/)).toBeVisible();
+  await expect(filas).toHaveCount(2);
+  const corregido = filas.filter({ hasText: "Corrección" });
+  await expect(corregido).toContainText("1.350,25");
+  await expect(corregido.getByRole("button", { name: /^Corregir gasto/ })).toBeVisible();
+  const original = filas.filter({ hasText: "Corregido" });
+  await expect(original).toContainText("Era con IVA");
+  await expect(original).toContainText("1.000,00");
+  await expect(original.getByRole("button", { name: /^Corregir gasto/ })).toHaveCount(0);
+
+  // Eliminar: la usada no se puede (tiene gastos); la libre sí; el rubro con gastos tampoco
+  await tarjeta.getByRole("button", { name: `Eliminar ${usada}` }).click();
+  let eliminar = page.getByRole("dialog", { name: "Eliminar subcategoría" });
+  await eliminar.getByRole("button", { name: "Eliminar" }).click();
+  await expect(
+    eliminar.getByText(
+      `La subcategoría "${usada}" ya tiene gastos: desactivala en vez de eliminarla`,
+    ),
+  ).toBeVisible();
+  await eliminar.getByRole("button", { name: "Cancelar" }).click();
+  await expect(eliminar).toBeHidden();
+
+  await tarjeta.getByRole("button", { name: `Eliminar ${libre}` }).click();
+  eliminar = page.getByRole("dialog", { name: "Eliminar subcategoría" });
+  await eliminar.getByRole("button", { name: "Eliminar" }).click();
+  await expect(page.getByText(`Subcategoría ${libre} eliminada`)).toBeVisible();
+  await expect(page.getByTestId(`subcategoria-${libre}`)).toHaveCount(0);
+
+  await tarjeta.getByRole("button", { name: `Eliminar ${rubro}` }).click();
+  eliminar = page.getByRole("dialog", { name: "Eliminar rubro" });
+  await eliminar.getByRole("button", { name: "Eliminar" }).click();
+  await expect(
+    eliminar.getByText(
+      `El rubro "${rubro}" ya tiene gastos en "${usada}": desactivalo en vez de eliminarlo`,
+    ),
+  ).toBeVisible();
+  await eliminar.getByRole("button", { name: "Cancelar" }).click();
+  await expect(eliminar).toBeHidden();
+
+  // Un rubro nuevo sin gastos se elimina entero
+  const vacio = `Vacío ${sufijo}`;
+  await page.getByRole("button", { name: "Nuevo rubro" }).click();
+  const otroRubro = page.getByRole("dialog", { name: "Nuevo rubro" });
+  await otroRubro.getByLabel("Nombre").fill(vacio);
+  await otroRubro.getByRole("button", { name: "Guardar" }).click();
+  await expect(page.getByText(`Categoría «${vacio}» creada`)).toBeVisible();
+  await page
+    .getByTestId(`rubro-${vacio}`)
+    .getByRole("button", { name: `Eliminar ${vacio}` })
+    .click();
+  await page
+    .getByRole("dialog", { name: "Eliminar rubro" })
+    .getByRole("button", { name: "Eliminar" })
+    .click();
+  await expect(page.getByText(`Rubro ${vacio} eliminado`)).toBeVisible();
+  await expect(page.getByTestId(`rubro-${vacio}`)).toHaveCount(0);
+});

@@ -3,9 +3,21 @@ import { formatearNumero } from "@/compartido/lib/formato";
 import type { Servicio } from "@/modulos/servicios/api/consultas";
 import { useCertificadoDeServicio } from "../api/consultas";
 
-/** Qué hoja de certificado se va a usar con el servicio elegido (la decide la BD). */
-export function AvisoCertificado({ servicio }: { servicio: Servicio }) {
-  const certificado = useCertificadoDeServicio(servicio.requiere_certificado ? servicio.id : null);
+/**
+ * Qué hoja de certificado se va a usar con el servicio elegido (la decide la BD): la de siempre o,
+ * en una condicional, la del certificado condicional.
+ */
+export function AvisoCertificado({
+  servicio,
+  condicional = false,
+}: {
+  servicio: Servicio;
+  condicional?: boolean;
+}) {
+  const certificado = useCertificadoDeServicio(
+    servicio.requiere_certificado ? servicio.id : null,
+    condicional,
+  );
   if (!servicio.requiere_certificado) {
     return <p className="text-base text-muted-foreground">Este servicio no lleva certificado.</p>;
   }
@@ -18,8 +30,9 @@ export function AvisoCertificado({ servicio }: { servicio: Servicio }) {
   if (certificado.data === null) {
     return (
       <p className="text-base text-destructive" data-testid="aviso-certificado">
-        No hay un certificado configurado para este servicio. La venta se registra igual y se avisa
-        al administrador.
+        {condicional
+          ? "Este servicio ya no tiene un certificado condicional: volvé y elegí el de siempre."
+          : "No hay un certificado configurado para este servicio. La venta se registra igual y se avisa al administrador."}
       </p>
     );
   }

@@ -33,6 +33,8 @@ const VENTA = {
   patente: null,
   descuentoId: null,
   precioEsperado: 30000,
+  condicional: false,
+  condicionalMitad: false,
 };
 
 beforeEach(() => {

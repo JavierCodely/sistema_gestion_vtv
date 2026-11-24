@@ -46,7 +46,32 @@ describe("DialogoCertificado", () => {
         unidad_compra: "libreta",
         hojas_por_unidad: 50,
         stock_minimo: 20,
+        condicional: false,
+        dias_vuelta: null,
+        costo_unidad: null,
       },
+    ]);
+  });
+
+  it("crea un certificado de condicional con los días para volver (30 por defecto)", async () => {
+    responder("certificados", "insert", { data: { id: 10, nombre: "B condicional" } });
+    const onCerrar = vi.fn();
+    renderConQuery(<DialogoCertificado onCerrar={onCerrar} />);
+    await userEvent.type(screen.getByLabelText("Nombre"), "B condicional");
+    await userEvent.type(screen.getByLabelText("Hojas por unidad"), "25");
+    expect(screen.queryByLabelText("Días para volver")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("switch", { name: "Es un certificado de condicional" }));
+    expect(screen.getByLabelText("Días para volver")).toHaveValue("30");
+    await userEvent.clear(screen.getByLabelText("Días para volver"));
+    await userEvent.click(screen.getByRole("button", { name: "Crear certificado" }));
+    expect(await screen.findByText(/los días para volver/i)).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("Días para volver"), "15");
+    await userEvent.click(screen.getByRole("button", { name: "Crear certificado" }));
+    await waitFor(() => {
+      expect(onCerrar).toHaveBeenCalled();
+    });
+    expect(argumentosDe("certificados", "insert")).toEqual([
+      expect.objectContaining({ nombre: "B condicional", condicional: true, dias_vuelta: 15 }),
     ]);
   });
 
@@ -62,7 +87,7 @@ describe("DialogoCertificado", () => {
     await userEvent.type(screen.getByLabelText("Hojas por unidad"), "25");
     await userEvent.click(screen.getByRole("button", { name: "Crear certificado" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Ya hay un certificado activo para todos los servicios. Desactivalo antes de activar otro.",
+      "Ya hay un certificado activo del mismo tipo para todos los servicios. Desactivalo antes de activar otro.",
     );
   });
 
@@ -97,7 +122,66 @@ describe("DialogoCertificado", () => {
         unidad_compra: "libreta",
         hojas_por_unidad: 50,
         stock_minimo: 7,
+        condicional: false,
+        dias_vuelta: null,
+        costo_unidad: null,
       },
     ]);
+  });
+
+  it("con el costo de la libreta calcula cuánto vale cada hoja y lo guarda", async () => {
+    responder("certificados", "insert", { data: { id: 11, nombre: "Libreta B" } });
+    const onCerrar = vi.fn();
+    renderConQuery(<DialogoCertificado onCerrar={onCerrar} />);
+    await userEvent.type(screen.getByLabelText("Nombre"), "Libreta B");
+    await elegir("Se compra por", "Libreta");
+    await userEvent.type(screen.getByLabelText("Hojas por unidad"), "25");
+    await userEvent.type(screen.getByLabelText("Costo por libreta ($)"), "3.700");
+    expect(screen.getByTestId("costo-por-hoja")).toHaveTextContent(/^Cada hoja: \$\s?148,00$/);
+    await userEvent.click(screen.getByRole("button", { name: "Crear certificado" }));
+    await waitFor(() => {
+      expect(onCerrar).toHaveBeenCalled();
+    });
+    expect(argumentosDe("certificados", "insert")).toEqual([
+      expect.objectContaining({ hojas_por_unidad: 25, costo_unidad: 3700 }),
+    ]);
+  });
+
+  it("al editar muestra cuánto pasa a valer el stock con el costo nuevo", async () => {
+    responder("certificados", "update", { data: { id: 4, nombre: "Hoja VTV" } });
+    renderConQuery(
+      <DialogoCertificado
+        certificado={certificadoDePrueba({
+          unidad_compra: "libreta",
+          hojas_por_unidad: 25,
+          stock_hojas: 300,
+          costo_unidad: 3500,
+        })}
+        onCerrar={vi.fn()}
+      />,
+    );
+    const costo = screen.getByLabelText("Costo por libreta ($)");
+    expect(costo).toHaveValue("3500");
+    await userEvent.clear(costo);
+    await userEvent.type(costo, "3700");
+    expect(screen.getByTestId("costo-por-hoja")).toHaveTextContent(
+      /^Cada hoja: \$\s?148,00 · las 300 hojas en stock valen \$\s?44\.400,00$/,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    await waitFor(() => {
+      expect(argumentosDe("certificados", "update")).toEqual([
+        expect.objectContaining({ costo_unidad: 3700 }),
+      ]);
+    });
+  });
+
+  it("un costo inválido no se guarda", async () => {
+    renderConQuery(<DialogoCertificado onCerrar={vi.fn()} />);
+    await userEvent.type(screen.getByLabelText("Nombre"), "Hoja");
+    await userEvent.type(screen.getByLabelText("Hojas por unidad"), "25");
+    await userEvent.type(screen.getByLabelText("Costo por caja ($)"), "0");
+    await userEvent.click(screen.getByRole("button", { name: "Crear certificado" }));
+    expect(await screen.findByText("El costo debe ser mayor a cero.")).toBeInTheDocument();
+    expect(argumentosDe("certificados", "insert")).toBeUndefined();
   });
 });

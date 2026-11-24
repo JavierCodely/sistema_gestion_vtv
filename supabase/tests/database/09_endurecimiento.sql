@@ -69,7 +69,7 @@ reset role;
 -- Concurrencia: los chequeos críticos toman locks (la carrera en sí no se puede simular en una sesión)
 select ok(pg_get_functiondef('public.tg_proteger_ultimo_admin()'::regprocedure) like '%pg_advisory_xact_lock%',
   'la protección del último admin serializa con un advisory lock');
-select ok(pg_get_functiondef('public.registrar_venta(bigint, bigint, public.medio_pago, text, jsonb, bigint, numeric)'::regprocedure)
+select ok(pg_get_functiondef('public.registrar_venta(bigint, bigint, public.medio_pago, text, jsonb, bigint, numeric, boolean, boolean)'::regprocedure)
             like '%_turno_para_trabajar(p_turno_id, false)%'
           and pg_get_functiondef('public._turno_para_trabajar(bigint, boolean)'::regprocedure) like '%for share%',
   'registrar_venta bloquea el turno para no vender en un turno que se está cerrando');

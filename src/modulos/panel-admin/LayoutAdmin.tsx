@@ -1,5 +1,6 @@
 import {
   Bell,
+  Car,
   ClipboardList,
   FileText,
   FileCheck,
@@ -32,6 +33,7 @@ interface ItemMenu {
 const MENU_ADMIN: ItemMenu[] = [
   { a: "/admin", texto: "Dashboard", icono: LayoutDashboard },
   { a: "/admin/ventas", texto: "Ventas", icono: Receipt },
+  { a: "/admin/patentes", texto: "Patentes", icono: Car },
   { a: "/admin/facturacion", texto: "Facturación", icono: FileCheck },
   { a: "/admin/alertas", texto: "Alertas", icono: Bell },
   { a: "/admin/usuarios", texto: "Usuarios", icono: Users },

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  costoPorHoja,
   describirPresentacion,
+  textoCondicional,
   validarAjuste,
   validarCertificado,
   validarCompra,
@@ -13,6 +15,9 @@ const certificado: FormularioCertificado = {
   unidadCompra: "caja",
   hojasPorUnidad: "25",
   stockMinimo: "30",
+  condicional: false,
+  diasVuelta: "30",
+  costoUnidad: "",
 };
 
 describe("validarCertificado", () => {
@@ -23,8 +28,56 @@ describe("validarCertificado", () => {
         unidad_compra: "caja",
         hojas_por_unidad: 25,
         stock_minimo: 30,
+        condicional: false,
+        dias_vuelta: null,
+        costo_unidad: null,
       },
     });
+  });
+
+  it("el costo de la unidad es opcional y se valida como un monto", () => {
+    expect(validarCertificado({ ...certificado, costoUnidad: "3.700" }).datos?.costo_unidad).toBe(
+      3700,
+    );
+    expect(
+      validarCertificado({ ...certificado, costoUnidad: "  " }).datos?.costo_unidad,
+    ).toBeNull();
+    expect(validarCertificado({ ...certificado, costoUnidad: "0" }).errores).toHaveProperty(
+      "costoUnidad",
+    );
+    expect(validarCertificado({ ...certificado, costoUnidad: "abc" }).errores).toHaveProperty(
+      "costoUnidad",
+    );
+  });
+
+  it("costoPorHoja: libreta de 25 hojas a $ 3.700 → $ 148 la hoja", () => {
+    expect(costoPorHoja("3.700", "libreta", "25")).toBe(148);
+    expect(costoPorHoja("1.000", "caja", "3")).toBe(333.3333);
+    expect(costoPorHoja("250,50", "unidad", "")).toBe(250.5);
+    expect(costoPorHoja("", "libreta", "25")).toBeUndefined();
+    expect(costoPorHoja("3.700", "libreta", "0")).toBeUndefined();
+  });
+
+  it("un certificado condicional lleva los días para volver (1 a 365)", () => {
+    expect(validarCertificado({ ...certificado, condicional: true }).datos).toMatchObject({
+      condicional: true,
+      dias_vuelta: 30,
+    });
+    expect(
+      validarCertificado({ ...certificado, condicional: true, diasVuelta: "0" }).errores,
+    ).toHaveProperty("diasVuelta");
+    expect(
+      validarCertificado({ ...certificado, condicional: true, diasVuelta: "366" }).errores,
+    ).toHaveProperty("diasVuelta");
+    expect(
+      validarCertificado({ ...certificado, condicional: true, diasVuelta: "" }).errores,
+    ).toHaveProperty("diasVuelta");
+  });
+
+  it("los días no se guardan si no es condicional", () => {
+    expect(
+      validarCertificado({ ...certificado, diasVuelta: "basura" }).datos?.dias_vuelta,
+    ).toBeNull();
   });
 
   it("una hoja suelta siempre tiene 1 hoja por unidad", () => {
@@ -113,6 +166,13 @@ describe("validarAjuste", () => {
     expect(
       validarAjuste({ sentido: "restar", cantidad: "1.251", nota: "Conteo" }, 1250).errores,
     ).toEqual({ cantidad: "No podés restar más hojas que el stock actual (1.250)." });
+  });
+});
+
+describe("textoCondicional", () => {
+  it("dice el plazo en días", () => {
+    expect(textoCondicional(30)).toBe("Condicional · vuelve dentro de 30 días");
+    expect(textoCondicional(1)).toBe("Condicional · vuelve dentro de 1 día");
   });
 });
 

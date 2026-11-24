@@ -11,6 +11,8 @@ const venta = (cambios: Partial<FormularioVenta> = {}): FormularioVenta => ({
   patente: "AB123CD",
   descuentoId: null,
   precioEsperado: 18000,
+  condicional: false,
+  condicionalMitad: false,
   ...cambios,
 });
 
@@ -31,6 +33,8 @@ describe("validarVenta", () => {
         patente: "AB123CD",
         descuentoId: null,
         precioEsperado: 18000,
+        condicional: false,
+        condicionalMitad: false,
       },
     });
     expect(validarVenta(venta({ patente: "  " })).errores).toEqual({
@@ -51,6 +55,8 @@ describe("validarVenta", () => {
       patente: "AB123CD",
       descuentoId: 4,
       precioEsperado: 16200,
+      condicional: false,
+      condicionalMitad: false,
     });
   });
 
@@ -69,5 +75,25 @@ describe("validarObservaciones", () => {
     expect(validarObservaciones("x".repeat(1001))).toBe(
       "Las observaciones no pueden superar los 1000 caracteres.",
     );
+  });
+});
+
+describe("validarVenta: condicional", () => {
+  it("pasa el certificado condicional y el 50% tal cual (lo controla la BD)", () => {
+    expect(
+      validarVenta(venta({ condicional: true, condicionalMitad: true, precioEsperado: 35500 }))
+        .datos,
+    ).toMatchObject({
+      condicional: true,
+      condicionalMitad: true,
+      precioEsperado: 35500,
+    });
+  });
+
+  it("el 50% solo va con el certificado condicional", () => {
+    expect(validarVenta(venta({ condicionalMitad: true })).datos).toMatchObject({
+      condicional: false,
+      condicionalMitad: false,
+    });
   });
 });

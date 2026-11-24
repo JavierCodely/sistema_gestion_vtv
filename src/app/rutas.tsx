@@ -47,6 +47,12 @@ export const rutas: RouteObject[] = [
             }),
           },
           {
+            path: "patentes",
+            lazy: async () => ({
+              Component: (await import("@/modulos/ventas/paginas/BuscarPatente")).BuscarPatente,
+            }),
+          },
+          {
             path: "ventas/turnos/:id",
             lazy: async () => ({
               Component: (await import("@/modulos/ventas/paginas/DetalleTurno")).DetalleTurno,
