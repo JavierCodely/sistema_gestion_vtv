@@ -52,7 +52,16 @@ test("una ruta privada pide login y después vuelve a esa ruta", async ({ page }
   await page.goto("/admin/usuarios");
   await expect(page).toHaveURL("/login");
   await page.getByLabel("Email").fill(ADMIN.email);
-  await page.getByLabel("Contraseña").fill(ADMIN.password);
+  const clave = page.getByLabel("Contraseña", { exact: true });
+  await clave.fill(ADMIN.password);
+  // El ojo muestra lo escrito y lo vuelve a ocultar, sin enviar el formulario
+  await expect(clave).toHaveAttribute("type", "password");
+  await page.getByRole("button", { name: "Mostrar contraseña" }).click();
+  await expect(clave).toHaveAttribute("type", "text");
+  await expect(clave).toHaveValue(ADMIN.password);
+  await page.getByRole("button", { name: "Ocultar contraseña" }).click();
+  await expect(clave).toHaveAttribute("type", "password");
+  await expect(page).toHaveURL("/login");
   await page.getByRole("button", { name: "Ingresar" }).click();
   await expect(page).toHaveURL("/admin/usuarios");
   await expect(page.getByRole("heading", { name: "Usuarios" })).toBeVisible();

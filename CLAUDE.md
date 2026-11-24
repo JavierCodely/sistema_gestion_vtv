@@ -132,6 +132,9 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
   (desactivado, quitado del servicio o redondea a $ 0), la venta **no** se registra sin él: "El
   descuento elegido ya no está disponible: elegí otro." y vuelve al paso del descuento (si no quedan
   otros, lo avisa y sigue sin descuento a la vista del cajero).
+- **Contraseñas**: todo campo de contraseña usa `InputPassword` (`compartido/componentes`), con el
+  botón "Mostrar contraseña" / "Ocultar contraseña" (ojo, `aria-pressed`, no envía el formulario).
+  En los E2E, `getByLabel("Contraseña", { exact: true })`: sin `exact` también encuentra el botón.
 - Diálogos con una escritura en curso no se cierran (Esc, la X o clic afuera): `onOpenChange` ignora
   el cierre mientras la mutación está `isPending` (ej. `DialogoCerrarTurno`, `DialogoDisponibilidad`).
   Los números de paso de patente (1), categoría (2), servicio (3), medio (4), mixto (5) y efectivo (5; 6 en un
@@ -453,7 +456,9 @@ Reglas que no son obvias leyendo una sola tabla:
   `descuentos`, `caja` y `servicios`; así `servicios` no importa de `descuentos` y no hay ciclo).
 - **Ventas del admin** (decisión 2026-11-23): `/admin/ventas` muestra arriba los **turnos abiertos en
   vivo** (`v_turnos` con `abierto = true`; con varios, una pestaña por caja): totales por medio,
-  gastos, neto, efectivo en caja y la lista de ventas (con factura y "Anular"); abajo el **historial de
+  gastos, neto y **"Efectivo en caja"** destacado dentro de la misma tarjeta de totales (`TotalesVentas`
+  con `efectivoEnCaja`, `vivo-efectivo-en-caja`; decisión 2026-11-24) y la lista de ventas (con
+  factura y "Anular"); abajo el **historial de
   turnos** filtrado por **fecha de apertura** (`SelectorRango` sobre `v_turnos.fecha_apertura`, por
   defecto el mes actual) con los totales del período (`resumen_turnos`, los suma la BD) y la tabla con
   los totales de cada turno. El detalle permite anular ventas (`anular_venta`) y cerrar un turno

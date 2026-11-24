@@ -26,7 +26,7 @@ test("ciclo completo de un usuario: crear, editar, contraseña, desactivar y rea
   await nuevo.getByLabel("Nombre").fill("Ana");
   await nuevo.getByLabel("Apellido").fill("Pérez");
   await nuevo.getByLabel("Email").fill(email);
-  await nuevo.getByLabel("Contraseña").fill("clave1234");
+  await nuevo.getByLabel("Contraseña", { exact: true }).fill("clave1234");
   await conFuncion(page, F, () => nuevo.getByRole("button", { name: "Crear usuario" }).click());
   await expect(page.getByText("Usuario Ana Pérez creado")).toBeVisible();
   const fila = page.getByTestId(`usuario-${email}`);
@@ -38,7 +38,7 @@ test("ciclo completo de un usuario: crear, editar, contraseña, desactivar y rea
   await nuevo.getByLabel("Nombre").fill("Otra");
   await nuevo.getByLabel("Apellido").fill("Persona");
   await nuevo.getByLabel("Email").fill(email);
-  await nuevo.getByLabel("Contraseña").fill("clave1234");
+  await nuevo.getByLabel("Contraseña", { exact: true }).fill("clave1234");
   await conFuncion(page, F, () => nuevo.getByRole("button", { name: "Crear usuario" }).click());
   await expect(nuevo.getByRole("alert")).toHaveText("Ya existe un usuario con ese email");
   await page.keyboard.press("Escape");

@@ -83,7 +83,7 @@ test("gastos: el admin habilita una categoría, el cajero carga un gasto y el ad
   await nuevoUsuario.getByLabel("Nombre").fill("Gaston");
   await nuevoUsuario.getByLabel("Apellido").fill(sufijo);
   await nuevoUsuario.getByLabel("Email").fill(cajero.email);
-  await nuevoUsuario.getByLabel("Contraseña").fill(cajero.password);
+  await nuevoUsuario.getByLabel("Contraseña", { exact: true }).fill(cajero.password);
   await conFuncion(page, "admin-usuarios", () =>
     nuevoUsuario.getByRole("button", { name: "Crear usuario" }).click(),
   );

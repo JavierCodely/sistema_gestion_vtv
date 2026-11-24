@@ -2,12 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { Cargando } from "@/compartido/componentes/Cargando";
 import { mensajeDeError } from "@/compartido/lib/errores";
-import {
-  formatearFechaHora,
-  formatearLista,
-  formatearMoneda,
-  formatearNumero,
-} from "@/compartido/lib/formato";
+import { formatearFechaHora, formatearLista, formatearNumero } from "@/compartido/lib/formato";
 import { Alert, AlertDescription } from "@/compartido/ui/alert";
 import { Button } from "@/compartido/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/compartido/ui/tabs";
@@ -30,14 +25,6 @@ function TurnoAbierto({ turno }: { turno: Turno }) {
               ? `Atendieron: ${formatearLista(turno.atendido_por)}`
               : "Todavía nadie vendió ni cargó gastos en este turno."}
           </p>
-          {turno.efectivo_en_caja !== null && (
-            <p>
-              Efectivo en caja:{" "}
-              <span className="font-medium tabular-nums" data-testid="vivo-efectivo-en-caja">
-                {formatearMoneda(turno.efectivo_en_caja)}
-              </span>
-            </p>
-          )}
         </div>
         <Button asChild variant="outline" size="sm">
           <Link to={`turnos/${String(turno.id)}`}>Ver detalle del turno</Link>
@@ -47,6 +34,7 @@ function TurnoAbierto({ turno }: { turno: Turno }) {
         titulo={`Totales del turno (${formatearNumero(turno.ventas_cantidad ?? 0)} ventas, sin anuladas)`}
         valores={turno}
         prefijoTestId="vivo"
+        efectivoEnCaja={turno.efectivo_en_caja}
       />
       <section className="flex flex-col gap-2" aria-label={`Ventas de ${turno.caja_nombre}`}>
         <h3 className="font-semibold">Ventas realizadas</h3>

@@ -1,4 +1,5 @@
 import { useState, type ChangeEvent, type SubmitEvent } from "react";
+import { InputPassword } from "@/compartido/componentes/InputPassword";
 import { toast } from "sonner";
 import { Campo } from "@/compartido/componentes/Campo";
 import { ErrorFormulario } from "@/compartido/componentes/ErrorFormulario";
@@ -97,7 +98,7 @@ export function DialogoNuevoUsuario({
             />
           </Campo>
           <Campo id="nuevo-password" etiqueta="Contraseña" error={errores.password}>
-            <Input {...campo("password")} type="password" autoComplete="new-password" />
+            <InputPassword {...campo("password")} autoComplete="new-password" />
           </Campo>
           <Campo id="nuevo-rol" etiqueta="Rol">
             <SelectorRol id="nuevo-rol" valor={rol} onCambio={setRol} />
