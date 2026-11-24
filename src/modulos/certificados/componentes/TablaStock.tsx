@@ -18,7 +18,7 @@ import {
   useActualizarCertificado,
   type CertificadoConStock,
 } from "../api/consultas";
-import { describirPresentacion } from "../lib/validaciones";
+import { describirPresentacion, textoCondicional } from "../lib/validaciones";
 import { BadgeSemaforo } from "./BadgeSemaforo";
 
 export type AccionCertificado = "comprar" | "ajustar" | "editar" | "destinos";
@@ -69,6 +69,11 @@ export function TablaStock({
             <TableRow key={c.id} data-testid={`certificado-${c.nombre}`}>
               <TableCell>
                 <div className="font-medium">{c.nombre}</div>
+                {c.condicional && c.dias_vuelta !== null && (
+                  <div className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                    {textoCondicional(c.dias_vuelta)}
+                  </div>
+                )}
                 {!c.activo && (
                   <div className="text-xs text-muted-foreground">
                     Desactivado: activalo para registrar compras.

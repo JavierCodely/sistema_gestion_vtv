@@ -16,6 +16,10 @@ export interface FormularioVenta {
   descuentoId: number | null;
   /** Precio final en pantalla: va a la BD para que rechace la venta si ya no es ese. */
   precioEsperado: number;
+  /** Con el certificado condicional del servicio. */
+  condicional: boolean;
+  /** Condicional pagada al 50%. */
+  condicionalMitad: boolean;
 }
 
 export type ErroresVenta = Errores<"servicioId" | "cobro" | "patente">;
@@ -46,6 +50,8 @@ export function validarVenta(
       patente: patente || null,
       descuentoId: formulario.descuentoId,
       precioEsperado: formulario.precioEsperado,
+      condicional: formulario.condicional,
+      condicionalMitad: formulario.condicional && formulario.condicionalMitad,
     },
   };
 }

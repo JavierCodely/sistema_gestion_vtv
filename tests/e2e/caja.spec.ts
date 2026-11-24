@@ -91,7 +91,7 @@ test("turno completo: el admin abre la caja con efectivo inicial, el cajero vend
   await trabajarEnCaja(pc, caja);
 
   // Dos ventas con el teclado: en efectivo muestra el vuelto
-  await expect(pc.getByRole("listbox", { name: "1. Categoría" })).toBeFocused();
+  await expect(pc.getByLabel("1. Patente")).toBeFocused();
   await venderEnCaja(pc, {
     categoria,
     servicio,

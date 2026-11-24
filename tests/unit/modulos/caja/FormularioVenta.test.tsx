@@ -51,6 +51,7 @@ const SERVICIOS: Servicio[] = [
     precio: 12500.5,
     requiere_certificado: false,
   }),
+  servicio({ id: 6, nombre: "Auto particular", precio: 71000 }),
 ];
 
 /** formatearMoneda separa "$" con un espacio duro: se compara con espacios normales. */
@@ -81,13 +82,26 @@ const opciones = (lista: HTMLElement) =>
     .getAllByRole("option")
     .map((o) => normal(o.textContent));
 
-/** Autos (Enter) → servicio N° `numero` (tecla) → Enter. */
-async function elegirServicioDeAutos(numero: string) {
-  await screen.findByRole("listbox", { name: "1. Categoría" });
+/** Patente (Enter) → Autos (Enter): queda en la lista de servicios. */
+async function hastaLosServicios(patente = "AA111AA") {
+  await screen.findByLabelText("1. Patente");
+  await userEvent.keyboard(`${patente}{Enter}`);
+  await screen.findByRole("listbox", { name: "2. Categoría" });
   await userEvent.keyboard("{Enter}");
-  await screen.findByRole("listbox", { name: "2. Servicio · Autos" });
+  await screen.findByRole("listbox", { name: "3. Servicio · Autos" });
+}
+
+/** Patente AA111AA → Autos → servicio N° `numero`: queda en el medio de pago (sin descuentos). */
+async function elegirServicioDeAutos(numero: string) {
+  await hastaLosServicios();
   await userEvent.keyboard(`${numero}{Enter}`);
-  await screen.findByLabelText("3. Patente");
+  await screen.findByRole("listbox", { name: "4. Medio de pago" });
+}
+
+/** En la confirmación (patente en grande), Enter registra. */
+async function confirmar() {
+  await screen.findByTestId("paso-confirmar");
+  await userEvent.keyboard("{Enter}");
 }
 
 beforeEach(() => {
@@ -95,25 +109,44 @@ beforeEach(() => {
   vi.mocked(toast.success).mockClear();
   vi.mocked(toast.warning).mockClear();
   responderRpc("certificado_para_servicio", { data: null });
+  responderRpc("certificado_condicional_para_servicio", { data: null });
   responderRpc("descuentos_para_servicio", { data: [] });
+  responderRpc("condicionales_de_patente", { data: [] });
 });
+
+/** El servicio tiene el certificado condicional "Hoja B" (30 días para volver). */
+function conCertificadoCondicional() {
+  responderRpc("certificado_condicional_para_servicio", { data: 8 });
+  responder("certificados", "select", {
+    data: { id: 8, nombre: "Hoja B", stock_hojas: 40, dias_vuelta: 30 },
+  });
+}
 
 describe("FormularioVenta (caja por teclado)", () => {
   it("ofrece solo categorías activas con servicios, numeradas, y sus servicios activos con precio", async () => {
     renderFormulario();
-    const categorias = await screen.findByRole("listbox", { name: "1. Categoría" });
+    expect(await screen.findByLabelText("1. Patente")).toHaveFocus();
+    await userEvent.keyboard("AA111AA{Enter}");
+    const categorias = await screen.findByRole("listbox", { name: "2. Categoría" });
+    expect(argumentosRpc("condicionales_de_patente")).toEqual({ p_patente: "AA111AA" });
     expect(categorias).toHaveFocus();
     expect(opciones(categorias)).toEqual(["1Autos", "2Motos"]);
 
     await userEvent.keyboard("{Enter}");
-    const servicios = await screen.findByRole("listbox", { name: "2. Servicio · Autos" });
+    const servicios = await screen.findByRole("listbox", { name: "3. Servicio · Autos" });
     expect(servicios).toHaveFocus();
-    expect(opciones(servicios)).toEqual(["1VTV auto$ 30.000,00", "2Reverificación$ 10.000,00"]);
+    expect(opciones(servicios)).toEqual([
+      "1VTV auto$ 30.000,00",
+      "2Reverificación$ 10.000,00",
+      "3Auto particular$ 71.000,00",
+    ]);
   });
 
   it("flechas y números marcan; Esc vuelve al paso anterior", async () => {
     renderFormulario();
-    const categorias = await screen.findByRole("listbox", { name: "1. Categoría" });
+    await screen.findByLabelText("1. Patente");
+    await userEvent.keyboard("AA111AA{Enter}");
+    const categorias = await screen.findByRole("listbox", { name: "2. Categoría" });
     await userEvent.keyboard("{ArrowDown}");
     expect(screen.getByRole("option", { name: "Motos" })).toHaveAttribute("aria-selected", "true");
     await userEvent.keyboard("{ArrowUp}");
@@ -127,9 +160,12 @@ describe("FormularioVenta (caja por teclado)", () => {
       screen.getByRole("option", { name: "Motos" }).id,
     );
     await userEvent.keyboard("{Enter}");
-    expect(await screen.findByRole("listbox", { name: "2. Servicio · Motos" })).toBeInTheDocument();
+    expect(await screen.findByRole("listbox", { name: "3. Servicio · Motos" })).toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
-    expect(await screen.findByRole("listbox", { name: "1. Categoría" })).toBeInTheDocument();
+    expect(await screen.findByRole("listbox", { name: "2. Categoría" })).toBeInTheDocument();
+    // Desde la categoría, Esc vuelve a la patente con lo escrito
+    await userEvent.keyboard("{Escape}");
+    expect(await screen.findByLabelText("1. Patente")).toHaveValue("AA111AA");
   });
 
   it("muestra qué hoja de certificado se va a usar", async () => {
@@ -154,27 +190,57 @@ describe("FormularioVenta (caja por teclado)", () => {
   it("un servicio sin certificado no consulta stock", async () => {
     reiniciarSupabaseFalso();
     responderRpc("descuentos_para_servicio", { data: [] });
+    responderRpc("condicionales_de_patente", { data: [] });
     renderFormulario();
     await elegirServicioDeAutos("2");
     expect(screen.getByText("Este servicio no lleva certificado.")).toBeInTheDocument();
     expect(argumentosRpc("certificado_para_servicio")).toBeUndefined();
+    expect(argumentosRpc("certificado_condicional_para_servicio")).toBeUndefined();
   });
 
   it("patente grande en mayúsculas (solo letras y números) y venta con tarjeta solo con el teclado", async () => {
     responderRpc("registrar_venta", {
-      data: { id: 81, servicio_nombre: "VTV auto", precio: 30000, sin_stock: false },
+      data: {
+        id: 81,
+        servicio_nombre: "VTV auto",
+        precio: 30000,
+        sin_stock: false,
+        vuelta_de: null,
+        condicional_vence: null,
+      },
     });
     renderFormulario();
-    await elegirServicioDeAutos("1");
-    const patente = screen.getByLabelText("3. Patente");
+    const patente = await screen.findByLabelText("1. Patente");
     expect(patente).toHaveFocus();
     await userEvent.keyboard("ab 12-3cd");
     expect(patente).toHaveValue("AB123CD");
+    await userEvent.keyboard("{Enter}");
+    await screen.findByRole("listbox", { name: "2. Categoría" });
+    await userEvent.keyboard("{Enter}");
+    await screen.findByRole("listbox", { name: "3. Servicio · Autos" });
     await userEvent.keyboard("{Enter}");
 
     const medios = await screen.findByRole("listbox", { name: "4. Medio de pago" });
     expect(opciones(medios)).toEqual(["1Efectivo", "2Transferencia", "3Tarjeta", "4Mixto"]);
     await userEvent.keyboard("{ArrowRight}{ArrowRight}{Enter}");
+
+    // Antes de registrar: la patente en grande para verificarla
+    const paso = await screen.findByTestId("paso-confirmar");
+    expect(screen.getByTestId("patente-a-confirmar")).toHaveTextContent("AB123CD");
+    expect(normal(paso.textContent)).toContain("Servicio:VTV auto");
+    expect(normal(paso.textContent)).toContain("Cobra:$ 30.000,00");
+    expect(normal(paso.textContent)).toContain("Medio:Tarjeta");
+    expect(screen.getByRole("button", { name: "Confirmar venta" })).toHaveFocus();
+    expect(argumentosRpc("registrar_venta")).toBeUndefined();
+    // Esc vuelve al medio; Enter de nuevo vuelve a la confirmación
+    await userEvent.keyboard("{Escape}");
+    await screen.findByRole("listbox", { name: "4. Medio de pago" });
+    expect(screen.getByRole("option", { name: "Tarjeta" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await userEvent.keyboard("{Enter}");
+    await confirmar();
     await waitFor(() => {
       expect(argumentosRpc("registrar_venta")).toEqual({
         p_turno_id: TURNO_ID,
@@ -185,33 +251,40 @@ describe("FormularioVenta (caja por teclado)", () => {
       });
     });
     expect(ultimoAviso(toast.success)).toBe("Venta N° 81: VTV auto · $ 30.000,00");
-    // Lista para la próxima venta
-    expect(await screen.findByRole("listbox", { name: "1. Categoría" })).toHaveFocus();
+    // Lista para la próxima venta: empieza por la patente, en blanco
+    const nueva = await screen.findByLabelText("1. Patente");
+    expect(nueva).toHaveFocus();
+    expect(nueva).toHaveValue("");
     expect(screen.getByTestId("ultima-venta")).toHaveTextContent("Última venta · N° 81");
+    expect(screen.getByTestId("ultima-venta")).toHaveTextContent("AB123CD");
   });
 
   it("la patente es obligatoria: vacía no avanza y lo avisa; al escribir se va el aviso", async () => {
     renderFormulario();
-    await elegirServicioDeAutos("1");
-    const patente = screen.getByLabelText("3. Patente");
+    const patente = await screen.findByLabelText("1. Patente");
     await userEvent.keyboard("{Enter}");
     expect(await screen.findByRole("alert")).toHaveTextContent("Ingresá la patente del vehículo.");
     expect(patente).toHaveAttribute("aria-invalid", "true");
-    expect(screen.queryByRole("listbox", { name: "4. Medio de pago" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("listbox", { name: "2. Categoría" })).not.toBeInTheDocument();
+    expect(argumentosRpc("condicionales_de_patente")).toBeUndefined();
     await userEvent.keyboard("AB1");
     expect(screen.queryByText("Ingresá la patente del vehículo.")).not.toBeInTheDocument();
     await userEvent.keyboard("{Enter}");
-    expect(await screen.findByRole("listbox", { name: "4. Medio de pago" })).toBeInTheDocument();
+    expect(await screen.findByRole("listbox", { name: "2. Categoría" })).toBeInTheDocument();
   });
 
   it("efectivo: el monto recibido acepta solo números y muestra el vuelto", async () => {
     responderRpc("registrar_venta", {
-      data: { id: 82, servicio_nombre: "VTV auto", precio: 30000, sin_stock: false },
+      data: {
+        id: 82,
+        servicio_nombre: "VTV auto",
+        precio: 30000,
+        sin_stock: false,
+        vuelta_de: null,
+      },
     });
     renderFormulario();
     await elegirServicioDeAutos("1");
-    await userEvent.keyboard("AA111AA{Enter}");
-    await screen.findByRole("listbox", { name: "4. Medio de pago" });
     await userEvent.keyboard("1{Enter}");
 
     const recibido = await screen.findByLabelText("5. ¿Cuánto te entregó? ($)");
@@ -220,6 +293,13 @@ describe("FormularioVenta (caja por teclado)", () => {
     expect(recibido).toHaveValue("50000");
     expect(normal(screen.getByTestId("vuelto").textContent)).toBe("$ 20.000,00");
     await userEvent.keyboard("{Enter}");
+    const paso = await screen.findByTestId("paso-confirmar");
+    expect(normal(paso.textContent)).toContain("Entregó $ 50.000,00 · Vuelto $ 20.000,00");
+    // Esc vuelve a lo entregado, con lo escrito
+    await userEvent.keyboard("{Escape}");
+    expect(await screen.findByLabelText("5. ¿Cuánto te entregó? ($)")).toHaveValue("50000");
+    await userEvent.keyboard("{Enter}");
+    await confirmar();
     await waitFor(() => {
       expect(argumentosRpc("registrar_venta")).toEqual({
         p_turno_id: TURNO_ID,
@@ -237,8 +317,6 @@ describe("FormularioVenta (caja por teclado)", () => {
   it("efectivo: si no alcanza avisa cuánto falta y no registra", async () => {
     renderFormulario();
     await elegirServicioDeAutos("1");
-    await userEvent.keyboard("AA111AA{Enter}");
-    await screen.findByRole("listbox", { name: "4. Medio de pago" });
     await userEvent.keyboard("{Enter}");
     await screen.findByLabelText("5. ¿Cuánto te entregó? ($)");
     await userEvent.keyboard("100");
@@ -255,15 +333,21 @@ describe("FormularioVenta (caja por teclado)", () => {
 
   it("efectivo: Enter con el campo vacío es pago justo; sin hoja avisa con una advertencia", async () => {
     responderRpc("registrar_venta", {
-      data: { id: 83, servicio_nombre: "Reverificación", precio: 10000, sin_stock: true },
+      data: {
+        id: 83,
+        servicio_nombre: "Reverificación",
+        precio: 10000,
+        sin_stock: true,
+        vuelta_de: null,
+        condicional_vence: null,
+      },
     });
     renderFormulario();
     await elegirServicioDeAutos("2");
-    await userEvent.keyboard("AA111AA{Enter}");
-    await screen.findByRole("listbox", { name: "4. Medio de pago" });
     await userEvent.keyboard("{Enter}");
     await screen.findByLabelText("5. ¿Cuánto te entregó? ($)");
     await userEvent.keyboard("{Enter}");
+    await confirmar();
     await waitFor(() => {
       expect(ultimoAviso(toast.warning)).toBe(
         "Venta N° 83: Reverificación · $ 10.000,00 (sin hoja de certificado)",
@@ -279,20 +363,26 @@ describe("FormularioVenta (caja por teclado)", () => {
     });
     renderFormulario();
     await elegirServicioDeAutos("2");
-    await userEvent.keyboard("AA111AA{Enter}");
-    await screen.findByRole("listbox", { name: "4. Medio de pago" });
     await userEvent.keyboard("2{Enter}");
+    await confirmar();
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Necesitás un turno abierto para vender",
     );
-    expect(screen.getByRole("listbox", { name: "4. Medio de pago" })).toBeInTheDocument();
+    // Sigue en la confirmación: se puede reintentar
+    expect(screen.getByTestId("paso-confirmar")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar venta" }));
+    await waitFor(() => {
+      expect(ventasPedidas()).toBe(2);
+    });
   });
 
   it("también se elige con el mouse", async () => {
     renderFormulario();
+    await userEvent.type(await screen.findByLabelText("1. Patente"), "AA111AA");
+    await userEvent.click(screen.getByRole("button", { name: "Continuar" }));
     await userEvent.click(await screen.findByRole("option", { name: "Motos" }));
     await userEvent.click(await screen.findByRole("option", { name: /VTV moto/ }));
-    expect(await screen.findByLabelText("3. Patente")).toBeInTheDocument();
+    expect(await screen.findByRole("listbox", { name: "4. Medio de pago" })).toBeInTheDocument();
     expect(normal(screen.getByTestId("precio").textContent)).toBe("$ 12.500,50");
   });
   it("si no se pueden leer los descuentos, la venta sigue sin descuento y lo avisa", async () => {
@@ -326,23 +416,23 @@ const ventaRegistrada = (cambios: Record<string, unknown> = {}) => ({
   monto_descuento: 0,
   descuento_nombre: null,
   sin_stock: false,
+  vuelta_de: null,
+  condicional_saldo: null,
+  condicional_vence: null,
+  patente: "AA111AA",
   ...cambios,
 });
 
 const CON_JUBILADOS = { precio: 27000, monto_descuento: 3000, descuento_nombre: "Jubilados" };
 
-/** Autos → VTV auto (el descuento N° `descuento` si se pasa) → patente AA111AA → medio N° `medio`. */
+/** Patente AA111AA → Autos → VTV auto (el descuento N° `descuento` si se pasa) → medio N° `medio`. */
 async function hastaElMedio(medio: string, descuento?: string) {
-  await screen.findByRole("listbox", { name: "1. Categoría" });
-  await userEvent.keyboard("{Enter}");
-  await screen.findByRole("listbox", { name: "2. Servicio · Autos" });
+  await hastaLosServicios();
   await userEvent.keyboard("1{Enter}");
   if (descuento) {
     await screen.findByRole("listbox", { name: "Descuento (opcional) · VTV auto" });
     await userEvent.keyboard(`${descuento}{Enter}`);
   }
-  await screen.findByLabelText("3. Patente");
-  await userEvent.keyboard("AA111AA{Enter}");
   await screen.findByRole("listbox", { name: "4. Medio de pago" });
   await userEvent.keyboard(`${medio}{Enter}`);
 }
@@ -365,9 +455,7 @@ describe("FormularioVenta: descuentos", () => {
     });
     responderRpc("registrar_venta", { data: ventaRegistrada(CON_JUBILADOS) });
     renderFormulario();
-    await screen.findByRole("listbox", { name: "1. Categoría" });
-    await userEvent.keyboard("{Enter}");
-    await screen.findByRole("listbox", { name: "2. Servicio · Autos" });
+    await hastaLosServicios();
     await userEvent.keyboard("1{Enter}");
 
     const lista = await screen.findByRole("listbox", { name: "Descuento (opcional) · VTV auto" });
@@ -385,12 +473,12 @@ describe("FormularioVenta: descuentos", () => {
     );
     await userEvent.keyboard("2{Enter}");
 
-    await screen.findByLabelText("3. Patente");
+    await screen.findByRole("listbox", { name: "4. Medio de pago" });
     expect(normal(screen.getByTestId("precio").textContent)).toBe("$ 27.000,00");
     expect(normal(screen.getByTestId("descuento-en-curso").textContent)).toBe(
       "Lista $ 30.000,00 · Jubilados −$ 3.000,00",
     );
-    // Esc desde la patente vuelve al descuento (con el elegido marcado)
+    // Esc desde el medio vuelve al descuento (con el elegido marcado)
     await userEvent.keyboard("{Escape}");
     await screen.findByRole("listbox", { name: "Descuento (opcional) · VTV auto" });
     expect(screen.getByRole("option", { name: /Jubilados/ })).toHaveAttribute(
@@ -398,10 +486,9 @@ describe("FormularioVenta: descuentos", () => {
       "true",
     );
     await userEvent.keyboard("{Enter}");
-    await screen.findByLabelText("3. Patente");
-    await userEvent.keyboard("AA111AA{Enter}");
     await screen.findByRole("listbox", { name: "4. Medio de pago" });
     await userEvent.keyboard("3{Enter}");
+    await confirmar();
     await waitFor(() => {
       expect(argumentosRpc("registrar_venta")).toEqual({
         p_turno_id: TURNO_ID,
@@ -421,18 +508,15 @@ describe("FormularioVenta: descuentos", () => {
     responderRpc("descuentos_para_servicio", { data: [JUBILADOS] });
     responderRpc("registrar_venta", { data: ventaRegistrada() });
     renderFormulario();
-    await screen.findByRole("listbox", { name: "1. Categoría" });
-    await userEvent.keyboard("{Enter}");
-    await screen.findByRole("listbox", { name: "2. Servicio · Autos" });
+    await hastaLosServicios();
     await userEvent.keyboard("1{Enter}");
     await screen.findByRole("listbox", { name: "Descuento (opcional) · VTV auto" });
     await userEvent.keyboard("{Enter}");
-    await screen.findByLabelText("3. Patente");
+    await screen.findByRole("listbox", { name: "4. Medio de pago" });
     expect(normal(screen.getByTestId("precio").textContent)).toBe("$ 30.000,00");
     expect(screen.queryByTestId("descuento-en-curso")).not.toBeInTheDocument();
-    await userEvent.keyboard("AA111AA{Enter}");
-    await screen.findByRole("listbox", { name: "4. Medio de pago" });
     await userEvent.keyboard("2{Enter}");
+    await confirmar();
     await waitFor(() => {
       expect(argumentosRpc("registrar_venta")).toEqual({
         p_turno_id: TURNO_ID,
@@ -453,6 +537,7 @@ describe("FormularioVenta: descuentos", () => {
     await userEvent.keyboard("27500");
     expect(normal(screen.getByTestId("vuelto").textContent)).toBe("$ 500,00");
     await userEvent.keyboard("{Enter}");
+    await confirmar();
     await waitFor(() => {
       expect(argumentosRpc("registrar_venta")).toEqual({
         p_turno_id: TURNO_ID,
@@ -475,6 +560,7 @@ describe("FormularioVenta: descuentos", () => {
     await hastaElMedio("1");
     await screen.findByLabelText("5. ¿Cuánto te entregó? ($)");
     await userEvent.keyboard("30000{Enter}");
+    await confirmar();
     const ultima = await screen.findByTestId("ultima-venta");
     expect(normal(ultima.textContent)).toContain("VTV auto · $ 31.000,00");
     expect(normal(within(ultima).getByRole("alert").textContent)).toBe(
@@ -536,6 +622,11 @@ describe("FormularioVenta: pago mixto", () => {
       "Efectivo a cobrar: $ 10.000,50",
     );
     await userEvent.keyboard("{Enter}");
+    const paso = await screen.findByTestId("paso-confirmar");
+    expect(normal(paso.textContent)).toContain(
+      "Medio:Mixto: Efectivo $ 10.000,50 + Tarjeta $ 19.999,50",
+    );
+    await confirmar();
     await waitFor(() => {
       expect(argumentosRpc("registrar_venta")).toEqual({
         p_turno_id: TURNO_ID,
@@ -585,6 +676,7 @@ describe("FormularioVenta: pago mixto", () => {
     await userEvent.keyboard("{Enter}");
     await screen.findByLabelText("6. ¿Cuánto te entregó en efectivo? ($)");
     await userEvent.keyboard("10000{Enter}");
+    await confirmar();
     await waitFor(() => {
       expect(argumentosRpc("registrar_venta")).toEqual({
         p_turno_id: TURNO_ID,
@@ -614,6 +706,7 @@ describe("FormularioVenta: pago mixto", () => {
     await userEvent.keyboard("{Enter}");
     await screen.findByLabelText("6. ¿Cuánto te entregó en efectivo? ($)");
     await userEvent.keyboard("{Enter}");
+    await confirmar();
     expect(await screen.findByText("Los pagos no suman el precio de la venta")).toBeInTheDocument();
   });
 });
@@ -662,13 +755,12 @@ describe("FormularioVenta: precio esperado", () => {
     renderCaja();
     await elegirServicioDeAutos("1");
     expect(normal(screen.getByTestId("precio").textContent)).toBe("$ 30.000,00");
-    await userEvent.keyboard("AA111AA{Enter}");
-    await screen.findByRole("listbox", { name: "4. Medio de pago" });
 
     // Mientras tanto el admin subió el precio a $ 31.000
     responder("servicios", "select", { data: conPrecio(31000) });
     responderRpc("registrar_venta", precioCambiado("31.000,00"));
     await userEvent.keyboard("2{Enter}");
+    await confirmar();
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "El precio cambió: ahora es $ 31.000,00. Revisá la venta.",
@@ -680,17 +772,16 @@ describe("FormularioVenta: precio esperado", () => {
       p_medio_pago: "transferencia",
       p_precio_esperado: 30000,
     });
-    // Vuelve a un paso previo (sin descuentos: la patente) con el precio nuevo a la vista
-    expect(await screen.findByLabelText("3. Patente")).toHaveFocus();
+    // Vuelve a un paso previo (sin descuentos: el medio) con el precio nuevo a la vista
+    expect(await screen.findByRole("listbox", { name: "4. Medio de pago" })).toHaveFocus();
     expect(normal(screen.getByTestId("precio").textContent)).toBe("$ 31.000,00");
     expect(ventasPedidas()).toBe(1);
     expect(toast.success).not.toHaveBeenCalled();
 
     // El cajero confirma otra vez, ahora con el precio nuevo
     responderRpc("registrar_venta", { data: ventaRegistrada({ precio: 31000 }) });
-    await userEvent.keyboard("{Enter}");
-    await screen.findByRole("listbox", { name: "4. Medio de pago" });
     await userEvent.keyboard("2{Enter}");
+    await confirmar();
     await waitFor(() => {
       expect(argumentosRpc("registrar_venta")).toEqual({
         p_turno_id: TURNO_ID,
@@ -723,6 +814,7 @@ describe("FormularioVenta: precio esperado", () => {
     });
     responderRpc("registrar_venta", precioCambiado("27.900,00"));
     await userEvent.keyboard("{Enter}");
+    await confirmar();
 
     const lista = await screen.findByRole("listbox", { name: "Descuento (opcional) · VTV auto" });
     expect(screen.getByRole("alert")).toHaveTextContent(
@@ -741,8 +833,6 @@ describe("FormularioVenta: precio esperado", () => {
 
     // El reparto anterior no sirve para el precio nuevo
     await userEvent.keyboard("{Enter}");
-    await screen.findByLabelText("3. Patente");
-    await userEvent.keyboard("AA111AA{Enter}");
     await screen.findByRole("listbox", { name: "4. Medio de pago" });
     await userEvent.keyboard("4{Enter}");
     expect(
@@ -763,11 +853,12 @@ describe("FormularioVenta: precio esperado", () => {
     responderRpc("descuentos_para_servicio", { data: [] });
     responderRpc("registrar_venta", precioCambiado("27.900,00"));
     await userEvent.keyboard("{Enter}");
+    await confirmar();
     await waitFor(() => {
       expect(ventasPedidas()).toBe(1);
     });
 
-    expect(await screen.findByLabelText("3. Patente")).toHaveFocus();
+    expect(await screen.findByRole("listbox", { name: "4. Medio de pago" })).toHaveFocus();
     expect(screen.getByRole("alert")).toHaveTextContent(
       "El precio cambió: ahora es $ 27.900,00. Revisá la venta. El descuento elegido ya no está disponible y este servicio no tiene otros",
     );
@@ -786,16 +877,12 @@ describe("FormularioVenta: descuento que deja de estar disponible", () => {
     precio_final: 25000,
   };
 
-  /** Autos → VTV auto → descuento N° 2 → patente AA111AA → paso del medio de pago. */
+  /** Patente AA111AA → Autos → VTV auto → descuento N° 2 → paso del medio de pago. */
   async function conDescuentoHastaElMedio() {
-    await screen.findByRole("listbox", { name: "1. Categoría" });
-    await userEvent.keyboard("{Enter}");
-    await screen.findByRole("listbox", { name: "2. Servicio · Autos" });
+    await hastaLosServicios();
     await userEvent.keyboard("1{Enter}");
     await screen.findByRole("listbox", { name: "Descuento (opcional) · VTV auto" });
     await userEvent.keyboard("2{Enter}");
-    await screen.findByLabelText("3. Patente");
-    await userEvent.keyboard("AA111AA{Enter}");
     await screen.findByRole("listbox", { name: "4. Medio de pago" });
   }
 
@@ -839,10 +926,9 @@ describe("FormularioVenta: descuento que deja de estar disponible", () => {
     expect(screen.queryByTestId("descuento-perdido")).not.toBeInTheDocument();
 
     await userEvent.keyboard("2{Enter}");
-    expect(await screen.findByLabelText("3. Patente")).toHaveValue("AA111AA");
-    await userEvent.keyboard("{Enter}");
     await screen.findByRole("listbox", { name: "4. Medio de pago" });
     await userEvent.keyboard("3{Enter}");
+    await confirmar();
     await waitFor(() => {
       expect(argumentosRpc("registrar_venta")).toEqual({
         p_turno_id: TURNO_ID,
@@ -866,16 +952,15 @@ describe("FormularioVenta: descuento que deja de estar disponible", () => {
     await screen.findByTestId("descuento-perdido");
 
     await userEvent.keyboard("2{Enter}");
-    expect(await screen.findByLabelText("3. Patente")).toHaveFocus();
+    expect(await screen.findByRole("listbox", { name: "4. Medio de pago" })).toHaveFocus();
     expect(screen.getByRole("alert")).toHaveTextContent(
       "El descuento elegido ya no está disponible y este servicio no tiene otros: la venta sigue sin descuento.",
     );
     expect(ventasPedidas()).toBe(0);
     expect(normal(screen.getByTestId("precio").textContent)).toBe("$ 30.000,00");
 
-    await userEvent.keyboard("{Enter}");
-    await screen.findByRole("listbox", { name: "4. Medio de pago" });
     await userEvent.keyboard("2{Enter}");
+    await confirmar();
     await waitFor(() => {
       expect(argumentosRpc("registrar_venta")).toEqual({
         p_turno_id: TURNO_ID,
@@ -899,15 +984,492 @@ describe("FormularioVenta: caja cerrada", () => {
     });
     renderFormulario();
     await elegirServicioDeAutos("1");
-    await screen.findByLabelText("3. Patente");
-    await userEvent.keyboard("AA111AA{Enter}");
-    await screen.findByRole("listbox", { name: "4. Medio de pago" });
     await userEvent.keyboard("3{Enter}");
+    await confirmar();
     await waitFor(() => {
       expect(turnoNoDisponible).toHaveBeenCalledWith(
         'El turno de la caja "Caja 1" ya se cerró: elegí una caja abierta',
       );
     });
     expect(argumentosRpc("registrar_venta")).toMatchObject({ p_turno_id: TURNO_ID });
+  });
+});
+
+/** Condicional sin usar de la patente, como la devuelve `condicionales_de_patente`. */
+const condicional = (cambios: Record<string, unknown> = {}) => ({
+  venta_id: 70,
+  fecha: "2026-11-02",
+  condicional_nombre: "Hoja B",
+  servicio_id: 1,
+  servicio_nombre: "VTV auto",
+  vence: "2026-12-02",
+  vigente: true,
+  pagado: 71000,
+  saldo: 0,
+  ...cambios,
+});
+
+/** Patente → pantalla de la condicional. */
+async function patenteConCondicional(patente = "AB123CD") {
+  await screen.findByLabelText("1. Patente");
+  await userEvent.keyboard(`${patente}{Enter}`);
+}
+
+describe("FormularioVenta: certificado condicional", () => {
+  /** Patente AA111AA → Autos → Auto particular (N° 3) → certificado condicional (N° 2). */
+  async function elegirCondicional() {
+    await hastaLosServicios();
+    await userEvent.keyboard("3{Enter}");
+    await screen.findByRole("listbox", { name: "Certificado · Auto particular" });
+    await userEvent.keyboard("2{Enter}");
+  }
+
+  it("un servicio sin certificado condicional no pregunta el certificado", async () => {
+    renderFormulario();
+    await elegirServicioDeAutos("3");
+    expect(argumentosRpc("certificado_condicional_para_servicio")).toEqual({ p_servicio_id: 6 });
+    expect(screen.queryByRole("listbox", { name: /Certificado/ })).not.toBeInTheDocument();
+  });
+
+  it("con certificado condicional ofrece el de siempre o el condicional; el de siempre es una venta común", async () => {
+    conCertificadoCondicional();
+    responderRpc("registrar_venta", {
+      data: ventaRegistrada({ servicio_nombre: "Auto particular", precio: 71000 }),
+    });
+    renderFormulario();
+    await hastaLosServicios();
+    await userEvent.keyboard("3{Enter}");
+    const lista = await screen.findByRole("listbox", { name: "Certificado · Auto particular" });
+    expect(lista).toHaveFocus();
+    expect(opciones(lista)).toEqual([
+      "1Certificado de siempreAprobado",
+      "2Hoja BCondicional · 30 días",
+    ]);
+    expect(screen.getByRole("option", { name: /siempre/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    // Esc vuelve a los servicios
+    await userEvent.keyboard("{Escape}");
+    await screen.findByRole("listbox", { name: "3. Servicio · Autos" });
+    await userEvent.keyboard("{Enter}");
+    await screen.findByRole("listbox", { name: "Certificado · Auto particular" });
+    await userEvent.keyboard("1{Enter}");
+    // El de siempre no pregunta el 50%: va al medio
+    await screen.findByRole("listbox", { name: "4. Medio de pago" });
+    expect(screen.queryByTestId("condicional-en-curso")).not.toBeInTheDocument();
+    // Esc desde el medio vuelve al certificado
+    await userEvent.keyboard("{Escape}");
+    await screen.findByRole("listbox", { name: "Certificado · Auto particular" });
+    await userEvent.keyboard("{Enter}");
+    await screen.findByRole("listbox", { name: "4. Medio de pago" });
+    await userEvent.keyboard("2{Enter}");
+    await confirmar();
+    await waitFor(() => {
+      expect(argumentosRpc("registrar_venta")).toEqual({
+        p_turno_id: TURNO_ID,
+        p_servicio_id: 6,
+        p_patente: "AA111AA",
+        p_medio_pago: "transferencia",
+        p_precio_esperado: 71000,
+      });
+    });
+  });
+
+  it("la condicional pregunta si paga el total o el 50%; al 50% cobra la mitad y lo avisa", async () => {
+    conCertificadoCondicional();
+    responderRpc("registrar_venta", {
+      data: ventaRegistrada({
+        id: 95,
+        servicio_nombre: "Auto particular",
+        precio: 35500,
+        precio_lista: 71000,
+        condicional_saldo: 35500,
+        condicional_vence: "2026-12-23",
+      }),
+    });
+    renderFormulario();
+    await elegirCondicional();
+
+    const lista = await screen.findByRole("listbox", {
+      name: "¿Cuánto paga? · Auto particular",
+    });
+    expect(lista).toHaveFocus();
+    expect(opciones(lista)).toEqual([
+      "1Total$ 71.000,00",
+      "250% ahora, el resto al volver$ 35.500,00",
+    ]);
+    expect(screen.getByRole("option", { name: /Total/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("condicional-en-curso")).toHaveTextContent(
+      "Condicional · vuelve dentro de 30 días",
+    );
+    expect(await screen.findByTestId("aviso-certificado")).toHaveTextContent(
+      "Usa una hoja de “Hoja B” (quedan 40).",
+    );
+    await userEvent.keyboard("2{Enter}");
+
+    await screen.findByRole("listbox", { name: "4. Medio de pago" });
+    expect(normal(screen.getByTestId("precio").textContent)).toBe("$ 35.500,00");
+    expect(normal(screen.getByTestId("mitad-en-curso").textContent)).toBe(
+      "Condicional al 50% · al volver: $ 35.500,00",
+    );
+    // Esc vuelve a elegir cuánto paga, con el 50% marcado
+    await userEvent.keyboard("{Escape}");
+    expect(await screen.findByRole("option", { name: /50%/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    // Y de ahí, al certificado (con el condicional marcado)
+    await userEvent.keyboard("{Escape}");
+    expect(await screen.findByRole("option", { name: /Hoja B/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await userEvent.keyboard("{Enter}");
+    await screen.findByRole("listbox", { name: "¿Cuánto paga? · Auto particular" });
+    await userEvent.keyboard("2{Enter}");
+    await screen.findByRole("listbox", { name: "4. Medio de pago" });
+    await userEvent.keyboard("3{Enter}");
+
+    const paso = await screen.findByTestId("paso-confirmar");
+    expect(normal(paso.textContent)).toContain("Cobra:$ 35.500,00");
+    expect(normal(paso.textContent)).toContain(
+      "Condicional con “Hoja B”: vuelve dentro de 30 días.",
+    );
+    expect(normal(paso.textContent)).toContain(
+      "Condicional al 50%: al volver dentro del plazo paga $ 35.500,00.",
+    );
+    await confirmar();
+    await waitFor(() => {
+      expect(argumentosRpc("registrar_venta")).toEqual({
+        p_turno_id: TURNO_ID,
+        p_servicio_id: 6,
+        p_patente: "AA111AA",
+        p_medio_pago: "tarjeta",
+        p_precio_esperado: 35500,
+        p_condicional: true,
+        p_condicional_mitad: true,
+      });
+    });
+    expect(ultimoAviso(toast.success)).toBe(
+      "Venta N° 95: Auto particular · $ 35.500,00 (condicional al 50%)",
+    );
+    expect(normal((await screen.findByTestId("ultima-venta")).textContent)).toContain(
+      "Condicional al 50%: al volver paga $ 35.500,00.",
+    );
+  });
+
+  it("al total manda la condicional sin el 50%", async () => {
+    conCertificadoCondicional();
+    responderRpc("registrar_venta", {
+      data: ventaRegistrada({
+        servicio_nombre: "Auto particular",
+        precio: 71000,
+        condicional_saldo: 0,
+        condicional_vence: "2026-12-23",
+      }),
+    });
+    renderFormulario();
+    await elegirCondicional();
+    await screen.findByRole("listbox", { name: "¿Cuánto paga? · Auto particular" });
+    await userEvent.keyboard("{Enter}");
+    await screen.findByRole("listbox", { name: "4. Medio de pago" });
+    expect(normal(screen.getByTestId("precio").textContent)).toBe("$ 71.000,00");
+    expect(screen.queryByTestId("mitad-en-curso")).not.toBeInTheDocument();
+    await userEvent.keyboard("2{Enter}");
+    await confirmar();
+    await waitFor(() => {
+      expect(argumentosRpc("registrar_venta")).toEqual({
+        p_turno_id: TURNO_ID,
+        p_servicio_id: 6,
+        p_patente: "AA111AA",
+        p_medio_pago: "transferencia",
+        p_precio_esperado: 71000,
+        p_condicional: true,
+      });
+    });
+    expect(ultimoAviso(toast.success)).toBe(
+      "Venta N° 90: Auto particular · $ 71.000,00 (condicional)",
+    );
+  });
+
+  it("con un descuento la condicional se paga completa: no pregunta el 50%", async () => {
+    conCertificadoCondicional();
+    responderRpc("descuentos_para_servicio", {
+      data: [
+        {
+          ...JUBILADOS,
+          precio_lista: 71000,
+          monto_descuento: 7100,
+          precio_final: 63900,
+        },
+      ],
+    });
+    renderFormulario();
+    await elegirCondicional();
+    await screen.findByRole("listbox", { name: "Descuento (opcional) · Auto particular" });
+    expect(
+      screen.getByText("Con un descuento la condicional se paga completa (no al 50%)."),
+    ).toBeInTheDocument();
+    await userEvent.keyboard("2{Enter}");
+    await screen.findByRole("listbox", { name: "4. Medio de pago" });
+    expect(normal(screen.getByTestId("precio").textContent)).toBe("$ 63.900,00");
+    // Esc vuelve al descuento (no hay paso del 50%)
+    await userEvent.keyboard("{Escape}");
+    await screen.findByRole("listbox", { name: "Descuento (opcional) · Auto particular" });
+    // Sin descuento sí pregunta
+    await userEvent.keyboard("1{Enter}");
+    expect(
+      await screen.findByRole("listbox", { name: "¿Cuánto paga? · Auto particular" }),
+    ).toBeInTheDocument();
+    // Esc desde el descuento vuelve al certificado
+    await userEvent.keyboard("{Escape}");
+    await screen.findByRole("listbox", { name: "Descuento (opcional) · Auto particular" });
+    await userEvent.keyboard("{Escape}");
+    await screen.findByRole("listbox", { name: "Certificado · Auto particular" });
+  });
+
+  it("si la BD dice que ya hay una condicional vigente, vuelve a la patente con el mensaje", async () => {
+    conCertificadoCondicional();
+    const mensaje =
+      'La patente AA111AA ya tiene una condicional vigente de "Auto particular" (del 02/11/2026): registrá la vuelta';
+    responderRpc("registrar_venta", { error: { code: "P0001", message: mensaje } });
+    renderFormulario();
+    await elegirCondicional();
+    await screen.findByRole("listbox", { name: "¿Cuánto paga? · Auto particular" });
+    await userEvent.keyboard("{Enter}");
+    await screen.findByRole("listbox", { name: "4. Medio de pago" });
+    await userEvent.keyboard("3{Enter}");
+    await confirmar();
+    expect(await screen.findByLabelText("1. Patente")).toHaveValue("AA111AA");
+    expect(screen.getByRole("alert")).toHaveTextContent(mensaje);
+  });
+});
+
+describe("FormularioVenta: vuelve de condicional", () => {
+  it("pagada completa: Aprobó registra el servicio aprobado sin cargo, con la patente en grande", async () => {
+    responderRpc("condicionales_de_patente", { data: [condicional()] });
+    responderRpc("registrar_venta", {
+      data: ventaRegistrada({
+        id: 91,
+        precio: 0,
+        precio_lista: 0,
+        vuelta_de: 70,
+        patente: "AB123CD",
+      }),
+    });
+    renderFormulario();
+    await patenteConCondicional("ab123cd");
+
+    const paso = await screen.findByTestId("paso-condicional");
+    expect(argumentosRpc("condicionales_de_patente")).toEqual({ p_patente: "AB123CD" });
+    expect(normal(paso.textContent)).toContain(
+      "La patente AB123CD tiene una condicional de “VTV auto” del 02/11/2026 (certificado “Hoja B”, vence el 02/12/2026). Pagó el total: la vuelta es sin cargo.",
+    );
+    const lista = screen.getByRole("listbox", { name: "Vuelve de condicional" });
+    expect(lista).toHaveFocus();
+    expect(opciones(lista)).toEqual(["1Aprobó: VTV autoSin cargo", "2Es otra venta"]);
+    await userEvent.keyboard("{Enter}");
+
+    const confirmacion = await screen.findByTestId("paso-confirmar");
+    expect(screen.getByTestId("patente-a-confirmar")).toHaveTextContent("AB123CD");
+    expect(normal(confirmacion.textContent)).toContain("Cobra:$ 0,00");
+    expect(normal(confirmacion.textContent)).toContain("Medio:Sin cargo");
+    expect(normal(confirmacion.textContent)).toContain(
+      "Vuelta de la condicional del 02/11/2026: sin cargo.",
+    );
+    expect(screen.getByTestId("vuelta-en-curso")).toHaveTextContent(
+      "Vuelta de condicional: sin cargo",
+    );
+    // Esc vuelve a la pantalla de la condicional
+    await userEvent.keyboard("{Escape}");
+    await screen.findByTestId("paso-condicional");
+    await userEvent.keyboard("{Enter}");
+    await confirmar();
+    await waitFor(() => {
+      expect(argumentosRpc("registrar_venta")).toEqual({
+        p_turno_id: TURNO_ID,
+        p_servicio_id: 1,
+        p_medio_pago: "efectivo",
+        p_patente: "AB123CD",
+        p_precio_esperado: 0,
+      });
+    });
+    expect(ultimoAviso(toast.success)).toBe(
+      "Venta N° 91: VTV auto · $ 0,00 (vuelta de condicional)",
+    );
+    const ultima = await screen.findByTestId("ultima-venta");
+    expect(ultima).toHaveTextContent("Vuelta de condicional: sin cargo.");
+    expect(ultima).toHaveTextContent("Sin cargo");
+    expect(ultima).not.toHaveTextContent("Pagó justo");
+  });
+
+  it("pagada al 50%: la vuelta cobra el resto con el medio que elija", async () => {
+    responderRpc("condicionales_de_patente", {
+      data: [condicional({ pagado: 35500, saldo: 35500 })],
+    });
+    responderRpc("registrar_venta", {
+      data: ventaRegistrada({ id: 92, precio: 35500, precio_lista: 35500, vuelta_de: 70 }),
+    });
+    renderFormulario();
+    await patenteConCondicional();
+    const paso = await screen.findByTestId("paso-condicional");
+    expect(normal(paso.textContent)).toContain("Pagó $ 35.500,00 (50%)");
+    expect(normal(paso.textContent)).toContain("faltan $ 35.500,00.");
+    expect(opciones(screen.getByRole("listbox", { name: "Vuelve de condicional" }))).toEqual([
+      "1Aprobó: VTV auto$ 35.500,00",
+      "2Es otra venta",
+    ]);
+    await userEvent.keyboard("{Enter}");
+
+    await screen.findByRole("listbox", { name: "4. Medio de pago" });
+    expect(normal(screen.getByTestId("precio").textContent)).toBe("$ 35.500,00");
+    expect(screen.getByTestId("vuelta-en-curso")).toHaveTextContent(
+      "Vuelta de condicional: el 50% que faltaba",
+    );
+    await userEvent.keyboard("3{Enter}");
+    const confirmacion = await screen.findByTestId("paso-confirmar");
+    expect(normal(confirmacion.textContent)).toContain(
+      "Vuelta de la condicional del 02/11/2026: cobra el 50% que faltaba.",
+    );
+    await confirmar();
+    await waitFor(() => {
+      expect(argumentosRpc("registrar_venta")).toEqual({
+        p_turno_id: TURNO_ID,
+        p_servicio_id: 1,
+        p_medio_pago: "tarjeta",
+        p_patente: "AB123CD",
+        p_precio_esperado: 35500,
+      });
+    });
+    expect(normal((await screen.findByTestId("ultima-venta")).textContent)).toContain(
+      "Vuelta de condicional: pagó el 50% que faltaba.",
+    );
+  });
+
+  it("“Es otra venta” sigue con la categoría; Esc desde la categoría vuelve a la condicional", async () => {
+    responderRpc("condicionales_de_patente", { data: [condicional()] });
+    renderFormulario();
+    await patenteConCondicional();
+    await screen.findByTestId("paso-condicional");
+    await userEvent.keyboard("2{Enter}");
+    await screen.findByRole("listbox", { name: "2. Categoría" });
+    await userEvent.keyboard("{Escape}");
+    await screen.findByTestId("paso-condicional");
+    await userEvent.keyboard("{Escape}");
+    expect(await screen.findByLabelText("1. Patente")).toHaveValue("AB123CD");
+  });
+
+  it("si después elige el servicio aprobado, también es la vuelta (lo decide la BD)", async () => {
+    responderRpc("condicionales_de_patente", { data: [condicional()] });
+    renderFormulario();
+    await patenteConCondicional();
+    await screen.findByTestId("paso-condicional");
+    await userEvent.keyboard("2{Enter}");
+    await screen.findByRole("listbox", { name: "2. Categoría" });
+    await userEvent.keyboard("{Enter}");
+    await screen.findByRole("listbox", { name: "3. Servicio · Autos" });
+    await userEvent.keyboard("1{Enter}");
+    expect(normal((await screen.findByTestId("paso-confirmar")).textContent)).toContain(
+      "Cobra:$ 0,00",
+    );
+    // Esc vuelve a la lista de servicios
+    await userEvent.keyboard("{Escape}");
+    expect(await screen.findByRole("listbox", { name: "3. Servicio · Autos" })).toBeInTheDocument();
+  });
+
+  it("vencida: avisa que lo pagado queda en la patente y ofrece otra condicional o cobrar el servicio completo", async () => {
+    conCertificadoCondicional();
+    responderRpc("condicionales_de_patente", {
+      data: [condicional({ vigente: false, vence: "2026-11-10" })],
+    });
+    responderRpc("registrar_venta", { data: ventaRegistrada() });
+    renderFormulario();
+    await patenteConCondicional();
+
+    const paso = await screen.findByTestId("paso-condicional-vencida");
+    expect(normal(paso.textContent)).toContain(
+      "La condicional de “VTV auto” del 02/11/2026 (certificado “Hoja B”) venció el 10/11/2026. Lo pagado ($ 71.000,00) queda registrado en la patente, pero ya no cuenta para la vuelta.",
+    );
+    const lista = screen.getByRole("listbox", { name: "La condicional venció" });
+    expect(opciones(lista)).toEqual([
+      "1Generar otra condicional",
+      "2Aprobó: cobrar VTV auto completo",
+      "3Es otra venta",
+    ]);
+
+    // Otra condicional del mismo servicio: va directo a cuánto paga
+    await userEvent.keyboard("1{Enter}");
+    expect(
+      await screen.findByRole("listbox", { name: "¿Cuánto paga? · VTV auto" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("condicional-en-curso")).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    expect(await screen.findByRole("option", { name: /Hoja B/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await userEvent.keyboard("{Escape}");
+    await screen.findByRole("listbox", { name: "3. Servicio · Autos" });
+    await userEvent.keyboard("{Escape}");
+    await screen.findByRole("listbox", { name: "2. Categoría" });
+    await userEvent.keyboard("{Escape}");
+    await screen.findByTestId("paso-condicional-vencida");
+
+    // Aprobó: el servicio completo con el certificado de siempre
+    await userEvent.keyboard("2{Enter}");
+    await screen.findByRole("listbox", { name: "4. Medio de pago" });
+    expect(normal(screen.getByTestId("precio").textContent)).toBe("$ 30.000,00");
+    expect(screen.queryByTestId("vuelta-en-curso")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("condicional-en-curso")).not.toBeInTheDocument();
+    await userEvent.keyboard("2{Enter}");
+    await confirmar();
+    await waitFor(() => {
+      expect(argumentosRpc("registrar_venta")).toEqual({
+        p_turno_id: TURNO_ID,
+        p_servicio_id: 1,
+        p_medio_pago: "transferencia",
+        p_patente: "AB123CD",
+        p_precio_esperado: 30000,
+      });
+    });
+  });
+
+  it("vencida sin certificado condicional en el servicio: no ofrece otra condicional", async () => {
+    responderRpc("condicionales_de_patente", {
+      data: [condicional({ vigente: false, vence: "2026-11-10" })],
+    });
+    renderFormulario();
+    await patenteConCondicional();
+    await screen.findByTestId("paso-condicional-vencida");
+    expect(opciones(await screen.findByRole("listbox", { name: "La condicional venció" }))).toEqual(
+      ["1Aprobó: cobrar VTV auto completo", "2Es otra venta"],
+    );
+  });
+
+  it("si no se puede revisar la condicional, no avanza y lo dice", async () => {
+    responderRpc("condicionales_de_patente", {
+      error: { code: "P0001", message: "Tu usuario está desactivado" },
+    });
+    renderFormulario();
+    await patenteConCondicional();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "No se pudo revisar si la patente tiene una condicional: Tu usuario está desactivado",
+    );
+    expect(screen.queryByRole("listbox", { name: "2. Categoría" })).not.toBeInTheDocument();
+  });
+
+  it("si la BD dice que es una vuelta que la caja no vio, vuelve a la patente con el mensaje", async () => {
+    const mensaje =
+      "La patente AB123CD vuelve de la condicional del 02/11/2026: corresponde cobrar $ 0,00. Revisá la venta.";
+    responderRpc("registrar_venta", { error: { code: "P0001", message: mensaje } });
+    renderFormulario();
+    await hastaLosServicios("AB123CD");
+    await userEvent.keyboard("1{Enter}");
+    await screen.findByRole("listbox", { name: "4. Medio de pago" });
+    await userEvent.keyboard("3{Enter}");
+    await confirmar();
+    expect(await screen.findByLabelText("1. Patente")).toHaveValue("AB123CD");
+    expect(screen.getByRole("alert")).toHaveTextContent(mensaje);
   });
 });

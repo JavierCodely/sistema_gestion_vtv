@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/compartido/ui/dialog";
 import { Input } from "@/compartido/ui/input";
+import { Label } from "@/compartido/ui/label";
 import {
   Select,
   SelectContent,
@@ -22,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/compartido/ui/select";
+import { Switch } from "@/compartido/ui/switch";
 import {
   MENSAJES_ERROR_CERTIFICADO,
   useActualizarCertificado,
@@ -29,6 +31,8 @@ import {
   type CertificadoConStock,
 } from "../api/consultas";
 import {
+  DIAS_VUELTA_MAXIMO,
+  DIAS_VUELTA_POR_DEFECTO,
   UNIDADES,
   validarCertificado,
   type ErroresCertificado,
@@ -43,6 +47,8 @@ function formularioInicial(certificado?: CertificadoConStock): FormularioCertifi
       unidadCompra: "caja",
       hojasPorUnidad: "",
       stockMinimo: "0",
+      condicional: false,
+      diasVuelta: DIAS_VUELTA_POR_DEFECTO,
     };
   }
   return {
@@ -50,6 +56,9 @@ function formularioInicial(certificado?: CertificadoConStock): FormularioCertifi
     unidadCompra: certificado.unidad_compra,
     hojasPorUnidad: String(certificado.hojas_por_unidad),
     stockMinimo: String(certificado.stock_minimo),
+    condicional: certificado.condicional,
+    diasVuelta:
+      certificado.dias_vuelta === null ? DIAS_VUELTA_POR_DEFECTO : String(certificado.dias_vuelta),
   };
 }
 
@@ -193,6 +202,48 @@ export function DialogoCertificado({
               Cuando una venta deja el stock en este número o menos, se genera una alerta.
             </p>
           </Campo>
+
+          <div className="flex flex-col gap-3 rounded-md border p-3">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label htmlFor="certificado-condicional">Es un certificado de condicional</Label>
+                <p className="text-xs text-muted-foreground">
+                  En la caja, el servicio ofrece este certificado o el de siempre. Se cobra el
+                  precio del servicio, entero o al 50%; si vuelve dentro del plazo y aprueba, paga
+                  lo que falta y se entrega el certificado de siempre.
+                </p>
+              </div>
+              <Switch
+                id="certificado-condicional"
+                checked={formulario.condicional}
+                onCheckedChange={(valor) => {
+                  cambiar("condicional", valor);
+                }}
+              />
+            </div>
+            {formulario.condicional && (
+              <Campo
+                id="certificado-dias-vuelta"
+                etiqueta="Días para volver"
+                error={errores.diasVuelta}
+              >
+                <Input
+                  id="certificado-dias-vuelta"
+                  value={formulario.diasVuelta}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={String(DIAS_VUELTA_MAXIMO).length}
+                  onChange={(e) => {
+                    cambiar("diasVuelta", e.target.value);
+                  }}
+                  {...propsError("certificado-dias-vuelta", errores.diasVuelta)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Cambiarlo no modifica las condicionales ya vendidas.
+                </p>
+              </Campo>
+            )}
+          </div>
 
           <ErrorFormulario mensaje={errorServidor} />
           <DialogFooter>

@@ -97,28 +97,46 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
   detalle "Efectivo $ 5.000,00 + Tarjeta $ 13.000,00" cuando `medio_pago` es NULL) y el descuento con
   `DescuentoDeVenta` (nombre, −monto, precio de lista; "—" sin descuento). Nunca indexar por
   `medio_pago` sin contemplar NULL.
-- **Venta en la caja** (`FormularioVenta`): categoría → servicio → descuento (solo si
+- **Venta en la caja** (`FormularioVenta`, decisión 2026-11-23): **1. Patente primero** (**obligatoria**,
+  migración 38: vacía no avanza y avisa "Ingresá la patente del vehículo."; al pasarla se leen
+  `condicionales_de_patente`; si no se pueden leer, no avanza y lo dice) → si tiene una condicional
+  **vigente**, pantalla "Vuelve de condicional" (`paso-condicional`: lo pagado y lo que falta) con
+  "Aprobó: «servicio»" (pagada completa → directo a la confirmación a $ 0, "Sin cargo", manda
+  efectivo con `p_precio_esperado` 0; pagada al 50% → medio de pago por el saldo) o "Es otra venta"; si
+  solo tiene una **vencida**, aviso (`paso-condicional-vencida`: lo pagado queda en la patente) con
+  "Generar otra condicional" (solo si el servicio sigue teniendo certificado condicional), "Aprobó:
+  cobrar «servicio» completo" o "Es otra venta" → 2. categoría → 3. servicio (si elige el servicio de una
+  condicional vigente, también es la vuelta) → **certificado** (solo si el servicio tiene un certificado
+  condicional, `certificado_condicional_para_servicio`; migración 42): "«certificado de siempre»
+  Aprobado" o "«certificado B» Condicional · N días" (manda `p_condicional`; si no se puede leer, se
+  sigue con el de siempre y se avisa) → descuento (solo si
   `descuentos_para_servicio` trae opciones; "Sin descuento" marcado; si no se pueden leer, se sigue sin
-  descuento y se avisa) → patente (**obligatoria**, migración 38: vacía no avanza y avisa "Ingresá la patente del vehículo.") → medio (Efectivo, Transferencia, Tarjeta, **Mixto**) → en Mixto
+  descuento y se avisa) → en una **condicional sin descuento**, "¿Cuánto paga?": Total o "50% ahora, el
+  resto al volver" (`mitadCondicional`, vista previa; manda `p_condicional_mitad`; con descuento no se
+  ofrece) → 4. medio (Efectivo, Transferencia, Tarjeta, **Mixto**) → en Mixto
   (decisión 2026-11-23) el cajero escribe **solo el efectivo** (campo grande; > 0 y menor que el precio)
   y el resto (precio final − efectivo, `revisarPagoMixto`, solo vista previa) se ve en grande; Enter →
   "¿Con qué paga el resto?": Transferencia / Débito / Crédito (1/2 o flechas + Enter, `PasoRestoMixto`;
-  Esc vuelve al efectivo) → cuánto entregó y el vuelto **sobre la parte en efectivo**.
+  Esc vuelve al efectivo) → cuánto entregó y el vuelto **sobre la parte en efectivo** → **confirmación
+  en toda venta** (`PasoConfirmarVenta`, `paso-confirmar`): la patente en grande (`patente-a-confirmar`),
+  servicio, lo que cobra, medio y el detalle (vuelto, 50%, vuelta); Enter registra, Esc vuelve al paso
+  anterior. Si la BD rechaza por "vuelve de la condicional", vuelve a la patente con el mensaje.
   La vista previa usa el precio final de `descuentos_para_servicio` (o el del servicio sin descuento);
   la "Última venta" usa el `precio` que devolvió `registrar_venta` y avisa si el vuelto da negativo.
   **Precio esperado**: `useRegistrarVenta` manda siempre `p_precio_esperado` = el precio final en
   pantalla. Ante "El precio cambió…" (`esPrecioCambiado`) se muestra el mensaje, el catálogo ya está
   releído (la venta invalida servicios, categorías y `clavesDescuentos.paraServicios` en `onSuccess` y
   `onError`, que TanStack espera antes de rechazar `mutateAsync`) y el cajero vuelve al paso del
-  descuento (o a la patente si no hay) con el reparto mixto y lo entregado en blanco: ve el precio
+  descuento (o al siguiente si no hay) con el reparto mixto y lo entregado en blanco: ve el precio
   nuevo y confirma otra vez. **Nunca se reintenta sola.** Si el descuento elegido ya no se ofrece
   (desactivado, quitado del servicio o redondea a $ 0), la venta **no** se registra sin él: "El
   descuento elegido ya no está disponible: elegí otro." y vuelve al paso del descuento (si no quedan
   otros, lo avisa y sigue sin descuento a la vista del cajero).
 - Diálogos con una escritura en curso no se cierran (Esc, la X o clic afuera): `onOpenChange` ignora
   el cierre mientras la mutación está `isPending` (ej. `DialogoCerrarTurno`, `DialogoDisponibilidad`).
-  Los números de paso de patente (3), medio (4), mixto (5) y efectivo (5; 6 en un mixto) no cambian con el paso
-  de descuento (que no lleva número): los E2E los usan.
+  Los números de paso de patente (1), categoría (2), servicio (3), medio (4), mixto (5) y efectivo (5; 6 en un
+  mixto) no cambian con los pasos sin número (condicional, descuento, ¿cuánto paga?, confirmación): los
+  E2E los usan (`escribirPatente`, `cobrarYConfirmar`, `confirmarVenta` de `tests/e2e/utilidades.ts`).
 - Listados con "Ver más": `useInfiniteQuery` con cursor sobre `id` (`order("id", desc)` + `lt("id", …)`,
   `siguienteCursor` y `TAMANO_PAGINA` de `compartido/lib/paginacion.ts`), nunca `range` por posición.
   Una vista sin `id` propio se pagina con `siguienteCursorDe(ultima, fila => cursor)`: el libro de Fondos
@@ -248,6 +266,9 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
 | 37 | `dashboard` | Dashboard del admin (solo lectura): `ventas_por_dia(desde, hasta)` (un día por fila hasta hoy, máx. 366 días), `resumen_dashboard(desde, hasta, turno)` (total, servicio, categoría, descuento) y `resumen_gastos(desde, hasta, turno)` (total, compra de certificados, otros gastos, rubro, subcategoría); interna `_validar_rango_reporte` — decisiones 2026-11-23 |
 | 38 | `patente_obligatoria` | Trigger `ventas_patente_obligatoria` (BEFORE INSERT): toda venta con turno lleva patente (22023 "Ingresá la patente del vehículo"); las ventas con fecha pasada siguen con patente opcional y las viejas sin patente no cambian — decisión 2026-11-23 |
 | 39 | `certificados_destinos` | Un certificado se usa en **una o más categorías y/o servicios**, mezclados: `certificados.todos_servicios` (el "global" de antes) o `certificado_destinos` (una fila por categoría entera —también los servicios futuros— o servicio suelto; `activo` copiado de `certificados.activo` por el trigger `certificados_destinos_activo`); se quitan `alcance`, `categoria_id`, `servicio_id` y el enum `alcance_certificado` (los existentes conservan su destino); un solo activo por destino y nivel (índices `certificados_un_global_activo`, `certificados_uno_por_categoria`, `certificados_uno_por_servicio`, con aviso previo por nombre de `_validar_destinos_certificado`); `fijar_destinos_certificado()`; `certificado_para_servicio` (servicio > categoría > todos), `v_stock_certificados` y `stock_certificados_valorizado()` con `todos_servicios`, `categoria_ids`, `servicio_ids` y `aplica_a` ("Todos los servicios", "Sin asignar" o "Categoría Autos, Reverificación") — decisión 2026-11-23 |
+| 40 | `condicionales` | **Condicionales** y búsqueda por patente: `servicios.condicional_de` (servicio aprobado) + `dias_vuelta` (1–365; trigger `servicios_condicional`: sin cadenas); foto en la venta (`ventas.condicional_servicio_id`, `condicional_vence` = día de negocio + días, trigger `ventas_condicional`); `ventas.vuelta_de` (una vuelta sin anular por condicional, índice `ventas_una_vuelta_por_condicional`); `registrar_venta` detecta la vuelta por patente y servicio y la registra a $ 0 descontando la hoja del aprobado; una condicional con vuelta no se anula (trigger `ventas_condicional_anulada`); `condicionales_vigentes()` (la reemplaza la 41), `ventas_por_patente()` (admin), interna `_normalizar_patente` — decisiones 2026-11-23. **Aplicada en la nube**: no se edita |
+| 41 | `condicional_mitad` | **Condicional al 50%**: `ventas.condicional_saldo` (lo que falta pagar al volver; 0 si se pagó entera, y así quedan las vendidas con la 40); `registrar_venta(..., p_condicional_mitad)` (sin descuento) cobra round(precio / 2, 2); la vuelta cobra el saldo ($ 0 o la otra mitad), sin descuento; CHECK `ventas_precio_cobrado` (precio = lista − descuento − saldo; reemplaza `ventas_precio_con_descuento` y `ventas_vuelta_sin_cargo`); `condicionales_de_patente()` (vigentes y vencidas, con pagado y saldo; reemplaza `condicionales_vigentes`); `_calcular_impuestos_venta` reparte el monto fijo entre condicional y vuelta; `ventas_por_patente` con `condicional_saldo` — decisiones 2026-11-23 |
+| 42 | `certificados_condicionales` | **La condicional es un certificado**: `certificados.condicional` + `dias_vuelta` (1–365; CHECK condicional ⇔ días; grant por columna al admin); `certificado_destinos.condicional` (copia por el trigger `certificados_destinos_activo`, ahora también al cambiar el tipo); índices `certificados_un_global_activo`, `certificados_uno_por_categoria` y `certificados_uno_por_servicio` por tipo; `_validar_destinos_certificado(…, p_condicional)`; interna `_certificado_para(servicio, condicional)`, `certificado_para_servicio` (el de siempre) y `certificado_condicional_para_servicio()`; `v_stock_certificados` y `stock_certificados_valorizado()` con `condicional`, `dias_vuelta`; `registrar_venta(..., p_condicional)` pone la foto de la condicional (sin trigger `ventas_condicional`); `condicionales_de_patente` sin `condicional_id` (`condicional_nombre` = el certificado entregado); se quitan `servicios.condicional_de`, `dias_vuelta` y su trigger (las condicionales configuradas se pasan solas) — decisiones 2026-11-23 |
 
 Reglas que no son obvias leyendo una sola tabla:
 - **Certificado a usar**: el activo más específico (servicio > categoría > todos los servicios).
@@ -256,11 +277,40 @@ Reglas que no son obvias leyendo una sola tabla:
   certificado nuevo no se usa en ninguna venta hasta fijarle los destinos ("Sin asignar"). Un solo
   certificado **activo** por categoría, por servicio y para todos; uno desactivado puede tener un
   destino ocupado, pero no se activa mientras choque (P0001 con el nombre del destino y del otro
-  certificado). En `/admin/certificados` el alta/edición es solo de datos y el botón **"Se usa en"**
+  certificado; uno de siempre y uno condicional no chocan entre sí). En `/admin/certificados` el
+  alta/edición es solo de datos (con el switch de condicional y sus días) y el botón **"Se usa en"**
   (`DialogoDestinosCertificado`, se abre solo al crear) fija los destinos de una vez con
   `fijar_destinos_certificado`: switch "Todos los servicios" o, por categoría, "Toda la categoría"
   (sus servicios quedan "Incluido por la categoría") y switches por servicio. Fijar destinos y
   activar/desactivar invalidan `["certificados"]` y `["caja", "certificado"]`.
+- **Condicionales** (decisiones 2026-11-23, migraciones 40 a 42): la condicional es un **certificado**,
+  no un servicio (migración 42; reemplaza el "servicio condicional" de la 40). En `/admin/certificados` un
+  certificado se marca **"Es un certificado de condicional"** con los **días para volver** (por defecto
+  30) y se asigna con "Se usa en" como cualquier otro: cada destino tiene a lo sumo un certificado activo
+  **de siempre** y uno **condicional** (los índices únicos y `_validar_destinos_certificado` van por tipo;
+  copia `certificado_destinos.condicional`). Ej.: servicio "Auto particular" $ 71.000 con "Certificado E"
+  y "B condicional". En la caja, al elegir el servicio se elige el certificado; la condicional cobra
+  **el precio del servicio**, **entera o al 50%** (el 50% solo sin descuento: con descuento, entera), y
+  descuenta la hoja B. Si la misma patente vuelve dentro del plazo y se vende **el mismo servicio**, la
+  venta es **automática**: cobra lo que faltaba ($ 0 si pagó el total; el 50% restante si pagó la mitad),
+  sin descuento, y descuenta la hoja de siempre (`ventas.vuelta_de`). Con una condicional vigente del
+  servicio no se hace otra (P0001 "…: registrá la vuelta"). Una sola vuelta por condicional; después se
+  cobra entero. **Vencido el plazo**, lo pagado queda registrado en la patente (`condicionales_de_patente`
+  la sigue listando con `vigente = false`) pero no cuenta: la caja avisa y ofrece otra condicional o
+  cobrar el servicio completo. El vencimiento es foto de la venta (`condicional_vence` = día de negocio +
+  días del certificado; cambiarlos no cambia las vendidas). Anular la vuelta libera la condicional; una
+  condicional con vuelta no se anula hasta anular la vuelta. Las ventas con fecha pasada no llevan
+  certificado: nunca son condicionales ni vuelta. Al aplicar la 42, cada servicio condicional de la 40
+  pasó su certificado (el que se usaba solo en él) al servicio aprobado como condicional, y quedó
+  desactivado. La caja marca "Condicional hasta dd/mm/aaaa", "Al 50%: al
+  volver paga $ X" y "Vuelta de condicional" en el historial. **Impuestos** de una condicional al 50%: el
+  porcentaje se calcula sobre lo cobrado en cada venta y el monto fijo se reparte en proporción (mitad y
+  mitad), así entre la condicional y su vuelta queda registrado el impuesto completo; una vuelta a $ 0
+  (condicional pagada entera) no lleva impuesto.
+- **Patentes** (admin, `/admin/patentes`, módulo `ventas`): busca las ventas cuya patente empieza con lo
+  escrito (mín. 3 caracteres, en la URL `?patente=`) con `ventas_por_patente`: fecha, servicio y
+  categoría, **certificado entregado**, precio, medio, caja y quién vendió, anuladas, y la relación
+  condicional ↔ vuelta (con "Pagó el 50%: faltan $ X"). Una patente puede tener muchas ventas.
 - **Venta sin stock** (o sin certificado configurado): se registra igual, `sin_stock = true`,
   costo 0, y se inserta una alerta `venta_sin_stock`. El stock nunca baja de 0.
 - **Stock bajo**: alerta `stock_bajo` solo al *cruzar* `stock_minimo` hacia abajo con una venta.
@@ -487,7 +537,9 @@ Todas requieren usuario autenticado y **activo**. Devuelven la fila afectada.
 |---|---|---|
 | `abrir_turno(p_caja_id bigint, p_efectivo_inicial numeric) → turnos` | admin | Turno de la caja, sin usuario (`usuario_id` NULL, `abierto_por` = admin). Caja activa y libre; el efectivo inicial (> 0) sale de la caja de cambio |
 | `cerrar_turno(p_turno_id bigint, p_observaciones text = null) → turnos` | admin | Cualquier turno abierto. El efectivo del cajón vuelve a la caja de cambio |
-| `registrar_venta(p_turno_id bigint, p_servicio_id bigint, p_medio_pago medio_pago = null, p_patente text = null, p_pagos jsonb = null, p_descuento_id bigint = null, p_precio_esperado numeric = null) → ventas` | todos | `p_turno_id` **obligatorio**: turno abierto de la caja donde se trabaja (NULL → 22023 "Elegí la caja en la que estás trabajando"; inexistente → 22023; cerrado → P0001 "El turno de la caja "X" ya se cerró: elegí una caja abierta"). `usuario_id` = quien vende. Un medio (`p_medio_pago`) **o** pago mixto (`p_pagos` = `[{"medio":"efectivo","monto":5000},{"medio":"tarjeta","monto":13000}]`, 2–3 medios distintos que suman el precio final), nunca los dos. `p_descuento_id` opcional (activo y habilitado para el servicio). `p_precio_esperado` opcional = precio final que vio el cajero: monto válido o `0` exacto (servicio de $ 0); si no coincide con el calculado, P0001 "El precio cambió: ahora es $ X. Revisá la venta." (sin el parámetro no se compara). Patente **obligatoria** (migración 38; 22023 "Ingresá la patente del vehículo") y se normaliza (mayúsculas, sin espacios). `ventas.id` = número de venta |
+| `registrar_venta(p_turno_id bigint, p_servicio_id bigint, p_medio_pago medio_pago = null, p_patente text = null, p_pagos jsonb = null, p_descuento_id bigint = null, p_precio_esperado numeric = null, p_condicional_mitad boolean = false, p_condicional boolean = false) → ventas` | todos | `p_turno_id` **obligatorio**: turno abierto de la caja donde se trabaja (NULL → 22023 "Elegí la caja en la que estás trabajando"; inexistente → 22023; cerrado → P0001 "El turno de la caja "X" ya se cerró: elegí una caja abierta"). `usuario_id` = quien vende. Un medio (`p_medio_pago`) **o** pago mixto (`p_pagos` = `[{"medio":"efectivo","monto":5000},{"medio":"tarjeta","monto":13000}]`, 2–3 medios distintos que suman el precio final), nunca los dos. `p_descuento_id` opcional (activo y habilitado para el servicio). `p_precio_esperado` opcional = precio final que vio el cajero: monto válido o `0` exacto (servicio de $ 0); si no coincide con el calculado, P0001 "El precio cambió: ahora es $ X. Revisá la venta." (sin el parámetro no se compara). Patente **obligatoria** (migración 38; 22023 "Ingresá la patente del vehículo") y se normaliza (mayúsculas, sin espacios). **Condicional** (`p_condicional`, migración 42): usa el certificado condicional del servicio (sin él, 22023 "El servicio "X" no tiene un certificado condicional…") y guarda la foto (`condicional_servicio_id` = el mismo servicio, `condicional_vence`, `condicional_saldo`); con una condicional vigente del servicio, P0001 "…: registrá la vuelta". **Condicional al 50%** (`p_condicional_mitad`, migración 41, solo con `p_condicional`): cobra round(precio / 2, 2) y guarda el resto en `condicional_saldo`; sin `p_condicional` → 22023 "Solo una condicional se puede pagar al 50%"; con descuento → P0001 "Con un descuento la condicional se paga completa…". **Vuelta de condicional**: si la patente tiene una condicional vigente y sin usar de este servicio, la venta cobra su saldo ($ 0 si se pagó entera) con `vuelta_de` (con descuento: P0001 "La patente X vuelve de la condicional del dd/mm/aaaa: no lleva descuento"; precio esperado distinto: P0001 "…: corresponde cobrar $ X. Revisá la venta."). `ventas.id` = número de venta |
+| `condicionales_de_patente(p_patente text) → setof (venta_id, fecha, condicional_nombre, servicio_id, servicio_nombre, vence, vigente, pagado, saldo)` | todos | Condicionales sin usar de la patente (normalizada), sin anular: vigentes primero (las más viejas antes) y después las vencidas (las más nuevas antes), hasta 20. `condicional_nombre` = el certificado condicional entregado; `servicio_id` = el servicio al que vuelve; `pagado` = lo cobrado; `saldo` = lo que cobra la vuelta (0 si pagó el total). Sin costos |
+| `ventas_por_patente(p_patente text) → setof (id, creado_en, patente, caja_nombre, usuario_nombre, servicio_nombre, categoria_nombre, precio, medio, anulada, venta_pasada, certificado_nombre, sin_stock, condicional_vence, condicional_saldo, condicional_servicio, vuelta_de, vuelta_venta_id)` | admin | Patentes que empiezan con el texto (≥ 3 caracteres, si no 22023), de la más nueva a la más vieja, hasta 500. `medio` = `'mixto'` en un pago mixto. Sin costos |
 | `descuentos_para_servicio(p_servicio_id bigint) → setof (id, nombre, tipo, valor, precio_lista, monto_descuento, precio_final)` | todos | Descuentos activos habilitados para el servicio que descuentan algo (monto redondeado > 0) y dejan precio final > 0, con los montos calculados por la BD. Vacío si el servicio o su categoría están desactivados |
 | `fijar_servicios_descuento(p_descuento_id bigint, p_servicio_ids bigint[]) → descuentos` | admin | Reemplaza de una vez (atómico) los servicios donde se puede usar; `'{}'` = ninguno |
 | `resumen_descuentos(p_desde date = null, p_hasta date = null) → setof (agrupacion, id, nombre, cantidad_ventas, total_descontado)` | admin | Sin anuladas, rango por día de negocio. `agrupacion` = `total` (1 fila, id NULL) · `descuento` · `servicio` (nombres actuales del catálogo); en ese orden y de mayor a menor total descontado |
@@ -509,7 +561,8 @@ Todas requieren usuario autenticado y **activo**. Devuelven la fila afectada.
 | `resumen_fondos(p_desde date = null, p_hasta date = null) → setof (cuenta, saldo, ingresos, egresos, neto, cantidad_movimientos)` | admin | Una fila por cuenta (efectivo, transferencia, tarjeta; nunca "mixto"). `saldo` de todos los tiempos; el resto, filas del libro con `fecha_local` en el rango; `neto` = suma del libro en el rango |
 | `resumen_ventas_mixtas(p_desde date = null, p_hasta date = null) → setof (cantidad_ventas, total, total_efectivo, total_transferencia, total_tarjeta, incluido_en_cuentas)` | admin | 1 fila. Ventas mixtas no anuladas por día de venta. **Informativo**: ya incluido en las cuentas (`incluido_en_cuentas = true`), no sumar |
 | `marcar_alertas_leidas(p_ids bigint[] = null) → int` | admin | `null` = todas; devuelve cuántas marcó |
-| `certificado_para_servicio(p_servicio_id bigint) → bigint` | todos | Para mostrar en Ventas qué hoja se usará |
+| `certificado_para_servicio(p_servicio_id bigint) → bigint` | todos | Para mostrar en Ventas qué hoja se usará (el certificado de siempre) |
+| `certificado_condicional_para_servicio(p_servicio_id bigint) → bigint` | todos | El certificado condicional del servicio (null si no tiene): la caja ofrece "Condicional" solo si existe |
 | `fijar_destinos_certificado(p_certificado_id bigint, p_todos boolean, p_categoria_ids bigint[], p_servicio_ids bigint[]) → void` | admin | Reemplaza de una vez dónde se usa: `p_todos = true` (listas vacías) o las categorías enteras y los servicios sueltos (`'{}'` = ninguno). Si el certificado está activo y un destino ya es de otro activo: P0001 con nombres |
 | `cajas_para_turno() → setof (id, nombre, ocupada, turno_id, abierto_en)` | admin | Cajas activas: libre u ocupada (con su turno abierto y desde cuándo) |
 | `turnos_abiertos() → setof (id, caja_id, caja_nombre, abierto_en)` | todos | Turnos abiertos sin dinero, por nombre de caja. La usa `v_turnos_abiertos` (el cliente lee la vista) |
@@ -550,7 +603,7 @@ se registra antes del `FECAESolicitar`; si no hubo respuesta, el siguiente `emit
 | `v_movimientos_caja` | Ventas + gastos juntos, con quién hizo cada uno (`usuario_id`, `usuario_nombre` —también para el cajero cuando lo hizo un compañero, vía `nombre_usuario`—). `tipo` = venta/gasto; **gastos con `monto` negativo** (fila roja); `anulada` para tacharlas (excluirlas de totales). `medio` = `'mixto'` en un pago mixto y `pagos` = detalle `[{medio, monto}]` (NULL en gastos); `descuento_nombre`, `monto_descuento`, `precio_lista` (NULL en gastos; `monto` es lo cobrado). Filtrar por `turno_id`, `caja_id`, `fecha_local`, etc. |
 | `v_turnos` | **Solo admin** (RLS de `turnos`; al cajero, 0 filas). Turnos con caja (sin cajero: el turno es de la caja), `abierto_por`/`abierto_por_nombre` (admin que lo abrió), `atendido_por` (text[]: quienes vendieron o gastaron, más el cajero asignado de los turnos anteriores a la 33), `abierto`, totales en vivo por medio (desde `venta_pagos`: una venta mixta suma en cada medio su parte), gastos y neto, y efectivo del cajón (`efectivo_inicial`, `gastos_efectivo`, `efectivo_en_caja` —en vivo si está abierto, foto del cierre si no—, `efectivo_cierre`); `fecha_apertura` = día de negocio de la apertura (filtro del historial) |
 | `v_turnos_abiertos` | `id`, `caja_id`, `caja_nombre`, `abierto_en` de los turnos abiertos, **sin dinero**: para que el usuario elija la caja donde trabaja. Envuelve `turnos_abiertos()` (security definer) porque el cajero no lee `turnos`; sin relación embebible con `cajas` |
-| `v_stock_certificados` | Stock en hojas, `semaforo` (ok/bajo/sin_stock), `todos_servicios`, `categoria_ids`, `servicio_ids` y `aplica_a` (texto). **Sin costos** (el admin usa `stock_certificados_valorizado()`) |
+| `v_stock_certificados` | Stock en hojas, `semaforo` (ok/bajo/sin_stock), `todos_servicios`, `categoria_ids`, `servicio_ids`, `aplica_a` (texto) y al final `condicional`, `dias_vuelta`. **Sin costos** (el admin usa `stock_certificados_valorizado()`) |
 | `v_compras_certificado` | Compras con certificado, usuario, estado de anulación y `editable` (regla de §4). Solo admin (RLS) |
 | `v_gastos_por_categoria` | Totales por fecha, rubro, subcategoría y fuente |
 | `v_movimientos_efectivo` | Libro de la caja de cambio con quién hizo cada movimiento (`usuario_nombre`). Solo admin (RLS de `movimientos_efectivo`) |

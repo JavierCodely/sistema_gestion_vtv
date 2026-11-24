@@ -46,7 +46,31 @@ describe("DialogoCertificado", () => {
         unidad_compra: "libreta",
         hojas_por_unidad: 50,
         stock_minimo: 20,
+        condicional: false,
+        dias_vuelta: null,
       },
+    ]);
+  });
+
+  it("crea un certificado de condicional con los días para volver (30 por defecto)", async () => {
+    responder("certificados", "insert", { data: { id: 10, nombre: "B condicional" } });
+    const onCerrar = vi.fn();
+    renderConQuery(<DialogoCertificado onCerrar={onCerrar} />);
+    await userEvent.type(screen.getByLabelText("Nombre"), "B condicional");
+    await userEvent.type(screen.getByLabelText("Hojas por unidad"), "25");
+    expect(screen.queryByLabelText("Días para volver")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("switch", { name: "Es un certificado de condicional" }));
+    expect(screen.getByLabelText("Días para volver")).toHaveValue("30");
+    await userEvent.clear(screen.getByLabelText("Días para volver"));
+    await userEvent.click(screen.getByRole("button", { name: "Crear certificado" }));
+    expect(await screen.findByText(/los días para volver/i)).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("Días para volver"), "15");
+    await userEvent.click(screen.getByRole("button", { name: "Crear certificado" }));
+    await waitFor(() => {
+      expect(onCerrar).toHaveBeenCalled();
+    });
+    expect(argumentosDe("certificados", "insert")).toEqual([
+      expect.objectContaining({ nombre: "B condicional", condicional: true, dias_vuelta: 15 }),
     ]);
   });
 
@@ -62,7 +86,7 @@ describe("DialogoCertificado", () => {
     await userEvent.type(screen.getByLabelText("Hojas por unidad"), "25");
     await userEvent.click(screen.getByRole("button", { name: "Crear certificado" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Ya hay un certificado activo para todos los servicios. Desactivalo antes de activar otro.",
+      "Ya hay un certificado activo del mismo tipo para todos los servicios. Desactivalo antes de activar otro.",
     );
   });
 
@@ -97,6 +121,8 @@ describe("DialogoCertificado", () => {
         unidad_compra: "libreta",
         hojas_por_unidad: 50,
         stock_minimo: 7,
+        condicional: false,
+        dias_vuelta: null,
       },
     ]);
   });

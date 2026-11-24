@@ -19,7 +19,7 @@ select is(
      and p.proname in ('abrir_turno', 'cerrar_turno', 'registrar_venta', 'registrar_gasto', 'cajas_para_turno')),
   array['abrir_turno(bigint,numeric)', 'cajas_para_turno()', 'cerrar_turno(bigint,text)',
         'registrar_gasto(bigint,numeric,fuente_fondos,text,bigint)',
-        'registrar_venta(bigint,bigint,medio_pago,text,jsonb,bigint,numeric)'],
+        'registrar_venta(bigint,bigint,medio_pago,text,jsonb,bigint,numeric,boolean,boolean)'],
   'abrir_turno, cerrar_turno, registrar_venta, registrar_gasto y cajas_para_turno tienen una sola firma (la nueva)');
 select ok(not has_function_privilege('authenticated', 'public._turno_para_trabajar(bigint, boolean)', 'execute'),
   '_turno_para_trabajar es interna');

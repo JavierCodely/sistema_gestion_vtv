@@ -14,8 +14,10 @@ type FilaValorizada =
  * Stock con costos (solo admin). Dónde se usa: `todos_servicios` o las categorías enteras
  * (`categoria_ids`) y los servicios sueltos (`servicio_ids`); `aplica_a` es el texto para mostrar.
  */
-export type CertificadoConStock = Omit<FilaValorizada, "semaforo"> & {
+export type CertificadoConStock = Omit<FilaValorizada, "semaforo" | "dias_vuelta"> & {
   semaforo: "ok" | "bajo" | "sin_stock";
+  /** Solo en un certificado condicional (los tipos generados de una RPC no marcan los NULL). */
+  dias_vuelta: number | null;
 };
 
 type FilaCompra = Database["public"]["Views"]["v_compras_certificado"]["Row"];
@@ -51,18 +53,19 @@ export const claves = {
 
 /** Columnas que se leen de `certificados` (nunca `*`: los costos no son legibles por columna). */
 const COLUMNAS_CERTIFICADO =
-  "id, nombre, unidad_compra, hojas_por_unidad, todos_servicios, stock_minimo, stock_hojas, activo";
+  "id, nombre, unidad_compra, hojas_por_unidad, todos_servicios, stock_minimo, stock_hojas, activo, condicional, dias_vuelta";
 
 export const MENSAJES_ERROR_CERTIFICADO = {
   repetido: "Ya existe un certificado con ese nombre.",
   restricciones: {
     // La BD avisa antes con nombres (P0001); estos quedan para dos cambios simultáneos.
+    // Uno activo por destino y tipo (de siempre o condicional, migración 42).
     certificados_un_global_activo:
-      "Ya hay un certificado activo para todos los servicios. Desactivalo antes de activar otro.",
+      "Ya hay un certificado activo del mismo tipo para todos los servicios. Desactivalo antes de activar otro.",
     certificados_uno_por_categoria:
-      "Una de las categorías ya tiene otro certificado activo. Desactivalo antes de activar este.",
+      "Una de las categorías ya tiene otro certificado activo del mismo tipo. Desactivalo antes de activar este.",
     certificados_uno_por_servicio:
-      "Uno de los servicios ya tiene otro certificado activo. Desactivalo antes de activar este.",
+      "Uno de los servicios ya tiene otro certificado activo del mismo tipo. Desactivalo antes de activar este.",
   },
 };
 

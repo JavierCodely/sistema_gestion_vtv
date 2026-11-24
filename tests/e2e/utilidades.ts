@@ -117,28 +117,69 @@ export async function esperarCaja(page: Page, caja: string) {
 
 const ORDEN_MEDIOS = ["Efectivo", "Transferencia", "Tarjeta"] as const;
 
+/** Cómo paga una condicional: el total o el 50% (el resto, al volver). */
+type PagoCondicional = "Total" | "50%";
+
+interface VentaEnCaja {
+  categoria: string;
+  servicio: string;
+  medio: (typeof ORDEN_MEDIOS)[number];
+  patente?: string;
+  recibido?: string;
+  /**
+   * Solo si el servicio tiene un certificado condicional: la caja pregunta cuál entrega, el de
+   * siempre ("aprobado") o el condicional.
+   */
+  certificado?: "aprobado" | "condicional";
+  /** Solo en una condicional sin descuento: el total o el 50%. */
+  pagoCondicional?: PagoCondicional;
+}
+
 /**
- * Venta en la caja como la hace el cajero: categoría y servicio (clic), patente, medio de pago con
- * su número y Enter, y en efectivo cuánto entregó (vacío = pagó justo). Espera el aviso de la venta.
+ * Venta en la caja como la hace el cajero: patente (sin condicional pendiente), categoría y servicio
+ * (clic), si el servicio tiene certificado condicional cuál entrega, en una condicional cuánto paga,
+ * medio de pago con su número y Enter, en efectivo cuánto entregó (vacío = pagó justo) y la
+ * confirmación con la patente en grande. Espera el aviso de la venta.
  */
-export async function venderEnCaja(
+export async function venderEnCaja(page: Page, venta: VentaEnCaja) {
+  await iniciarVentaEnCaja(page, venta);
+  await expect(
+    page.getByText(new RegExp(`^Venta N° \\d+: ${venta.servicio}`)).first(),
+  ).toBeVisible();
+}
+
+/** Paso 1: escribe la patente y Enter (la caja revisa si tiene una condicional). */
+export async function escribirPatente(page: Page, patente: string) {
+  await page.getByRole("tab", { name: "Ventas" }).click();
+  const campoPatente = page.getByLabel("1. Patente");
+  await campoPatente.fill(patente);
+  await campoPatente.press("Enter");
+}
+
+/** Último paso: la patente en grande; Enter registra la venta. */
+export async function confirmarVenta(page: Page, patente: string) {
+  // Como la caja: solo letras y números, en mayúsculas.
+  await expect(page.getByTestId("patente-a-confirmar")).toHaveText(
+    patente.replace(/[^a-z0-9]/gi, "").toUpperCase(),
+  );
+  await expect(page.getByRole("button", { name: "Confirmar venta" })).toBeFocused();
+  await page.keyboard.press("Enter");
+}
+
+/** Elige el medio (y en efectivo, cuánto entregó) y confirma. */
+export async function cobrarYConfirmar(
   page: Page,
-  {
-    categoria,
-    servicio,
-    medio,
-    patente = "AA111AA",
-    recibido = "",
-  }: {
-    categoria: string;
-    servicio: string;
-    medio: (typeof ORDEN_MEDIOS)[number];
-    patente?: string;
-    recibido?: string;
-  },
+  { medio, patente, recibido = "" }: Pick<VentaEnCaja, "medio" | "recibido"> & { patente: string },
 ) {
-  await iniciarVentaEnCaja(page, { categoria, servicio, medio, patente, recibido });
-  await expect(page.getByText(new RegExp(`^Venta N° \\d+: ${servicio}`)).first()).toBeVisible();
+  await expect(page.getByRole("listbox", { name: "4. Medio de pago" })).toBeFocused();
+  await page.keyboard.press(String(ORDEN_MEDIOS.indexOf(medio) + 1));
+  await page.keyboard.press("Enter");
+  if (medio === "Efectivo") {
+    await expect(page.getByLabel("5. ¿Cuánto te entregó? ($)")).toBeFocused();
+    await page.keyboard.type(recibido);
+    await page.keyboard.press("Enter");
+  }
+  await confirmarVenta(page, patente);
 }
 
 /** Igual que `venderEnCaja` pero sin esperar el resultado (ej. cuando la BD la rechaza). */
@@ -150,33 +191,35 @@ export async function iniciarVentaEnCaja(
     medio,
     patente = "AA111AA",
     recibido = "",
-  }: {
-    categoria: string;
-    servicio: string;
-    medio: (typeof ORDEN_MEDIOS)[number];
-    patente?: string;
-    recibido?: string;
-  },
+    certificado,
+    pagoCondicional,
+  }: VentaEnCaja,
 ) {
-  await page.getByRole("tab", { name: "Ventas" }).click();
+  await escribirPatente(page, patente);
   await page
-    .getByRole("listbox", { name: "1. Categoría" })
+    .getByRole("listbox", { name: "2. Categoría" })
     .getByRole("option", { name: categoria, exact: true })
     .click();
   await page
-    .getByRole("listbox", { name: /^2\. Servicio/ })
+    .getByRole("listbox", { name: /^3\. Servicio/ })
     .getByRole("option", { name: new RegExp(`^${servicio}`) })
     .click();
-  const campoPatente = page.getByLabel("3. Patente");
-  await expect(campoPatente).toBeFocused();
-  await page.keyboard.type(patente);
-  await page.keyboard.press("Enter");
-  await expect(page.getByRole("listbox", { name: "4. Medio de pago" })).toBeFocused();
-  await page.keyboard.press(String(ORDEN_MEDIOS.indexOf(medio) + 1));
-  await page.keyboard.press("Enter");
-  if (medio === "Efectivo") {
-    await expect(page.getByLabel("5. ¿Cuánto te entregó? ($)")).toBeFocused();
-    await page.keyboard.type(recibido);
-    await page.keyboard.press("Enter");
+  if (certificado) {
+    // Cada opción termina con "Aprobado" o "Condicional · N días".
+    await page
+      .getByRole("listbox", { name: /^Certificado ·/ })
+      .getByRole("option", {
+        name: certificado === "aprobado" ? /Aprobado$/ : /Condicional · \d+ días$/,
+      })
+      .click();
   }
+  if (pagoCondicional) {
+    await page
+      .getByRole("listbox", { name: /^¿Cuánto paga\?/ })
+      .getByRole("option", {
+        name: new RegExp(`^${pagoCondicional === "Total" ? "Total" : "50%"}`),
+      })
+      .click();
+  }
+  await cobrarYConfirmar(page, { medio, patente, recibido });
 }

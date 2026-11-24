@@ -9,10 +9,10 @@ insert into cajas (nombre) values ('Caja Test 3') returning id as caja3 \gset
 
 -- Firma y permisos de la RPC ------------------------------------------------------------------------
 select ok(has_function_privilege('authenticated',
-  'public.registrar_venta(bigint, bigint, public.medio_pago, text, jsonb, bigint, numeric)', 'execute'),
+  'public.registrar_venta(bigint, bigint, public.medio_pago, text, jsonb, bigint, numeric, boolean, boolean)', 'execute'),
   'authenticated puede vender (con o sin pago mixto)');
 select ok(not has_function_privilege('anon',
-  'public.registrar_venta(bigint, bigint, public.medio_pago, text, jsonb, bigint, numeric)', 'execute'),
+  'public.registrar_venta(bigint, bigint, public.medio_pago, text, jsonb, bigint, numeric, boolean, boolean)', 'execute'),
   'anon no puede vender');
 select is((select count(*)::int from pg_proc where proname = 'registrar_venta' and pronamespace = 'public'::regnamespace),
   1, 'no quedan sobrecargas de registrar_venta');

@@ -62,12 +62,18 @@ export type Venta = Pick<
   | "anulada"
   | "anulada_motivo"
   | "anulada_en"
+  | "vuelta_de"
+  | "condicional_vence"
+  | "condicional_saldo"
 > & { venta_pagos: PagoDeVenta[] };
 
-/** Certificado que se usará al vender un servicio (`null`: no lleva o no hay configurado). */
+/**
+ * Certificado que se usará al vender un servicio (`null`: no lleva o no hay configurado). El
+ * condicional trae además los días para volver (migración 42).
+ */
 export type CertificadoDeVenta = Pick<
   Tablas["certificados"]["Row"],
-  "id" | "nombre" | "stock_hojas"
+  "id" | "nombre" | "stock_hojas" | "dias_vuelta"
 > | null;
 
 export const claves = {
@@ -80,13 +86,44 @@ export const claves = {
   turnosAbiertos: ["turnos", "abiertos"] as const,
   /** Historial de la caja: las ventas de un turno, de todos los que vendieron. */
   ventasDeTurno: (turnoId: number) => ["caja", "ventas", turnoId] as const,
-  certificadoDeServicio: (servicioId: number) => ["caja", "certificado", servicioId] as const,
+  certificadoDeServicio: (servicioId: number, condicional: boolean) =>
+    ["caja", "certificado", servicioId, condicional ? "condicional" : "de-siempre"] as const,
+  /** Condicionales vigentes de una patente (bajo `["caja"]`: vender y anular las invalidan). */
+  condicionales: (patente: string) => ["caja", "condicionales", patente] as const,
   nombreUsuario: (usuarioId: string) => ["nombre-usuario", usuarioId] as const,
 };
 
 /** Columnas de `ventas` que se leen (nunca `*`: los costos no son legibles por columna). */
 export const COLUMNAS_VENTA =
-  "id, creado_en, turno_id, usuario_id, servicio_nombre, precio, precio_lista, monto_descuento, descuento_nombre, medio_pago, patente, sin_stock, anulada, anulada_motivo, anulada_en, venta_pagos(medio, monto)";
+  "id, creado_en, turno_id, usuario_id, servicio_nombre, precio, precio_lista, monto_descuento, descuento_nombre, medio_pago, patente, sin_stock, anulada, anulada_motivo, anulada_en, vuelta_de, condicional_vence, condicional_saldo, venta_pagos(medio, monto)";
+
+/**
+ * Condicional sin usar de una patente (`condicionales_de_patente`, sin costos): vigentes primero.
+ * Si `vigente` y el vehículo aprobó, la venta de `servicio_id` cobra `saldo` ($ 0 si pagó el total; el
+ * 50% restante si pagó la mitad) y descuenta la hoja de siempre (migraciones 40 a 42). Vencida, lo pagado
+ * queda en la patente y se cobra entero (o se hace otra condicional del mismo servicio).
+ * `condicional_nombre` = el certificado condicional que se entregó.
+ */
+export type CondicionalDePatente =
+  Database["public"]["Functions"]["condicionales_de_patente"]["Returns"][number];
+
+/**
+ * Opciones para leer las condicionales de una patente al pasar el paso de la patente. Siempre se
+ * consultan de nuevo (`staleTime: 0`): la vuelta la decide la BD al vender.
+ */
+export function consultaCondicionales(patente: string) {
+  return {
+    queryKey: claves.condicionales(patente),
+    staleTime: 0,
+    queryFn: async (): Promise<CondicionalDePatente[]> => {
+      const { data, error } = await supabase.rpc("condicionales_de_patente", {
+        p_patente: patente,
+      });
+      if (error) throw error;
+      return data;
+    },
+  };
+}
 
 export const MEDIOS_PAGO: Record<MedioPago, string> = {
   efectivo: "Efectivo",
@@ -195,27 +232,32 @@ export function useVentasDeTurno(turnoId: number) {
 }
 
 /**
- * `certificado_para_servicio` devuelve null cuando no hay certificado, pero el esquema generado
- * la tipa como `number`: se valida el valor real en vez de confiar en el tipo.
+ * `certificado_para_servicio` / `certificado_condicional_para_servicio` devuelven null cuando no hay
+ * certificado, pero el esquema generado las tipa como `number`: se valida el valor real.
  */
 function idOpcional(valor: unknown): number | null {
   return typeof valor === "number" ? valor : null;
 }
 
-export function useCertificadoDeServicio(servicioId: number | null) {
+/**
+ * Certificado del servicio: el de siempre o (`condicional`) el de condicional, que la caja ofrece
+ * como alternativa solo si existe.
+ */
+export function useCertificadoDeServicio(servicioId: number | null, condicional = false) {
   return useQuery({
-    queryKey: claves.certificadoDeServicio(servicioId ?? 0),
+    queryKey: claves.certificadoDeServicio(servicioId ?? 0, condicional),
     enabled: servicioId !== null,
     queryFn: async (): Promise<CertificadoDeVenta> => {
-      const { data: id, error } = await supabase.rpc("certificado_para_servicio", {
-        p_servicio_id: servicioId ?? 0,
-      });
+      const { data: id, error } = await supabase.rpc(
+        condicional ? "certificado_condicional_para_servicio" : "certificado_para_servicio",
+        { p_servicio_id: servicioId ?? 0 },
+      );
       if (error) throw error;
       const certificadoId = idOpcional(id);
       if (certificadoId === null) return null;
       const { data, error: errorCert } = await supabase
         .from("certificados")
-        .select("id, nombre, stock_hojas")
+        .select("id, nombre, stock_hojas, dias_vuelta")
         .eq("id", certificadoId)
         .single();
       if (errorCert) throw errorCert;
@@ -318,6 +360,10 @@ export interface DatosVenta {
    * otro, rechaza la venta (`esPrecioCambiado`) en vez de cobrar un importe que el cajero no vio.
    */
   precioEsperado: number;
+  /** Con el certificado condicional del servicio (migración 42). */
+  condicional: boolean;
+  /** Condicional pagada al 50% (sin descuento): el resto se cobra al volver dentro del plazo. */
+  condicionalMitad: boolean;
 }
 
 /** Mensajes de `_turno_para_trabajar` cuando el turno elegido ya no sirve para trabajar. */
@@ -350,6 +396,21 @@ export function esPrecioCambiado(error: unknown): boolean {
   );
 }
 
+/**
+ * `registrar_venta` rechaza cobrar una vuelta de condicional, o hacer otra condicional cuando la patente
+ * ya tiene una vigente del servicio (la caja no la vio: se usó o se vendió otra mientras tanto). Se
+ * vuelve a la patente para revisarla.
+ */
+export function esVueltaDeCondicional(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const { code, message } = error as { code?: unknown; message?: unknown };
+  return (
+    code === "P0001" &&
+    typeof message === "string" &&
+    (message.includes("vuelve de la condicional") || message.includes("registrá la vuelta"))
+  );
+}
+
 /** `turnoId`: el turno de la caja elegida en `/caja` (la BD controla que siga abierto). */
 export function useRegistrarVenta() {
   const invalidar = useInvalidarVenta();
@@ -361,6 +422,8 @@ export function useRegistrarVenta() {
       patente,
       descuentoId,
       precioEsperado,
+      condicional,
+      condicionalMitad,
     }: DatosVenta & { turnoId: number }) => {
       const { data, error } = await supabase.rpc("registrar_venta", {
         p_turno_id: turnoId,
@@ -371,6 +434,8 @@ export function useRegistrarVenta() {
         ...(patente && { p_patente: patente }),
         ...(descuentoId !== null && { p_descuento_id: descuentoId }),
         p_precio_esperado: precioEsperado,
+        ...(condicional && { p_condicional: true }),
+        ...(condicionalMitad && { p_condicional_mitad: true }),
       });
       if (error) throw error;
       return data;

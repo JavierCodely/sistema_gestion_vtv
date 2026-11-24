@@ -51,6 +51,17 @@ describe("TablaStock", () => {
     );
   });
 
+  it("marca el certificado de condicional con su plazo", () => {
+    renderTabla([
+      certificadoDePrueba({ nombre: "Hoja B", condicional: true, dias_vuelta: 30 }),
+      certificadoDePrueba({ id: 5, nombre: "Hoja E" }),
+    ]);
+    expect(screen.getByTestId("certificado-Hoja B")).toHaveTextContent(
+      "Condicional · vuelve dentro de 30 días",
+    );
+    expect(screen.getByTestId("certificado-Hoja E")).not.toHaveTextContent("Condicional");
+  });
+
   it("los botones avisan la acción con el certificado", async () => {
     const onAccion = renderTabla([certificadoDePrueba()]);
     await userEvent.click(screen.getByRole("button", { name: "Ajuste de stock de Hoja VTV" }));
@@ -104,7 +115,7 @@ describe("TablaStock", () => {
     await userEvent.click(screen.getByRole("switch", { name: "Certificado Hoja VTV activo" }));
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith(
-        "Uno de los servicios ya tiene otro certificado activo. Desactivalo antes de activar este.",
+        "Uno de los servicios ya tiene otro certificado activo del mismo tipo. Desactivalo antes de activar este.",
       );
     });
     expect(argumentosDe("certificados", "update")).toEqual([{ activo: true }]);

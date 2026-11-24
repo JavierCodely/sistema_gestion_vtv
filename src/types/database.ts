@@ -223,14 +223,14 @@ isOneToOne: false
                   ]
                 },"certificado_destinos": {
                   Row: {
-                    "activo": boolean,"categoria_id": number | null,"certificado_id": number,"id": number,"servicio_id": number | null
+                    "activo": boolean,"categoria_id": number | null,"certificado_id": number,"condicional": boolean,"id": number,"servicio_id": number | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "activo": boolean,"categoria_id"?: number | null,"certificado_id": number,"id"?: never,"servicio_id"?: number | null
+                    "activo": boolean,"categoria_id"?: number | null,"certificado_id": number,"condicional"?: boolean,"id"?: never,"servicio_id"?: number | null
                   }
                   Update: {
-                    "activo"?: boolean,"categoria_id"?: number | null,"certificado_id"?: number,"id"?: never,"servicio_id"?: number | null
+                    "activo"?: boolean,"categoria_id"?: number | null,"certificado_id"?: number,"condicional"?: boolean,"id"?: never,"servicio_id"?: number | null
                   }
                   Relationships: [
                     {
@@ -261,14 +261,14 @@ isOneToOne: false
                   ]
                 },"certificados": {
                   Row: {
-                    "activo": boolean,"actualizado_en": string,"costo_promedio": number,"creado_en": string,"hojas_por_unidad": number,"id": number,"nombre": string,"stock_hojas": number,"stock_minimo": number,"todos_servicios": boolean,"unidad_compra": Database["public"]['Enums']["unidad_compra"]
+                    "activo": boolean,"actualizado_en": string,"condicional": boolean,"costo_promedio": number,"creado_en": string,"dias_vuelta": number | null,"hojas_por_unidad": number,"id": number,"nombre": string,"stock_hojas": number,"stock_minimo": number,"todos_servicios": boolean,"unidad_compra": Database["public"]['Enums']["unidad_compra"]
                   }
                   ComputedFields: never
                   Insert: {
-                    "activo"?: boolean,"actualizado_en"?: string,"costo_promedio"?: number,"creado_en"?: string,"hojas_por_unidad": number,"id"?: never,"nombre": string,"stock_hojas"?: number,"stock_minimo"?: number,"todos_servicios"?: boolean,"unidad_compra"?: Database["public"]['Enums']["unidad_compra"]
+                    "activo"?: boolean,"actualizado_en"?: string,"condicional"?: boolean,"costo_promedio"?: number,"creado_en"?: string,"dias_vuelta"?: number | null,"hojas_por_unidad": number,"id"?: never,"nombre": string,"stock_hojas"?: number,"stock_minimo"?: number,"todos_servicios"?: boolean,"unidad_compra"?: Database["public"]['Enums']["unidad_compra"]
                   }
                   Update: {
-                    "activo"?: boolean,"actualizado_en"?: string,"costo_promedio"?: number,"creado_en"?: string,"hojas_por_unidad"?: number,"id"?: never,"nombre"?: string,"stock_hojas"?: number,"stock_minimo"?: number,"todos_servicios"?: boolean,"unidad_compra"?: Database["public"]['Enums']["unidad_compra"]
+                    "activo"?: boolean,"actualizado_en"?: string,"condicional"?: boolean,"costo_promedio"?: number,"creado_en"?: string,"dias_vuelta"?: number | null,"hojas_por_unidad"?: number,"id"?: never,"nombre"?: string,"stock_hojas"?: number,"stock_minimo"?: number,"todos_servicios"?: boolean,"unidad_compra"?: Database["public"]['Enums']["unidad_compra"]
                   }
                   Relationships: [
                     
@@ -793,14 +793,14 @@ isOneToOne: false
                   ]
                 },"ventas": {
                   Row: {
-                    "anulada": boolean,"anulada_en": string | null,"anulada_motivo": string | null,"anulada_por": string | null,"caja_id": number,"cargada_en": string | null,"categoria_id": number,"certificado_id": number | null,"costo_certificado": number,"creado_en": string,"descuento_id": number | null,"descuento_nombre": string | null,"descuento_tipo": Database["public"]['Enums']["tipo_descuento"] | null,"descuento_valor": number | null,"id": number,"medio_pago": Database["public"]['Enums']["medio_pago"] | null,"monto_descuento": number,"patente": string | null,"precio": number,"precio_lista": number,"servicio_id": number,"servicio_nombre": string,"sin_stock": boolean,"turno_id": number | null,"usuario_id": string
+                    "anulada": boolean,"anulada_en": string | null,"anulada_motivo": string | null,"anulada_por": string | null,"caja_id": number,"cargada_en": string | null,"categoria_id": number,"certificado_id": number | null,"condicional_saldo": number | null,"condicional_servicio_id": number | null,"condicional_vence": string | null,"costo_certificado": number,"creado_en": string,"descuento_id": number | null,"descuento_nombre": string | null,"descuento_tipo": Database["public"]['Enums']["tipo_descuento"] | null,"descuento_valor": number | null,"id": number,"medio_pago": Database["public"]['Enums']["medio_pago"] | null,"monto_descuento": number,"patente": string | null,"precio": number,"precio_lista": number,"servicio_id": number,"servicio_nombre": string,"sin_stock": boolean,"turno_id": number | null,"usuario_id": string,"vuelta_de": number | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "anulada"?: boolean,"anulada_en"?: string | null,"anulada_motivo"?: string | null,"anulada_por"?: string | null,"caja_id": number,"cargada_en"?: string | null,"categoria_id": number,"certificado_id"?: number | null,"costo_certificado"?: number,"creado_en"?: string,"descuento_id"?: number | null,"descuento_nombre"?: string | null,"descuento_tipo"?: Database["public"]['Enums']["tipo_descuento"] | null,"descuento_valor"?: number | null,"id"?: never,"medio_pago"?: Database["public"]['Enums']["medio_pago"] | null,"monto_descuento"?: number,"patente"?: string | null,"precio": number,"precio_lista": number,"servicio_id": number,"servicio_nombre": string,"sin_stock"?: boolean,"turno_id"?: number | null,"usuario_id": string
+                    "anulada"?: boolean,"anulada_en"?: string | null,"anulada_motivo"?: string | null,"anulada_por"?: string | null,"caja_id": number,"cargada_en"?: string | null,"categoria_id": number,"certificado_id"?: number | null,"condicional_saldo"?: number | null,"condicional_servicio_id"?: number | null,"condicional_vence"?: string | null,"costo_certificado"?: number,"creado_en"?: string,"descuento_id"?: number | null,"descuento_nombre"?: string | null,"descuento_tipo"?: Database["public"]['Enums']["tipo_descuento"] | null,"descuento_valor"?: number | null,"id"?: never,"medio_pago"?: Database["public"]['Enums']["medio_pago"] | null,"monto_descuento"?: number,"patente"?: string | null,"precio": number,"precio_lista": number,"servicio_id": number,"servicio_nombre": string,"sin_stock"?: boolean,"turno_id"?: number | null,"usuario_id": string,"vuelta_de"?: number | null
                   }
                   Update: {
-                    "anulada"?: boolean,"anulada_en"?: string | null,"anulada_motivo"?: string | null,"anulada_por"?: string | null,"caja_id"?: number,"cargada_en"?: string | null,"categoria_id"?: number,"certificado_id"?: number | null,"costo_certificado"?: number,"creado_en"?: string,"descuento_id"?: number | null,"descuento_nombre"?: string | null,"descuento_tipo"?: Database["public"]['Enums']["tipo_descuento"] | null,"descuento_valor"?: number | null,"id"?: never,"medio_pago"?: Database["public"]['Enums']["medio_pago"] | null,"monto_descuento"?: number,"patente"?: string | null,"precio"?: number,"precio_lista"?: number,"servicio_id"?: number,"servicio_nombre"?: string,"sin_stock"?: boolean,"turno_id"?: number | null,"usuario_id"?: string
+                    "anulada"?: boolean,"anulada_en"?: string | null,"anulada_motivo"?: string | null,"anulada_por"?: string | null,"caja_id"?: number,"cargada_en"?: string | null,"categoria_id"?: number,"certificado_id"?: number | null,"condicional_saldo"?: number | null,"condicional_servicio_id"?: number | null,"condicional_vence"?: string | null,"costo_certificado"?: number,"creado_en"?: string,"descuento_id"?: number | null,"descuento_nombre"?: string | null,"descuento_tipo"?: Database["public"]['Enums']["tipo_descuento"] | null,"descuento_valor"?: number | null,"id"?: never,"medio_pago"?: Database["public"]['Enums']["medio_pago"] | null,"monto_descuento"?: number,"patente"?: string | null,"precio"?: number,"precio_lista"?: number,"servicio_id"?: number,"servicio_nombre"?: string,"sin_stock"?: boolean,"turno_id"?: number | null,"usuario_id"?: string,"vuelta_de"?: number | null
                   }
                   Relationships: [
                     {
@@ -834,6 +834,12 @@ isOneToOne: false
       referencedRelation: "v_stock_certificados"
       referencedColumns: ["id"]
     },{
+      foreignKeyName: "ventas_condicional_servicio_id_fkey"
+      columns: ["condicional_servicio_id"]
+isOneToOne: false
+      referencedRelation: "servicios"
+      referencedColumns: ["id"]
+    },{
       foreignKeyName: "ventas_descuento_id_fkey"
       columns: ["descuento_id"]
 isOneToOne: false
@@ -862,6 +868,18 @@ isOneToOne: false
       columns: ["usuario_id"]
 isOneToOne: false
       referencedRelation: "perfiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "ventas_vuelta_de_fkey"
+      columns: ["vuelta_de"]
+isOneToOne: false
+      referencedRelation: "v_ventas_mixtas"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "ventas_vuelta_de_fkey"
+      columns: ["vuelta_de"]
+isOneToOne: false
+      referencedRelation: "ventas"
       referencedColumns: ["id"]
     }
                   ]
@@ -1032,7 +1050,7 @@ isOneToOne: false
                   ]
                 },"v_stock_certificados": {
                   Row: {
-                    "activo": boolean,"aplica_a": string | null,"categoria_ids": (number)[] | null,"hojas_por_unidad": number,"id": number,"nombre": string,"semaforo": string | null,"servicio_ids": (number)[] | null,"stock_hojas": number,"stock_minimo": number,"todos_servicios": boolean,"unidad_compra": Database["public"]['Enums']["unidad_compra"]
+                    "activo": boolean,"aplica_a": string | null,"categoria_ids": (number)[] | null,"condicional": boolean,"dias_vuelta": number | null,"hojas_por_unidad": number,"id": number,"nombre": string,"semaforo": string | null,"servicio_ids": (number)[] | null,"stock_hojas": number,"stock_minimo": number,"todos_servicios": boolean,"unidad_compra": Database["public"]['Enums']["unidad_compra"]
                   }
                   ComputedFields: never
                   Relationships: [
@@ -1506,6 +1524,9 @@ isOneToOne: false
 "_calcular_impuestos_venta":
 { Args: { "p_venta_id": number }; Returns: undefined
                            },
+"_certificado_para":
+{ Args: { "p_condicional": boolean,"p_servicio_id": number }; Returns: number
+                           },
 "_efectivo_en_caja":
 { Args: { "p_turno_id": number }; Returns: number
                            },
@@ -1545,6 +1566,9 @@ isOneToOne: false
                            },
 "_neto_iva":
 { Args: { "p_total": number }; Returns: Record<string, unknown>
+                           },
+"_normalizar_patente":
+{ Args: { "p_patente": string }; Returns: string
                            },
 "_pesos":
 { Args: { "p_monto": number }; Returns: string
@@ -1602,7 +1626,7 @@ isOneToOne: false
         isSetofReturn: false
       } },
 "_validar_destinos_certificado":
-{ Args: { "p_categoria_ids": (number)[],"p_certificado_id": number,"p_servicio_ids": (number)[],"p_todos": boolean }; Returns: undefined
+{ Args: { "p_categoria_ids": (number)[],"p_certificado_id": number,"p_condicional": boolean,"p_servicio_ids": (number)[],"p_todos": boolean }; Returns: undefined
                            },
 "_validar_monto":
 { Args: { "p_campo": string,"p_monto": number }; Returns: undefined
@@ -1693,6 +1717,9 @@ isOneToOne: false
 "cargada_en": string | null,
 "categoria_id": number,
 "certificado_id": number | null,
+"condicional_saldo": number | null,
+"condicional_servicio_id": number | null,
+"condicional_vence": string | null,
 "costo_certificado": number,
 "creado_en": string,
 "descuento_id": number | null,
@@ -1709,7 +1736,8 @@ isOneToOne: false
 "servicio_nombre": string,
 "sin_stock": boolean,
 "turno_id": number | null,
-"usuario_id": string
+"usuario_id": string,
+"vuelta_de": number | null
             }
                           SetofOptions: {
         from: "*"
@@ -1745,8 +1773,16 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"certificado_condicional_para_servicio":
+{ Args: { "p_servicio_id": number }; Returns: number
+                           },
 "certificado_para_servicio":
 { Args: { "p_servicio_id": number }; Returns: number
+                           },
+"condicionales_de_patente":
+{ Args: { "p_patente": string }; Returns: {
+              "condicional_nombre": string,"fecha": string,"pagado": number,"saldo": number,"servicio_id": number,"servicio_nombre": string,"vence": string,"venta_id": number,"vigente": boolean
+            }[]
                            },
 "corregir_compra_certificado":
 { Args: { "p_compra_id": number,"p_costo_unidad": number,"p_fuente": Database["public"]['Enums']["fuente_fondos"],"p_motivo": string,"p_proveedor": string,"p_unidades": number }; Returns: {
@@ -2021,7 +2057,7 @@ isOneToOne: false
         isSetofReturn: false
       } },
 "registrar_venta":
-{ Args: { "p_descuento_id"?: number,"p_medio_pago"?: Database["public"]['Enums']["medio_pago"],"p_pagos"?: Json,"p_patente"?: string,"p_precio_esperado"?: number,"p_servicio_id": number,"p_turno_id": number }; Returns: {
+{ Args: { "p_condicional"?: boolean,"p_condicional_mitad"?: boolean,"p_descuento_id"?: number,"p_medio_pago"?: Database["public"]['Enums']["medio_pago"],"p_pagos"?: Json,"p_patente"?: string,"p_precio_esperado"?: number,"p_servicio_id": number,"p_turno_id": number }; Returns: {
               "anulada": boolean,
 "anulada_en": string | null,
 "anulada_motivo": string | null,
@@ -2030,6 +2066,9 @@ isOneToOne: false
 "cargada_en": string | null,
 "categoria_id": number,
 "certificado_id": number | null,
+"condicional_saldo": number | null,
+"condicional_servicio_id": number | null,
+"condicional_vence": string | null,
 "costo_certificado": number,
 "creado_en": string,
 "descuento_id": number | null,
@@ -2046,7 +2085,8 @@ isOneToOne: false
 "servicio_nombre": string,
 "sin_stock": boolean,
 "turno_id": number | null,
-"usuario_id": string
+"usuario_id": string,
+"vuelta_de": number | null
             }
                           SetofOptions: {
         from: "*"
@@ -2064,6 +2104,9 @@ isOneToOne: false
 "cargada_en": string | null,
 "categoria_id": number,
 "certificado_id": number | null,
+"condicional_saldo": number | null,
+"condicional_servicio_id": number | null,
+"condicional_vence": string | null,
 "costo_certificado": number,
 "creado_en": string,
 "descuento_id": number | null,
@@ -2080,7 +2123,8 @@ isOneToOne: false
 "servicio_nombre": string,
 "sin_stock": boolean,
 "turno_id": number | null,
-"usuario_id": string
+"usuario_id": string,
+"vuelta_de": number | null
             }
                           SetofOptions: {
         from: "*"
@@ -2133,7 +2177,7 @@ isOneToOne: false
                            },
 "stock_certificados_valorizado":
 { Args: Record<PropertyKey, never>; Returns: {
-              "activo": boolean,"aplica_a": string,"categoria_ids": (number)[],"costo_promedio": number,"hojas_por_unidad": number,"id": number,"nombre": string,"semaforo": string,"servicio_ids": (number)[],"stock_hojas": number,"stock_minimo": number,"todos_servicios": boolean,"unidad_compra": Database["public"]['Enums']["unidad_compra"],"valor_stock": number
+              "activo": boolean,"aplica_a": string,"categoria_ids": (number)[],"condicional": boolean,"costo_promedio": number,"dias_vuelta": number,"hojas_por_unidad": number,"id": number,"nombre": string,"semaforo": string,"servicio_ids": (number)[],"stock_hojas": number,"stock_minimo": number,"todos_servicios": boolean,"unidad_compra": Database["public"]['Enums']["unidad_compra"],"valor_stock": number
             }[]
                            },
 "turno_abierto":
@@ -2147,6 +2191,11 @@ isOneToOne: false
 "ventas_por_dia":
 { Args: { "p_desde": string,"p_hasta": string }; Returns: {
               "cantidad": number,"fecha": string,"total": number
+            }[]
+                           },
+"ventas_por_patente":
+{ Args: { "p_patente": string }; Returns: {
+              "anulada": boolean,"caja_nombre": string,"categoria_nombre": string,"certificado_nombre": string,"condicional_saldo": number,"condicional_servicio": string,"condicional_vence": string,"creado_en": string,"id": number,"medio": string,"patente": string,"precio": number,"servicio_nombre": string,"sin_stock": boolean,"usuario_nombre": string,"venta_pasada": boolean,"vuelta_de": number,"vuelta_venta_id": number
             }[]
                            }
           }

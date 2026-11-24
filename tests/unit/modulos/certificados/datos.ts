@@ -19,6 +19,8 @@ export function certificadoDePrueba(
     valor_stock: 0,
     semaforo: "sin_stock",
     activo: true,
+    condicional: false,
+    dias_vuelta: null,
     ...cambios,
   };
 }

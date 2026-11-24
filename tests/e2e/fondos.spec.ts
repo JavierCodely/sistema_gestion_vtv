@@ -4,6 +4,8 @@ import {
   ADMIN,
   CAJERO,
   cerrarTurnoDesdeBarra,
+  confirmarVenta,
+  escribirPatente,
   ingresar,
   ingresarEfectivo,
   trabajarEnCaja,
@@ -119,17 +121,15 @@ test("fondos: ventas por transferencia, tarjeta y mixta, un gasto y un saldo ini
   });
   await venderEnCaja(pc, { categoria, servicio, medio: "Tarjeta", patente: patenteTarjeta });
 
+  await escribirPatente(pc, patenteMixta);
   await pc
-    .getByRole("listbox", { name: "1. Categoría" })
+    .getByRole("listbox", { name: "2. Categoría" })
     .getByRole("option", { name: categoria, exact: true })
     .click();
   await pc
-    .getByRole("listbox", { name: /^2\. Servicio/ })
+    .getByRole("listbox", { name: /^3\. Servicio/ })
     .getByRole("option", { name: new RegExp(`^${servicio}`) })
     .click();
-  await expect(pc.getByLabel("3. Patente")).toBeFocused();
-  await pc.keyboard.type(patenteMixta);
-  await pc.keyboard.press("Enter");
   await expect(pc.getByRole("listbox", { name: "4. Medio de pago" })).toBeFocused();
   await pc.keyboard.press("4");
   await pc.keyboard.press("Enter");
@@ -143,6 +143,7 @@ test("fondos: ventas por transferencia, tarjeta y mixta, un gasto y un saldo ini
   // Pagó justo el efectivo
   await expect(pc.getByLabel("6. ¿Cuánto te entregó en efectivo? ($)")).toBeFocused();
   await pc.keyboard.press("Enter");
+  await confirmarVenta(pc, patenteMixta);
   // (Los avisos de las ventas anteriores pueden seguir en pantalla: se mira la "Última venta".)
   const ultima = pc.getByTestId("ultima-venta");
   await expect(ultima).toContainText(servicio);

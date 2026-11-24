@@ -15,6 +15,10 @@ export const MAXIMO_HOJAS_POR_UNIDAD = 10_000;
 export const MAXIMO_STOCK_MINIMO = 1_000_000;
 export const MAXIMO_UNIDADES_COMPRA = 100_000;
 export const MAXIMO_HOJAS_AJUSTE = 100_000;
+/** Plazo para volver de una condicional (mismo CHECK que la BD, migración 42). */
+export const DIAS_VUELTA_MINIMO = 1;
+export const DIAS_VUELTA_MAXIMO = 365;
+export const DIAS_VUELTA_POR_DEFECTO = "30";
 
 export type UnidadCompra = Enums["unidad_compra"];
 
@@ -38,16 +42,21 @@ export interface FormularioCertificado {
   unidadCompra: UnidadCompra;
   hojasPorUnidad: string;
   stockMinimo: string;
+  /** Certificado de condicional: la caja lo ofrece como alternativa al de siempre del servicio. */
+  condicional: boolean;
+  diasVuelta: string;
 }
 
 export type DatosCertificado = Required<
   Pick<
     Tablas["certificados"]["Insert"],
-    "nombre" | "unidad_compra" | "hojas_por_unidad" | "stock_minimo"
+    "nombre" | "unidad_compra" | "hojas_por_unidad" | "stock_minimo" | "condicional" | "dias_vuelta"
   >
 >;
 
-export type ErroresCertificado = Errores<"nombre" | "hojasPorUnidad" | "stockMinimo">;
+export type ErroresCertificado = Errores<
+  "nombre" | "hojasPorUnidad" | "stockMinimo" | "diasVuelta"
+>;
 
 export function validarCertificado(
   formulario: FormularioCertificado,
@@ -76,6 +85,17 @@ export function validarCertificado(
   });
   if (minimo.error !== undefined) errores.stockMinimo = minimo.error;
 
+  let diasVuelta: number | null = null;
+  if (formulario.condicional) {
+    const dias = parsearEntero(formulario.diasVuelta, {
+      minimo: DIAS_VUELTA_MINIMO,
+      maximo: DIAS_VUELTA_MAXIMO,
+      nombre: "los días para volver",
+    });
+    if (dias.error !== undefined) errores.diasVuelta = dias.error;
+    else diasVuelta = dias.valor;
+  }
+
   if (hojas.valor === undefined || minimo.valor === undefined || Object.keys(errores).length > 0) {
     return { errores };
   }
@@ -85,8 +105,15 @@ export function validarCertificado(
       unidad_compra: formulario.unidadCompra,
       hojas_por_unidad: hojas.valor,
       stock_minimo: minimo.valor,
+      condicional: formulario.condicional,
+      dias_vuelta: diasVuelta,
     },
   };
+}
+
+/** "Condicional · vuelve dentro de 30 días". */
+export function textoCondicional(dias: number): string {
+  return `Condicional · vuelve dentro de ${String(dias)} ${dias === 1 ? "día" : "días"}`;
 }
 
 // ---------------------------------------------------------------- Compra

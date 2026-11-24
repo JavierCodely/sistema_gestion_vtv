@@ -4,7 +4,9 @@ import {
   ADMIN,
   CAJERO,
   cerrarTurnoDesdeBarra,
+  confirmarVenta,
   conFuncion,
+  escribirPatente,
   ingresar,
   ingresarEfectivo,
   trabajarEnCaja,
@@ -109,23 +111,21 @@ test("descuentos: el admin crea uno y lo habilita para un servicio; el cajero ve
   await ingresar(pc, cajero);
   await expect(pc).toHaveURL("/caja");
   await trabajarEnCaja(pc, caja);
+  await escribirPatente(pc, "AA111AA");
   await pc
-    .getByRole("listbox", { name: "1. Categoría" })
+    .getByRole("listbox", { name: "2. Categoría" })
     .getByRole("option", { name: categoria, exact: true })
     .click();
 
-  // El servicio sin el descuento habilitado no ofrece el paso: va directo a la patente
+  // El servicio sin el descuento habilitado no ofrece el paso: va directo al medio de pago
   await pc
-    .getByRole("listbox", { name: /^2\. Servicio/ })
+    .getByRole("listbox", { name: /^3\. Servicio/ })
     .getByRole("option", { name: new RegExp(`^${otroServicio}`) })
     .click();
-  await expect(pc.getByLabel("3. Patente")).toBeFocused();
-  await pc.keyboard.type("AA111AA");
-  await pc.keyboard.press("Enter");
   await expect(pc.getByRole("listbox", { name: "4. Medio de pago" })).toBeFocused();
 
   // Mientras tanto el admin le sube el precio: la BD rechaza la venta (precio esperado), la caja
-  // relee el catálogo y deja al cajero en la patente con el precio nuevo; no se registra nada.
+  // relee el catálogo y deja al cajero en el medio de pago con el precio nuevo; no se registra nada.
   await page.goto("/admin/servicios");
   await page
     .getByTestId(`servicio-${otroServicio}`)
@@ -139,16 +139,29 @@ test("descuentos: el admin crea uno y lo habilita para un servicio; el cajero ve
   await expect(pc.getByTestId("precio")).toHaveText(/\$\s?20\.000,00/);
   await pc.keyboard.press("2");
   await pc.keyboard.press("Enter");
+  await confirmarVenta(pc, "AA111AA");
   await expect(pc.getByRole("alert")).toHaveText(
     /^El precio cambió: ahora es \$\s?25\.000,00\. Revisá la venta\.$/,
   );
-  await expect(pc.getByLabel("3. Patente")).toBeFocused();
+  await expect(pc.getByRole("listbox", { name: "4. Medio de pago" })).toBeFocused();
   await expect(pc.getByTestId("precio")).toHaveText(/\$\s?25\.000,00/);
   // (Que no se registró lo confirma el total del turno más abajo: solo la venta con descuento.)
+  // Vuelve a la patente (Esc: medio → servicios → categoría → patente) y empieza otra venta.
   await pc.keyboard.press("Escape");
+  await expect(pc.getByRole("listbox", { name: /^3\. Servicio/ })).toBeFocused();
+  await pc.keyboard.press("Escape");
+  await expect(pc.getByRole("listbox", { name: "2. Categoría" })).toBeFocused();
+  await pc.keyboard.press("Escape");
+  // La patente de antes sigue escrita: se reemplaza
+  await expect(pc.getByLabel("1. Patente")).toHaveValue("AA111AA");
+  await escribirPatente(pc, "ac 456 bd");
+  await pc
+    .getByRole("listbox", { name: "2. Categoría" })
+    .getByRole("option", { name: categoria, exact: true })
+    .click();
 
   await pc
-    .getByRole("listbox", { name: /^2\. Servicio/ })
+    .getByRole("listbox", { name: /^3\. Servicio/ })
     .getByRole("option", { name: new RegExp(`^${servicio}`) })
     .click();
   const descuentos = pc.getByRole("listbox", { name: `Descuento (opcional) · ${servicio}` });
@@ -158,12 +171,6 @@ test("descuentos: el admin crea uno y lo habilita para un servicio; el cajero ve
   await expect(opcionDescuento).toContainText(/\$\s?18\.000,00/);
   await opcionDescuento.click();
   await expect(pc.getByTestId("precio")).toHaveText(/\$\s?18\.000,00/);
-  await expect(pc.getByLabel("3. Patente")).toBeFocused();
-  // La patente de antes sigue escrita: se reemplaza
-  await expect(pc.getByLabel("3. Patente")).toHaveValue("AA111AA");
-  await pc.keyboard.press("Control+A");
-  await pc.keyboard.type("ac 456 bd");
-  await pc.keyboard.press("Enter");
   await expect(pc.getByRole("listbox", { name: "4. Medio de pago" })).toBeFocused();
   await pc.keyboard.press("4");
   await pc.keyboard.press("Enter");
@@ -187,6 +194,7 @@ test("descuentos: el admin crea uno y lo habilita para un servicio; el cajero ve
   await pc.keyboard.type("10000");
   await expect(pc.getByTestId("vuelto")).toHaveText(/\$\s?5\.000,00/);
   await pc.keyboard.press("Enter");
+  await confirmarVenta(pc, "AC456BD");
   await expect(
     pc.getByText(new RegExp(`^Venta N° \\d+: ${servicio} · \\$\\s?18\\.000,00$`)),
   ).toBeVisible();

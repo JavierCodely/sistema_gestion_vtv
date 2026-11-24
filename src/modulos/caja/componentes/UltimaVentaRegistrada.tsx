@@ -5,6 +5,11 @@ import { calcularVuelto } from "../lib/vuelto";
 export interface UltimaVenta {
   id: number;
   servicio: string;
+  patente: string;
+  /** Vuelta de una condicional (cobra lo que faltaba, con la hoja del aprobado). */
+  vuelta: boolean;
+  /** Condicional al 50%: lo que se cobra al volver (0 si no). */
+  saldoCondicional: number;
   /** Lo cobrado (`ventas.precio`, ya con el descuento). */
   precio: number;
   descuento: { nombre: string; monto: number } | null;
@@ -39,6 +44,19 @@ export function UltimaVentaRegistrada({ venta }: { venta: UltimaVenta }) {
       <p className="text-2xl font-semibold">
         {venta.servicio} · {formatearMoneda(venta.precio)}
       </p>
+      <p className="font-mono text-xl font-bold tracking-widest">{venta.patente}</p>
+      {venta.vuelta && (
+        <p className="text-base">
+          {venta.precio === 0
+            ? "Vuelta de condicional: sin cargo."
+            : "Vuelta de condicional: pagó el 50% que faltaba."}
+        </p>
+      )}
+      {venta.saldoCondicional > 0 && (
+        <p className="text-base">
+          Condicional al 50%: al volver paga {formatearMoneda(venta.saldoCondicional)}.
+        </p>
+      )}
       {venta.descuento && (
         <p className="text-base">
           Descuento {venta.descuento.nombre}: −{formatearMoneda(venta.descuento.monto)}
