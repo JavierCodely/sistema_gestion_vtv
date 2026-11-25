@@ -1,4 +1,4 @@
--- Migración 45: ventas anteriores de una patente (aviso de patente repetida en la caja).
+-- Migraciones 45 y 49: ventas de hoy de una patente (aviso de patente repetida en la caja).
 begin;
 \ir _helpers.psql
 select plan(13);
@@ -28,15 +28,23 @@ select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja, 100) as turno \gset
 select (registrar_venta(:turno, :servicio, 'efectivo', 'tp 901 xq')).id as v1 \gset
 select (registrar_venta(:turno, :servicio, 'tarjeta', 'TP901XQ')).id as v2 \gset
 select (registrar_venta(:turno, :servicio, 'tarjeta', 'TP901XQ')).id as v_anulada \gset
+select (registrar_venta(:turno, :servicio, 'tarjeta', 'TP901XQ')).id as v_ayer \gset
+select (registrar_venta(:turno, :servicio, 'tarjeta', 'TP901XQ')).id as v_hace_un_anio \gset
 select (registrar_venta(:turno, :servicio, 'tarjeta', 'ZZ999ZZ')).id as v_otra \gset
 reset role;
--- La primera, de otro día (para el orden y la fecha de negocio).
-update ventas set creado_en = '2026-01-10 15:00-03' where id = :v1;
+-- Otros días (migración 49: no avisan): ayer a las 23:59 (hora AR) y el mismo día del año pasado.
+update ventas set creado_en = ((fecha_local(now()) - 1) + time '23:59')
+                              at time zone 'America/Argentina/Buenos_Aires'
+  where id = :v_ayer;
+update ventas set creado_en = now() - interval '1 year' where id = :v_hace_un_anio;
 select pg_temp.como(:'admin');
 select anular_venta(:v_anulada, 'error de carga');
 select cerrar_turno(:turno);
 select (registrar_venta_pasada('2025-06-01', '10:00', :caja, :servicio, 'efectivo', 20000, 'TP901XQ')).id as v_pasada \gset
+select (registrar_venta_pasada('2025-06-02', '10:00', :caja, :servicio, 'efectivo', 20000, 'TP901XQ')).id as v_pasada_hoy \gset
 reset role;
+-- Una venta con fecha pasada cargada con la fecha de hoy (antes de las demás).
+update ventas set creado_en = now() - interval '1 second' where id = :v_pasada_hoy;
 
 -- El cajero las ve aunque el turno ya se cerró --------------------------------------------------------
 select pg_temp.como(:'cajero');
@@ -44,16 +52,16 @@ select is((select count(*)::int from ventas where patente = 'TP901XQ'), 0,
   'por RLS el cajero no lee las ventas de un turno cerrado');
 select is((select array_agg(venta_id order by ord) from (
              select venta_id, row_number() over () as ord from ventas_anteriores_de_patente(' tp 901 xq ')) x),
-  array[:v2, :v1, :v_pasada]::bigint[],
-  'pero la RPC le devuelve las ventas de la patente (normalizada), de la más nueva a la más vieja, sin anuladas');
+  array[:v2, :v1, :v_pasada_hoy]::bigint[],
+  'pero la RPC le devuelve las ventas de hoy de la patente (normalizada), de la más nueva a la más vieja, sin anuladas ni de otros días (ayer, el año pasado, fecha pasada)');
 select is((select row(fecha, servicio_nombre, certificado_nombre, condicional, vuelta)::text
            from ventas_anteriores_de_patente('TP901XQ') where venta_id = :v1),
-  row('2026-01-10'::date, 'Servicio Test', 'Hoja Patente', false, false)::text,
+  row(fecha_local(now()), 'Servicio Test', 'Hoja Patente', false, false)::text,
   'cada venta trae el día de negocio, el servicio y el certificado entregado');
 select is((select row(fecha, certificado_nombre)::text
-           from ventas_anteriores_de_patente('TP901XQ') where venta_id = :v_pasada),
-  row('2025-06-01'::date, null::text)::text,
-  'una venta con fecha pasada no tiene certificado');
+           from ventas_anteriores_de_patente('TP901XQ') where venta_id = :v_pasada_hoy),
+  row(fecha_local(now()), null::text)::text,
+  'una venta con fecha pasada de hoy avisa, sin certificado');
 select is((select count(*)::int from ventas_anteriores_de_patente('TP901')), 0,
   'busca la patente exacta, no por prefijo');
 select is((select count(*)::int from ventas_anteriores_de_patente('QQ000QQ')), 0,

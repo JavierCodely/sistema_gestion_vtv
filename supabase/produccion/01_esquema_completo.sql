@@ -56,10 +56,11 @@
 --   46. 20261124000046_condicional_vencida_vuelta.sql
 --   47. 20261124000047_caja_efectivo_anular.sql
 --   48. 20261124000048_condicional_vencida_estado.sql
+--   49. 20261125000049_patente_repetida_del_dia.sql
 --
 -- Después de ejecutarlo, registrá las migraciones como aplicadas para que
 -- `supabase db push` no intente aplicarlas de nuevo:
---   npx supabase migration repair --status applied 20261119000001 20261119000002 20261119000003 20261119000004 20261119000005 20261119000006 20261119000007 20261119000008 20261119000009 20261119000010 20261119000011 20261119000012 20261119000013 20261120000014 20261120000015 20261120000016 20261120000017 20261120000018 20261120000019 20261120000020 20261120000021 20261120000022 20261120000023 20261120000024 20261120000025 20261121000026 20261121000027 20261121000028 20261121000029 20261122000030 20261122000031 20261122000032 20261122000033 20261122000034 20261123000035 20261123000036 20261123000037 20261123000038 20261123000039 20261123000040 20261123000041 20261123000042 20261124000043 20261124000044 20261124000045 20261124000046 20261124000047 20261124000048
+--   npx supabase migration repair --status applied 20261119000001 20261119000002 20261119000003 20261119000004 20261119000005 20261119000006 20261119000007 20261119000008 20261119000009 20261119000010 20261119000011 20261119000012 20261119000013 20261120000014 20261120000015 20261120000016 20261120000017 20261120000018 20261120000019 20261120000020 20261120000021 20261120000022 20261120000023 20261120000024 20261120000025 20261121000026 20261121000027 20261121000028 20261121000029 20261122000030 20261122000031 20261122000032 20261122000033 20261122000034 20261123000035 20261123000036 20261123000037 20261123000038 20261123000039 20261123000040 20261123000041 20261123000042 20261124000043 20261124000044 20261124000045 20261124000046 20261124000047 20261124000048 20261125000049
 -- =====================================================================
 
 begin;
@@ -12191,5 +12192,56 @@ begin
     limit 20;
 end;
 $$;
+
+-- ---------------------------------------------------------------------
+-- 20261125000049_patente_repetida_del_dia.sql
+-- ---------------------------------------------------------------------
+-- Patente repetida: solo las ventas de hoy (decisión del negocio, 2026-11-25).
+--
+-- El aviso de patente repetida de la caja (migración 45) salta solo si la patente ya se vendió **el
+-- mismo día** (día de negocio, hora AR: mismo día, mes y año). Las ventas de otros días no avisan
+-- (la condicional vigente o vencida se sigue detectando aparte, con `condicionales_de_patente`).
+--
+-- `ventas_anteriores_de_patente(p_patente)` mantiene la firma y las columnas; ahora devuelve solo las
+-- ventas sin anular de la patente exacta cuyo día de negocio es hoy (también una venta con fecha
+-- pasada cargada con la fecha de hoy), de la más nueva a la más vieja, hasta 20.
+
+create or replace function public.ventas_anteriores_de_patente(p_patente text)
+returns table (
+  venta_id           bigint,
+  fecha              date,
+  servicio_nombre    text,
+  certificado_nombre text,
+  condicional        boolean,
+  vuelta             boolean
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_patente text := public._normalizar_patente(p_patente);
+  v_hoy     date := public.fecha_local(now());
+begin
+  perform public._exigir_usuario();
+  if v_patente is null then
+    raise exception 'Ingresá la patente del vehículo' using errcode = '22023';
+  end if;
+  return query
+    select v.id, public.fecha_local(v.creado_en), v.servicio_nombre, c.nombre,
+           v.condicional_vence is not null, v.vuelta_de is not null
+    from public.ventas v
+    left join public.certificados c on c.id = v.certificado_id
+    where v.patente = v_patente
+      and not v.anulada
+      and public.fecha_local(v.creado_en) = v_hoy
+    order by v.creado_en desc, v.id desc
+    limit 20;
+end;
+$$;
+
+revoke execute on function public.ventas_anteriores_de_patente(text) from public, anon;
+grant execute on function public.ventas_anteriores_de_patente(text) to authenticated;
 
 commit;

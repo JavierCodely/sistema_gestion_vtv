@@ -1623,7 +1623,7 @@ describe("FormularioVenta: patente repetida", () => {
     await userEvent.keyboard("ab123cd{Enter}");
 
     const dialogo = await screen.findByRole("dialog", {
-      name: "La patente AB123CD ya tiene 3 ventas",
+      name: "La patente AB123CD ya tiene 3 ventas hoy",
     });
     expect(argumentosRpc("ventas_anteriores_de_patente")).toEqual({ p_patente: "AB123CD" });
     const filas = within(dialogo)
@@ -1652,7 +1652,7 @@ describe("FormularioVenta: patente repetida", () => {
     await screen.findByLabelText("1. Patente");
     await userEvent.keyboard("AB123CD{Enter}");
     const dialogo = await screen.findByRole("dialog", {
-      name: "La patente AB123CD ya tiene una venta",
+      name: "La patente AB123CD ya tiene una venta hoy",
     });
     expect(dialogo).toHaveTextContent("Hoja E (vuelta de condicional)");
   });

@@ -157,14 +157,14 @@ export async function venderEnCaja(page: Page, venta: VentaEnCaja) {
   ).toBeVisible();
 }
 
-/** Aviso de patente repetida: la patente ya tiene ventas (migración 45). */
+/** Aviso de patente repetida: la patente ya se vendió hoy (migraciones 45 y 49). */
 export function dialogoPatenteRepetida(page: Page) {
   return page.getByTestId("dialogo-patente-repetida");
 }
 
 /**
- * Paso 1: escribe la patente y Enter (la caja revisa si ya tiene ventas o una condicional). Si la
- * patente ya tiene ventas aparece el aviso de patente repetida y el cajero sigue con la venta (Enter,
+ * Paso 1: escribe la patente y Enter (la caja revisa si se vendió hoy o tiene una condicional). Si la
+ * patente ya se vendió hoy aparece el aviso de patente repetida y el cajero sigue con la venta (Enter,
  * "Continuar con la venta"); para revisar el aviso, `escribirPatenteRepetida`.
  */
 export async function escribirPatente(page: Page, patente: string) {
@@ -188,7 +188,7 @@ export async function escribirPatente(page: Page, patente: string) {
   }
 }
 
-/** Paso 1 con una patente que ya tiene ventas: deja el aviso abierto y lo devuelve. */
+/** Paso 1 con una patente que ya se vendió hoy: deja el aviso abierto y lo devuelve. */
 export async function escribirPatenteRepetida(page: Page, patente: string) {
   await page.getByRole("tab", { name: "Ventas" }).click();
   const campoPatente = page.getByLabel("1. Patente");

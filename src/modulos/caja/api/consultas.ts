@@ -140,9 +140,9 @@ export function consultaCondicionales(patente: string) {
 }
 
 /**
- * Venta anterior (sin anular) de una patente (`ventas_anteriores_de_patente`, migración 45): solo la
- * fecha, el servicio y el certificado entregado (`null` en una venta con fecha pasada). Sin montos ni
- * quién vendió. La caja la muestra para avisar que la patente ya tiene ventas.
+ * Venta de hoy (sin anular) de una patente (`ventas_anteriores_de_patente`, migraciones 45 y 49): solo
+ * la fecha, el servicio y el certificado entregado (`null` en una venta con fecha pasada). Sin montos
+ * ni quién vendió. La caja la muestra para avisar que la patente ya se vendió hoy.
  */
 export type VentaAnteriorDePatente = Omit<
   Database["public"]["Functions"]["ventas_anteriores_de_patente"]["Returns"][number],

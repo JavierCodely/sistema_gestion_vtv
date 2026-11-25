@@ -27,7 +27,8 @@ function certificadoDe(venta: VentaAnteriorDePatente): string {
 }
 
 /**
- * Aviso al pasar la patente si ya tiene ventas: cuándo se vendió, qué servicio y qué certificado se
+ * Aviso al pasar la patente si ya se vendió hoy (migración 49; las ventas de otros días no avisan):
+ * cuándo se vendió, qué servicio y qué certificado se
  * entregó. Enter (o "Continuar con la venta") sigue con el flujo de siempre; Esc o "Cancelar" vuelve
  * a la patente.
  */
@@ -52,10 +53,10 @@ export function DialogoPatenteRepetida({
       <DialogContent className="sm:max-w-2xl" data-testid="dialogo-patente-repetida">
         <DialogHeader>
           <DialogTitle className="text-2xl">
-            {`La patente ${patente} ya tiene ${ventas.length === 1 ? "una venta" : `${String(ventas.length)} ventas`}`}
+            {`La patente ${patente} ya tiene ${ventas.length === 1 ? "una venta" : `${String(ventas.length)} ventas`} hoy`}
           </DialogTitle>
           <DialogDescription className="text-base">
-            Revisá las ventas anteriores antes de seguir. ¿Querés continuar con esta venta?
+            Revisá las ventas de hoy antes de seguir. ¿Querés continuar con esta venta?
           </DialogDescription>
         </DialogHeader>
         <div className="max-h-[50svh] overflow-auto">

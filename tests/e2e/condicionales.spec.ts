@@ -128,7 +128,7 @@ test("condicional con certificado B: total o 50%; al volver, el servicio cobra l
   // 2) Vuelve y aprueba: la patente ya tiene una venta (aviso con la fecha, el servicio y el
   // certificado); Esc vuelve a la patente; al continuar, la caja detecta la condicional y es sin cargo
   let aviso = await escribirPatenteRepetida(page, patente.toLowerCase());
-  await expect(aviso).toContainText(`La patente ${patente} ya tiene una venta`);
+  await expect(aviso).toContainText(`La patente ${patente} ya tiene una venta hoy`);
   const filaAviso = aviso.getByRole("row").filter({ hasText: servicio });
   await expect(filaAviso).toHaveCount(1);
   await expect(filaAviso).toContainText(`${hojaCondicional} (condicional)`);
