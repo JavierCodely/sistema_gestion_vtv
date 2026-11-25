@@ -93,8 +93,8 @@ export function GraficoRanking({
           <Bar dataKey={medida} fill={`var(--color-${medida})`} radius={4} maxBarSize={28} />
         </BarChart>
       </ChartContainer>
-      <div className="overflow-x-auto rounded-md border">
-        <Table>
+      <div className="md:overflow-x-auto md:rounded-md md:border">
+        <Table apilada>
           <TableHeader>
             <TableRow>
               <TableHead>Nombre</TableHead>
@@ -106,15 +106,17 @@ export function GraficoRanking({
           <TableBody>
             {filas.map((fila) => (
               <TableRow key={fila.nombre} data-testid={`${idBase}-${fila.nombre}`}>
-                <TableCell className="font-medium">{fila.nombre}</TableCell>
-                <TableCell className="text-right tabular-nums">
+                <TableCell data-label="Nombre" className="font-medium">
+                  {fila.nombre}
+                </TableCell>
+                <TableCell data-label="Cantidad" className="text-right tabular-nums">
                   {formatearNumero(fila.cantidad)}
                 </TableCell>
-                <TableCell className="text-right tabular-nums">
+                <TableCell data-label="Total" className="text-right tabular-nums">
                   {formatearMoneda(fila.total)}
                 </TableCell>
                 {etiquetaExtra && (
-                  <TableCell className="text-right tabular-nums">
+                  <TableCell data-label={etiquetaExtra} className="text-right tabular-nums">
                     {formatearMoneda(fila.extra ?? 0)}
                   </TableCell>
                 )}

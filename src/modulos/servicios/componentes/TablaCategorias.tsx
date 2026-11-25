@@ -71,8 +71,8 @@ export function TablaCategorias({
           Todavía no hay categorías. Creá una antes de cargar servicios.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-md border">
-          <Table>
+        <div className="md:overflow-x-auto md:rounded-md md:border">
+          <Table apilada>
             <TableHeader>
               <TableRow>
                 <TableHead>Nombre</TableHead>
@@ -84,11 +84,13 @@ export function TablaCategorias({
             <TableBody>
               {categorias.map((categoria) => (
                 <TableRow key={categoria.id} data-testid={`categoria-${categoria.nombre}`}>
-                  <TableCell className="font-medium">{categoria.nombre}</TableCell>
-                  <TableCell className="text-right tabular-nums">
+                  <TableCell data-label="Nombre" className="font-medium">
+                    {categoria.nombre}
+                  </TableCell>
+                  <TableCell data-label="Servicios" className="text-right tabular-nums">
                     {cantidadServicios(categoria.id)}
                   </TableCell>
-                  <TableCell>
+                  <TableCell data-label="Activa">
                     <Switch
                       checked={categoria.activa}
                       disabled={actualizar.isPending}
@@ -96,7 +98,7 @@ export function TablaCategorias({
                       onCheckedChange={(activa) => void cambiarActiva(categoria, activa)}
                     />
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell data-acciones="" className="text-right">
                     <Button
                       variant="ghost"
                       size="sm"

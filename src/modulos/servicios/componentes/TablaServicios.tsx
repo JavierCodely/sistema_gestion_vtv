@@ -109,8 +109,8 @@ export function TablaServicios({
             : "No hay servicios en esta categoría."}
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-md border">
-          <Table>
+        <div className="md:overflow-x-auto md:rounded-md md:border">
+          <Table apilada>
             <TableHeader>
               <TableRow>
                 <TableHead>Nombre</TableHead>
@@ -126,22 +126,24 @@ export function TablaServicios({
                 const categoria = categoriaPorId.get(servicio.categoria_id);
                 return (
                   <TableRow key={servicio.id} data-testid={`servicio-${servicio.nombre}`}>
-                    <TableCell className="font-medium">{servicio.nombre}</TableCell>
-                    <TableCell>
+                    <TableCell data-label="Nombre" className="font-medium">
+                      {servicio.nombre}
+                    </TableCell>
+                    <TableCell data-label="Categoría">
                       {categoria?.nombre}
                       {categoria && !categoria.activa && (
                         <span className="text-muted-foreground"> (desactivada)</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell data-label="Precio" className="text-right tabular-nums">
                       {formatearMoneda(servicio.precio)}
                     </TableCell>
-                    <TableCell>
+                    <TableCell data-label="Hoja">
                       <Badge variant={servicio.requiere_certificado ? "default" : "secondary"}>
                         {servicio.requiere_certificado ? "Usa hoja" : "Sin hoja"}
                       </Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell data-label="Activo">
                       <Switch
                         checked={servicio.activo}
                         disabled={actualizar.isPending}
@@ -149,7 +151,7 @@ export function TablaServicios({
                         onCheckedChange={(activo) => void cambiarActivo(servicio, activo)}
                       />
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell data-acciones="" className="text-right">
                       <Button
                         variant="ghost"
                         size="sm"

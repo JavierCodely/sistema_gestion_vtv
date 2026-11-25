@@ -100,7 +100,11 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
   y "Condicional vencida: se cobró de nuevo". El medio se muestra con `MedioDeVenta` ("Mixto" +
   detalle "Efectivo $ 5.000,00 + Tarjeta $ 13.000,00" cuando `medio_pago` es NULL) y el descuento con
   `DescuentoDeVenta` (nombre, −monto, precio de lista; "—" sin descuento). Nunca indexar por
-  `medio_pago` sin contemplar NULL.
+  `medio_pago` sin contemplar NULL. `COLUMNAS_VENTA` trae también `categoria_id` y
+  `categorias_servicio(nombre)`: el historial de la caja y las ventas de un turno del admin
+  (`VentasDelTurno`) usan `FiltrosVentas` (`caja/componentes`; patente desde 3 caracteres, categoría
+  —las de las ventas de la lista— y medio de pago: una mixta aparece en cada medio que usó, "Mixto"
+  solo las mixtas; "Limpiar filtros") y filtran con `filtrarVentas` (`caja/lib/filtrar-ventas.ts`).
 - **Venta en la caja** (`FormularioVenta`, decisión 2026-11-23): **1. Patente primero** (**obligatoria**,
   migración 38: vacía no avanza y avisa "Ingresá la patente del vehículo."; al pasarla se leen
   `condicionales_de_patente` y `ventas_anteriores_de_patente`; si alguna no se puede leer, no avanza y
@@ -146,6 +150,16 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
   (desactivado, quitado del servicio o redondea a $ 0), la venta **no** se registra sin él: "El
   descuento elegido ya no está disponible: elegí otro." y vuelve al paso del descuento (si no quedan
   otros, lo avisa y sigue sin descuento a la vista del cajero).
+- **Celular** (decisión 2026-11-25: el admin usa todo el panel desde el celular): debajo de `md` el menú
+  del admin se abre con "Abrir el menú" de la barra (`Sheet` lateral, se cierra al elegir una pantalla)
+  y ninguna pantalla tiene scroll horizontal. **Toda tabla de datos usa `<Table apilada>`**
+  (`compartido/ui/table.tsx`): en el celular cada fila es una tarjeta y cada `TableCell` lleva
+  `data-label="<encabezado>"` (la etiqueta se pinta con `::before`, sin texto extra en el DOM ni en los
+  tests); la celda de botones lleva `data-acciones` y una celda vacía `max-md:hidden!`. Filas con muchos
+  números: `apilada="grilla"` (dos columnas; `max-md:col-span-2` a todo el ancho). Lo tachado de una
+  anulada lleva `max-md:no-underline` (si no, también se tacha la etiqueta). El contenedor de la tabla
+  es `md:overflow-x-auto md:rounded-md md:border`. E2E: `tests/e2e/responsive.spec.ts` (390 px: todas
+  las pantallas sin desborde, ventas como tarjetas).
 - **Contraseñas**: todo campo de contraseña usa `InputPassword` (`compartido/componentes`), con el
   botón "Mostrar contraseña" / "Ocultar contraseña" (ojo, `aria-pressed`, no envía el formulario).
   En los E2E, `getByLabel("Contraseña", { exact: true })`: sin `exact` también encuentra el botón.
@@ -293,6 +307,7 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
 | 46 | `condicional_vencida_vuelta` | `registrar_venta(..., p_vuelta_vencida)`: vuelta fuera de plazo de una condicional vencida (cajero o admin; cobra el saldo, sin descuento, hoja de siempre, `vuelta_de`) — decisión 2026-11-24 |
 | 47 | `caja_efectivo_anular` | `efectivo_en_caja_de_turno()` (todos, turno abierto): el efectivo del cajón, único total que ve el cajero; `anular_venta`: el cajero anula **solo sus ventas** de un turno abierto (42501 si no); `nombre_usuario` también de quien anuló una venta de un turno abierto — decisiones 2026-11-24 |
 | 48 | `condicional_vencida_estado` | `ventas.vuelta_fuera_de_plazo` y `ventas.condicional_vencida_de` (la venta del mismo servicio y patente se cobró de nuevo con una condicional vencida, completa u otra condicional; esa condicional queda resuelta: sale de `condicionales_de_patente` y no admite vuelta; anular la venta la libera), llenadas por el trigger `ventas_condicional_vencida` (BEFORE INSERT, sin cambiar firmas; no marca ventas con fecha pasada); CHECK `ventas_vuelta_o_recobro` — decisión 2026-11-24 |
+| 50 | `resumen_ventas_de_turno` | `resumen_ventas_de_turno()` (todos): cantidad y monto de las ventas realizadas (sin anular) y anuladas del turno entero; el cajero, de un turno abierto; el admin, de cualquiera — decisión 2026-11-25 |
 
 Reglas que no son obvias leyendo una sola tabla:
 - **Certificado a usar**: el activo más específico (servicio > categoría > todos los servicios).
@@ -416,7 +431,10 @@ Reglas que no son obvias leyendo una sola tabla:
   sin sumas). **Excepción (decisión 2026-11-24, migración 47)**: en HISTORIAL ve el **"Efectivo en
   caja"** de la caja donde trabaja (`efectivo_en_caja_de_turno`, `efectivo-en-caja`, reconsultado cada
   15 s), busca por patente (desde 3 caracteres, solo las ventas de ese turno; `caja/lib/buscar-patente.ts`)
-  y anula sus ventas ("Anular", `DialogoAnularVenta` de `caja/componentes`, sin emitir la NC). Los totales por medio, gastos y neto los ve el admin en `/admin/ventas` (lee `v_turnos`).
+  y anula sus ventas ("Anular", `DialogoAnularVenta` de `caja/componentes`, sin emitir la NC).
+  **Excepción (decisión 2026-11-25, migración 50)**: también ve el total de ventas **realizadas** y
+  **anuladas** del turno (cantidad y monto, `resumen_ventas_de_turno`, `total-realizadas` /
+  `total-anuladas`, reconsultado cada 15 s); nunca los totales por medio, gastos ni neto. Los totales por medio, gastos y neto los ve el admin en `/admin/ventas` (lee `v_turnos`).
   No hay arqueo al cerrar. Desde la migración 33 es también **regla de seguridad** para los datos del
   turno: la RLS de `turnos` es solo admin, así que el cajero no lee `efectivo_inicial`, `efectivo_en_caja`,
   `efectivo_cierre`, `observaciones` ni los totales (`v_turnos` le devuelve 0 filas). Lo único que
@@ -599,6 +617,7 @@ Todas requieren usuario autenticado y **activo**. Devuelven la fila afectada.
 | `resumen_descuentos(p_desde date = null, p_hasta date = null) → setof (agrupacion, id, nombre, cantidad_ventas, total_descontado)` | admin | Sin anuladas, rango por día de negocio. `agrupacion` = `total` (1 fila, id NULL) · `descuento` · `servicio` (nombres actuales del catálogo); en ese orden y de mayor a menor total descontado |
 | `registrar_venta_pasada(p_fecha date, p_hora time, p_caja_id bigint, p_servicio_id bigint, p_medio_pago medio_pago, p_precio numeric, p_patente text = null) → ventas` | admin | Sin turno ni hoja de certificado; efectivo a la caja de cambio; no facturable |
 | `anular_venta(p_venta_id bigint, p_motivo text) → ventas` | todos | Motivo obligatorio; guarda `anulada_por`, `anulada_en`, `anulada_motivo`. Admin: cualquiera. Cajero (migración 47): solo las suyas de un turno abierto (ajena → 42501 "Solo podés anular las ventas que registraste vos…"; turno cerrado o venta pasada → 42501 "Solo el administrador anula ventas de un turno cerrado"); si estaba facturada, la NC queda pendiente y la emite el admin |
+| `resumen_ventas_de_turno(p_turno_id bigint) → setof (realizadas_cantidad, realizadas_total, anuladas_cantidad, anuladas_total)` | todos | 1 fila: ventas sin anular y anuladas del turno entero (`precio` = lo cobrado). Cajero: turno abierto (mismas validaciones que `registrar_venta`); admin: cualquier turno (inexistente → 22023). Lo muestran `ResumenVentasTurno` (`caja/componentes`) en el historial de la caja y en las ventas de cada turno del admin, sin depender de los filtros |
 | `efectivo_en_caja_de_turno(p_turno_id bigint) → numeric` | todos | Efectivo del cajón (`_efectivo_en_caja`: inicial + ventas en efectivo − gastos en efectivo, sin anulados) de un turno **abierto** (mismas validaciones que `registrar_venta`). Lo único de dinero del turno que ve el cajero (migración 47) |
 | `registrar_gasto(p_categoria_id bigint, p_monto numeric, p_fuente fuente_fondos, p_nota text, p_turno_id bigint = null) → gastos` | todos | Nota obligatoria. Cajero: `p_turno_id` obligatorio (turno abierto, mismas validaciones que `registrar_venta`) + categoría habilitada; paga con ese cajón. Admin: con `p_turno_id` paga con el cajón de esa caja; sin él, caja de cambio y sin turno |
 | `anular_gasto(p_gasto_id bigint, p_motivo text) → gastos` | admin | No aplica a gastos de compra de certificados |

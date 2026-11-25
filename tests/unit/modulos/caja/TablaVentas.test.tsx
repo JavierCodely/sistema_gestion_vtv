@@ -15,6 +15,37 @@ beforeEach(() => {
 });
 
 describe("TablaVentas", () => {
+  it("en el celular cada venta es una tarjeta: cada celda lleva la etiqueta de su columna", () => {
+    renderConQuery(
+      <TablaVentas
+        ventas={[ventaDePrueba({ id: 1 })]}
+        acciones={() => <button type="button">Anular</button>}
+      />,
+    );
+    expect(screen.getByRole("table")).toHaveClass("max-md:[&>thead]:hidden");
+    const celdas = Array.from(screen.getByTestId("venta-1").querySelectorAll("td"));
+    expect(
+      celdas.map((c) => c.dataset.label ?? (c.hasAttribute("data-acciones") ? "·" : "")),
+    ).toEqual([
+      "Venta N°",
+      "Hora",
+      "Vendió",
+      "Servicio",
+      "Patente",
+      "Certificado",
+      "Medio",
+      "Descuento",
+      "Precio",
+      "Estado",
+      "·",
+    ]);
+    // Sin certificado, descuento ni estado: esas líneas no se muestran en el celular.
+    for (const etiqueta of ["Certificado", "Descuento", "Estado"]) {
+      expect(celdas.find((c) => c.dataset.label === etiqueta)).toHaveClass("max-md:hidden!");
+    }
+    expect(celdas.find((c) => c.dataset.label === "Patente")).not.toHaveClass("max-md:hidden!");
+  });
+
   it("marca las condicionales (hasta cuándo) y las vueltas sin cargo", () => {
     renderConQuery(
       <TablaVentas

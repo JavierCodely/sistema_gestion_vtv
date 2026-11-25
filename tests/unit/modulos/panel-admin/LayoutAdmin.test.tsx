@@ -79,6 +79,29 @@ describe("scroll propio del contenido", () => {
   });
 });
 
+describe("menú en el celular", () => {
+  it("se abre con 'Abrir el menú' de la barra y se cierra al elegir una pantalla", async () => {
+    responder("cajas", "select", { data: [] });
+    const { router } = renderRuta("/admin/ventas/pasadas", admin());
+    const abrir = await within(await screen.findByRole("banner")).findByRole("button", {
+      name: "Abrir el menú",
+    });
+    expect(abrir).toHaveClass("md:hidden");
+    expect(abrir).toHaveAttribute("aria-expanded", "false");
+    // El menú fijo de la izquierda solo se ve desde md.
+    expect(screen.getByRole("complementary")).toHaveClass("hidden", "md:block");
+
+    await userEvent.click(abrir);
+    const panel = await screen.findByRole("dialog", { name: "Sistema VTV" });
+    expect(abrir).toHaveAttribute("aria-expanded", "true");
+    await userEvent.click(within(panel).getByRole("link", { name: "Cajas" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(router.state.location.pathname).toBe("/admin/cajas");
+  });
+});
+
 describe("barra fija del admin", () => {
   it("es sticky y tiene siempre Abrir turno y Cerrar turno (sin turnos abiertos, deshabilitado y explicado)", async () => {
     renderRuta("/admin", admin());

@@ -47,8 +47,8 @@ export function ListaVentasMixtas({ rango }: { rango: RangoFechas }) {
         </p>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-md border">
-            <Table>
+          <div className="md:overflow-x-auto md:rounded-md md:border">
+            <Table apilada>
               <TableHeader>
                 <TableRow>
                   <TableHead>N°</TableHead>
@@ -64,15 +64,17 @@ export function ListaVentasMixtas({ rango }: { rango: RangoFechas }) {
               </TableHeader>
               <TableBody>
                 {ventas.data.pages.flat().map((v) => {
-                  const tachado = v.anulada && "line-through";
+                  const tachado = v.anulada && "line-through max-md:no-underline";
                   return (
                     <TableRow
                       key={v.id}
                       data-testid={`venta-mixta-${String(v.id)}`}
                       className={cn(v.anulada && "text-muted-foreground")}
                     >
-                      <TableCell className={cn("tabular-nums", tachado)}>{v.id}</TableCell>
-                      <TableCell className="whitespace-nowrap">
+                      <TableCell data-label="N°" className={cn("tabular-nums", tachado)}>
+                        {v.id}
+                      </TableCell>
+                      <TableCell data-label="Fecha" className="whitespace-nowrap">
                         <span className={cn(tachado)}>{formatearFechaHora(v.creado_en)}</span>
                         {v.anulada && (
                           <div className="mt-1 flex flex-col gap-0.5">
@@ -83,28 +85,37 @@ export function ListaVentasMixtas({ rango }: { rango: RangoFechas }) {
                           </div>
                         )}
                       </TableCell>
-                      <TableCell className={cn(tachado)}>{v.caja_nombre ?? "—"}</TableCell>
-                      <TableCell className={cn("max-w-xs break-words", tachado)}>
+                      <TableCell data-label="Caja" className={cn(tachado)}>
+                        {v.caja_nombre ?? "—"}
+                      </TableCell>
+                      <TableCell
+                        data-label="Servicio"
+                        className={cn("max-w-xs break-words", tachado)}
+                      >
                         {v.servicio_nombre}
                         {v.patente && ` — ${v.patente}`}
                       </TableCell>
-                      <TableCell>{v.usuario_nombre ?? "—"}</TableCell>
+                      <TableCell data-label="Vendió">{v.usuario_nombre ?? "—"}</TableCell>
                       <TableCell
+                        data-label="Efectivo"
                         className={cn("text-right whitespace-nowrap tabular-nums", tachado)}
                       >
                         {parte(v.pago_efectivo)}
                       </TableCell>
                       <TableCell
+                        data-label="Transferencia"
                         className={cn("text-right whitespace-nowrap tabular-nums", tachado)}
                       >
                         {parte(v.pago_transferencia)}
                       </TableCell>
                       <TableCell
+                        data-label="Crédito/Débito"
                         className={cn("text-right whitespace-nowrap tabular-nums", tachado)}
                       >
                         {parte(v.pago_tarjeta)}
                       </TableCell>
                       <TableCell
+                        data-label="Total"
                         className={cn(
                           "text-right font-medium whitespace-nowrap tabular-nums",
                           tachado,

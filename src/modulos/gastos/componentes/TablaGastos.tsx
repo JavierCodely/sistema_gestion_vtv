@@ -39,8 +39,8 @@ export function TablaGastos({
   }
 
   return (
-    <div className="overflow-x-auto rounded-md border">
-      <Table>
+    <div className="md:overflow-x-auto md:rounded-md md:border">
+      <Table apilada>
         <TableHeader>
           <TableRow>
             <TableHead>Fecha</TableHead>
@@ -56,28 +56,40 @@ export function TablaGastos({
         </TableHeader>
         <TableBody>
           {gastos.map((gasto) => {
-            const tachado = cn(gasto.anulada && "text-muted-foreground line-through");
+            const tachado = cn(
+              gasto.anulada && "text-muted-foreground line-through max-md:no-underline",
+            );
             return (
               <TableRow key={gasto.id} data-testid={`gasto-${String(gasto.id)}`}>
-                <TableCell className={cn("whitespace-nowrap", tachado)}>
+                <TableCell data-label="Fecha" className={cn("whitespace-nowrap", tachado)}>
                   {gasto.fecha ? formatearFechaHora(gasto.fecha) : "—"}
                 </TableCell>
-                <TableCell className={tachado}>
+                <TableCell data-label="Categoría" className={tachado}>
                   {gasto.concepto}
                   {gasto.detalle && (
                     <div className="text-xs text-muted-foreground">{gasto.detalle}</div>
                   )}
                 </TableCell>
-                <TableCell className={cn("max-w-xs break-words", tachado)}>{gasto.nota}</TableCell>
-                <TableCell className={tachado}>{nombreFuente(gasto.medio)}</TableCell>
+                <TableCell data-label="Nota" className={cn("max-w-xs break-words", tachado)}>
+                  {gasto.nota}
+                </TableCell>
+                <TableCell data-label="Pagado con" className={tachado}>
+                  {nombreFuente(gasto.medio)}
+                </TableCell>
                 {conUsuario && (
-                  <TableCell className={tachado}>{gasto.usuario_nombre ?? "—"}</TableCell>
+                  <TableCell data-label="Cargó" className={tachado}>
+                    {gasto.usuario_nombre ?? "—"}
+                  </TableCell>
                 )}
-                {completo && <TableCell className={tachado}>{gasto.caja_nombre ?? "—"}</TableCell>}
-                <TableCell className={cn("text-right tabular-nums", tachado)}>
+                {completo && (
+                  <TableCell data-label="Caja" className={tachado}>
+                    {gasto.caja_nombre ?? "—"}
+                  </TableCell>
+                )}
+                <TableCell data-label="Monto" className={cn("text-right tabular-nums", tachado)}>
                   {formatearMoneda(Math.abs(gasto.monto ?? 0))}
                 </TableCell>
-                <TableCell>
+                <TableCell data-label="Estado">
                   {gasto.anulada &&
                     (gasto.reemplazado_por !== null ? (
                       <Badge variant="outline">Corregido</Badge>
@@ -91,7 +103,11 @@ export function TablaGastos({
                     <div className="text-xs text-muted-foreground">{gasto.motivo_anulacion}</div>
                   )}
                 </TableCell>
-                {acciones && <TableCell className="text-right">{acciones(gasto)}</TableCell>}
+                {acciones && (
+                  <TableCell data-acciones="" className="text-right">
+                    {acciones(gasto)}
+                  </TableCell>
+                )}
               </TableRow>
             );
           })}

@@ -69,8 +69,8 @@ export function Cajas() {
           Todavía no hay cajas. Creá la primera con “Nueva caja”.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-md border">
-          <Table>
+        <div className="md:overflow-x-auto md:rounded-md md:border">
+          <Table apilada>
             <TableHeader>
               <TableRow>
                 <TableHead>Nombre</TableHead>
@@ -81,8 +81,10 @@ export function Cajas() {
             <TableBody>
               {cajas.data.map((caja) => (
                 <TableRow key={caja.id} data-testid={`caja-${caja.nombre}`}>
-                  <TableCell className="font-medium">{caja.nombre}</TableCell>
-                  <TableCell>
+                  <TableCell data-label="Nombre" className="font-medium">
+                    {caja.nombre}
+                  </TableCell>
+                  <TableCell data-label="Activa">
                     <Switch
                       checked={caja.activa}
                       disabled={actualizar.isPending}
@@ -90,7 +92,7 @@ export function Cajas() {
                       onCheckedChange={(activa) => void cambiarActiva(caja, activa)}
                     />
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell data-acciones="" className="text-right">
                     <Button
                       variant="ghost"
                       size="sm"

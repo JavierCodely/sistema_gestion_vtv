@@ -59,21 +59,25 @@ function FilaSinAutorizar({ c }: { c: Comprobante }) {
   }
   return (
     <TableRow data-testid={`sin-autorizar-${String(c.id)}`}>
-      <TableCell>{nombreComprobante(c.cbte_tipo)}</TableCell>
-      <TableCell>
+      <TableCell data-label="Comprobante">{nombreComprobante(c.cbte_tipo)}</TableCell>
+      <TableCell data-label="Venta">
         <Link className="underline" to={`/admin/ventas/turnos/${String(c.turno_id)}`}>
           Venta N° {c.venta_id}
         </Link>
       </TableCell>
-      <TableCell className="text-right tabular-nums">{formatearMoneda(c.total)}</TableCell>
-      <TableCell>
+      <TableCell data-label="Total" className="text-right tabular-nums">
+        {formatearMoneda(c.total)}
+      </TableCell>
+      <TableCell data-label="Estado">
         <Badge variant={c.estado === "rechazado" ? "destructive" : "outline"}>
           {c.a_reconciliar ? "A confirmar con ARCA" : ESTADOS[c.estado]}
         </Badge>
         {c.mensaje && <div className="text-xs text-muted-foreground">{c.mensaje}</div>}
       </TableCell>
-      <TableCell className="tabular-nums">{c.intentos}</TableCell>
-      <TableCell className="text-right">
+      <TableCell data-label="Intentos" className="tabular-nums">
+        {c.intentos}
+      </TableCell>
+      <TableCell data-acciones="" className="text-right">
         {c.tipo === "factura" && c.estado === "rechazado" ? (
           // Un rechazo suele ser por los datos del cliente: se corrigen al refacturar desde el turno.
           <Button asChild variant="outline" size="sm">
@@ -115,8 +119,8 @@ function SinAutorizar() {
           No hay comprobantes pendientes ni rechazados.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-md border">
-          <Table>
+        <div className="md:overflow-x-auto md:rounded-md md:border">
+          <Table apilada>
             <TableHeader>
               <TableRow>
                 <TableHead>Comprobante</TableHead>
@@ -204,8 +208,8 @@ function Log() {
         </p>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-md border">
-            <Table>
+          <div className="md:overflow-x-auto md:rounded-md md:border">
+            <Table apilada>
               <TableHeader>
                 <TableRow>
                   <TableHead>Fecha</TableHead>
@@ -220,16 +224,16 @@ function Log() {
               <TableBody>
                 {filas.map((i) => (
                   <TableRow key={i.id} data-testid={`intento-${String(i.id)}`}>
-                    <TableCell className="whitespace-nowrap">
+                    <TableCell data-label="Fecha" className="whitespace-nowrap">
                       {formatearFechaHora(i.creado_en)}
                     </TableCell>
-                    <TableCell>
+                    <TableCell data-label="Operación">
                       {OPERACIONES[i.operacion] ?? i.operacion}
                       {i.ambiente === "homologacion" && (
                         <span className="text-xs text-muted-foreground"> · homologación</span>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell data-label="Resultado">
                       <Badge variant={i.exito ? "secondary" : "destructive"}>
                         {i.exito ? "OK" : "Error"}
                       </Badge>
@@ -237,12 +241,14 @@ function Log() {
                         <div className="max-w-xs text-xs text-muted-foreground">{i.mensaje}</div>
                       )}
                     </TableCell>
-                    <TableCell className="tabular-nums">{i.comprobante_id ?? "—"}</TableCell>
-                    <TableCell>{i.perfiles?.nombre_completo ?? "—"}</TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell data-label="Comprobante" className="tabular-nums">
+                      {i.comprobante_id ?? "—"}
+                    </TableCell>
+                    <TableCell data-label="Usuario">{i.perfiles?.nombre_completo ?? "—"}</TableCell>
+                    <TableCell data-label="Duración" className="text-right tabular-nums">
                       {formatearNumero(i.duracion_ms)} ms
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell data-acciones="" className="text-right">
                       <Button
                         variant="ghost"
                         size="sm"

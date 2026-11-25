@@ -50,8 +50,8 @@ export function TablaStock({
   }
 
   return (
-    <div className="overflow-x-auto rounded-md border">
-      <Table>
+    <div className="md:overflow-x-auto md:rounded-md md:border">
+      <Table apilada>
         <TableHeader>
           <TableRow>
             <TableHead>Certificado</TableHead>
@@ -67,7 +67,7 @@ export function TablaStock({
         <TableBody>
           {certificados.map((c) => (
             <TableRow key={c.id} data-testid={`certificado-${c.nombre}`}>
-              <TableCell>
+              <TableCell data-label="Certificado">
                 <div className="font-medium">{c.nombre}</div>
                 {c.condicional && c.dias_vuelta !== null && (
                   <div className="text-xs font-medium text-amber-700 dark:text-amber-400">
@@ -84,7 +84,7 @@ export function TablaStock({
                   {formatearNumero(c.stock_minimo)}
                 </div>
               </TableCell>
-              <TableCell data-columna="destinos">
+              <TableCell data-label="Se usa en" data-columna="destinos">
                 {/* Ancho fijo: con muchos destinos el texto se corta con "…" (completo al pasar
                     el mouse) y la tabla no se ensancha. */}
                 <div className="max-w-64 truncate" title={c.aplica_a}>
@@ -98,19 +98,31 @@ export function TablaStock({
                     </div>
                   )}
               </TableCell>
-              <TableCell className="text-right tabular-nums" data-columna="stock">
+              <TableCell
+                data-label="Stock (hojas)"
+                className="text-right tabular-nums"
+                data-columna="stock"
+              >
                 {formatearNumero(c.stock_hojas)}
               </TableCell>
-              <TableCell>
+              <TableCell data-label="Estado">
                 <BadgeSemaforo semaforo={c.semaforo} />
               </TableCell>
-              <TableCell className="text-right tabular-nums" data-columna="costo">
+              <TableCell
+                data-label="Costo por hoja"
+                className="text-right tabular-nums"
+                data-columna="costo"
+              >
                 {formatearMoneda(c.costo_promedio)}
               </TableCell>
-              <TableCell className="text-right tabular-nums" data-columna="valor">
+              <TableCell
+                data-label="Valor del stock"
+                className="text-right tabular-nums"
+                data-columna="valor"
+              >
                 {formatearMoneda(c.valor_stock)}
               </TableCell>
-              <TableCell>
+              <TableCell data-label="Activo">
                 <Switch
                   checked={c.activo}
                   disabled={actualizar.isPending}
@@ -118,7 +130,7 @@ export function TablaStock({
                   onCheckedChange={(activo) => void cambiarActivo(c, activo)}
                 />
               </TableCell>
-              <TableCell>
+              <TableCell data-acciones="">
                 <div className="flex flex-wrap justify-end gap-1">
                   <Button
                     variant="ghost"

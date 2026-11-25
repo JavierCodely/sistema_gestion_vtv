@@ -98,8 +98,8 @@ export function MovimientosCertificado() {
               Todavía no hay movimientos.
             </p>
           ) : (
-            <div className="overflow-x-auto rounded-md border">
-              <Table>
+            <div className="md:overflow-x-auto md:rounded-md md:border">
+              <Table apilada>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Fecha</TableHead>
@@ -116,10 +116,10 @@ export function MovimientosCertificado() {
                 <TableBody>
                   {filas.map((m) => (
                     <TableRow key={m.id} data-testid={`movimiento-${String(m.id)}`}>
-                      <TableCell className="whitespace-nowrap">
+                      <TableCell data-label="Fecha" className="whitespace-nowrap">
                         {formatearFechaHora(m.creado_en)}
                       </TableCell>
-                      <TableCell>
+                      <TableCell data-label="Tipo">
                         <Badge
                           variant={
                             m.tipo === "anulacion_compra"
@@ -133,25 +133,28 @@ export function MovimientosCertificado() {
                         </Badge>
                       </TableCell>
                       <TableCell
+                        data-label="Hojas"
                         className={`text-right tabular-nums ${m.hojas < 0 ? "text-destructive" : ""}`}
                       >
                         {m.hojas > 0 ? "+" : ""}
                         {formatearNumero(m.hojas)}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell data-label="Stock" className="text-right tabular-nums">
                         {formatearNumero(m.stock_resultante)}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell data-label="Costo por hoja" className="text-right tabular-nums">
                         {formatearMoneda(m.costo_unitario)}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell data-label="Costo total" className="text-right tabular-nums">
                         {formatearMoneda(m.costo_total)}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell data-label="Costo promedio" className="text-right tabular-nums">
                         {formatearMoneda(m.costo_promedio_resultante)}
                       </TableCell>
-                      <TableCell>{detalle(m)}</TableCell>
-                      <TableCell>{m.perfiles?.nombre_completo ?? "—"}</TableCell>
+                      <TableCell data-label="Detalle">{detalle(m)}</TableCell>
+                      <TableCell data-label="Usuario">
+                        {m.perfiles?.nombre_completo ?? "—"}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

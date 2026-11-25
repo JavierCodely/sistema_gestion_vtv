@@ -38,8 +38,8 @@ export function TablaVentas({
   }
 
   return (
-    <div className="overflow-x-auto rounded-md border">
-      <Table>
+    <div className="md:overflow-x-auto md:rounded-md md:border">
+      <Table apilada>
         <TableHeader>
           <TableRow>
             <TableHead>N°</TableHead>
@@ -57,21 +57,44 @@ export function TablaVentas({
         </TableHeader>
         <TableBody>
           {ventas.map((venta) => {
-            const tachada = cn(venta.anulada && "text-muted-foreground line-through");
+            const tachada = cn(
+              venta.anulada && "text-muted-foreground line-through max-md:no-underline",
+            );
+            const conEstado =
+              venta.anulada ||
+              venta.sin_stock ||
+              venta.vuelta_de !== null ||
+              venta.condicional_vencida_de !== null ||
+              venta.condicional_vence !== null ||
+              (venta.condicional_saldo ?? 0) > 0;
             return (
               <TableRow key={venta.id} data-testid={`venta-${String(venta.id)}`}>
-                <TableCell className="tabular-nums">{venta.id}</TableCell>
-                <TableCell className={cn("whitespace-nowrap", tachada)}>
+                {/* En el celular cada venta es una tarjeta: arriba el número y la hora; la patente y
+                    el precio, más grandes. Las celdas sin dato no se muestran. */}
+                <TableCell data-label="Venta N°" className="tabular-nums max-md:font-semibold">
+                  {venta.id}
+                </TableCell>
+                <TableCell data-label="Hora" className={cn("whitespace-nowrap", tachada)}>
                   {formatearFechaHora(venta.creado_en)}
                 </TableCell>
-                <TableCell className={tachada}>
+                <TableCell data-label="Vendió" className={tachada}>
                   <NombreUsuario usuarioId={venta.usuario_id} />
                 </TableCell>
-                <TableCell className={tachada}>{venta.servicio_nombre}</TableCell>
-                <TableCell className={tachada}>{venta.patente ?? "—"}</TableCell>
-                <TableCell className={tachada}>
+                <TableCell data-label="Servicio" className={tachada}>
+                  {venta.servicio_nombre}
+                </TableCell>
+                <TableCell
+                  data-label="Patente"
+                  className={cn("max-md:text-base max-md:font-semibold", tachada)}
+                >
+                  {venta.patente ?? "—"}
+                </TableCell>
+                <TableCell
+                  data-label="Certificado"
+                  className={cn(tachada, !venta.certificados && "max-md:hidden!")}
+                >
                   {venta.certificados ? (
-                    <div className="flex flex-wrap items-center gap-1">
+                    <div className="flex flex-wrap items-center justify-end gap-1 md:justify-start">
                       <span>{venta.certificados.nombre}</span>
                       {venta.certificados.condicional && (
                         <Badge variant="outline">Condicional</Badge>
@@ -81,50 +104,69 @@ export function TablaVentas({
                     "—"
                   )}
                 </TableCell>
-                <TableCell className={tachada}>
-                  <MedioDeVenta venta={venta} />
+                <TableCell data-label="Medio" className={tachada}>
+                  <div>
+                    <MedioDeVenta venta={venta} />
+                  </div>
                 </TableCell>
-                <TableCell className={tachada}>
-                  <DescuentoDeVenta venta={venta} />
+                <TableCell
+                  data-label="Descuento"
+                  className={cn(tachada, venta.descuento_nombre === null && "max-md:hidden!")}
+                >
+                  <div>
+                    <DescuentoDeVenta venta={venta} />
+                  </div>
                 </TableCell>
-                <TableCell className={cn("text-right tabular-nums", tachada)}>
+                <TableCell
+                  data-label="Precio"
+                  className={cn(
+                    "text-right tabular-nums max-md:text-base max-md:font-semibold",
+                    tachada,
+                  )}
+                >
                   {formatearMoneda(venta.precio)}
                 </TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap items-center gap-1">
-                    {venta.anulada && <Badge variant="destructive">Anulada</Badge>}
-                    {venta.sin_stock && <Badge variant="outline">Sin certificado</Badge>}
-                    {venta.vuelta_de !== null && (
-                      <Badge variant="secondary">
-                        {venta.vuelta_fuera_de_plazo
-                          ? "Vuelta de condicional fuera de plazo"
-                          : "Vuelta de condicional"}
-                      </Badge>
+                <TableCell data-label="Estado" className={cn(!conEstado && "max-md:hidden!")}>
+                  <div className="flex flex-col items-end gap-1 md:items-start">
+                    <div className="flex flex-wrap items-center justify-end gap-1 md:justify-start">
+                      {venta.anulada && <Badge variant="destructive">Anulada</Badge>}
+                      {venta.sin_stock && <Badge variant="outline">Sin certificado</Badge>}
+                      {venta.vuelta_de !== null && (
+                        <Badge variant="secondary">
+                          {venta.vuelta_fuera_de_plazo
+                            ? "Vuelta de condicional fuera de plazo"
+                            : "Vuelta de condicional"}
+                        </Badge>
+                      )}
+                      {venta.condicional_vencida_de !== null && (
+                        <Badge variant="outline">Condicional vencida: se cobró de nuevo</Badge>
+                      )}
+                      {venta.condicional_vence !== null && (
+                        <Badge variant="outline">
+                          Condicional hasta {formatearDia(venta.condicional_vence)}
+                        </Badge>
+                      )}
+                      {(venta.condicional_saldo ?? 0) > 0 && (
+                        <Badge variant="outline">
+                          Al 50%: al volver paga {formatearMoneda(venta.condicional_saldo ?? 0)}
+                        </Badge>
+                      )}
+                    </div>
+                    {venta.anulada && venta.anulada_motivo && (
+                      <div className="text-xs text-muted-foreground">{venta.anulada_motivo}</div>
                     )}
-                    {venta.condicional_vencida_de !== null && (
-                      <Badge variant="outline">Condicional vencida: se cobró de nuevo</Badge>
-                    )}
-                    {venta.condicional_vence !== null && (
-                      <Badge variant="outline">
-                        Condicional hasta {formatearDia(venta.condicional_vence)}
-                      </Badge>
-                    )}
-                    {(venta.condicional_saldo ?? 0) > 0 && (
-                      <Badge variant="outline">
-                        Al 50%: al volver paga {formatearMoneda(venta.condicional_saldo ?? 0)}
-                      </Badge>
+                    {venta.anulada && venta.anulada_por && (
+                      <div className="text-xs text-muted-foreground">
+                        Anuló: <NombreUsuario usuarioId={venta.anulada_por} />
+                      </div>
                     )}
                   </div>
-                  {venta.anulada && venta.anulada_motivo && (
-                    <div className="text-xs text-muted-foreground">{venta.anulada_motivo}</div>
-                  )}
-                  {venta.anulada && venta.anulada_por && (
-                    <div className="text-xs text-muted-foreground">
-                      Anuló: <NombreUsuario usuarioId={venta.anulada_por} />
-                    </div>
-                  )}
                 </TableCell>
-                {acciones && <TableCell className="text-right">{acciones(venta)}</TableCell>}
+                {acciones && (
+                  <TableCell data-acciones="" className="text-right">
+                    {acciones(venta)}
+                  </TableCell>
+                )}
               </TableRow>
             );
           })}

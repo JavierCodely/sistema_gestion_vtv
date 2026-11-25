@@ -104,8 +104,8 @@ export function ReporteImpuestos() {
               No hay impuestos aplicados en ese período.
             </p>
           ) : (
-            <div className="overflow-x-auto rounded-md border">
-              <Table>
+            <div className="md:overflow-x-auto md:rounded-md md:border">
+              <Table apilada>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Impuesto</TableHead>
@@ -119,20 +119,22 @@ export function ReporteImpuestos() {
                 <TableBody>
                   {resumen.data.porImpuesto.map((fila) => (
                     <TableRow key={fila.id} data-testid={`reporte-impuesto-${fila.nombre}`}>
-                      <TableCell className="font-medium">{fila.nombre}</TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell data-label="Impuesto" className="font-medium">
+                        {fila.nombre}
+                      </TableCell>
+                      <TableCell data-label="Ventas" className="text-right tabular-nums">
                         {formatearNumero(fila.cantidad_ventas)}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell data-label="Efectivo" className="text-right tabular-nums">
                         {formatearMoneda(fila.total_efectivo)}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell data-label="Transferencia" className="text-right tabular-nums">
                         {formatearMoneda(fila.total_transferencia)}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell data-label="Tarjeta" className="text-right tabular-nums">
                         {formatearMoneda(fila.total_tarjeta)}
                       </TableCell>
-                      <TableCell className="text-right font-medium tabular-nums">
+                      <TableCell data-label="Total" className="text-right font-medium tabular-nums">
                         {formatearMoneda(fila.total)}
                       </TableCell>
                     </TableRow>

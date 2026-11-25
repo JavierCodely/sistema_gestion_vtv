@@ -77,8 +77,8 @@ export function TablaDescuentos({
           Todavía no hay descuentos.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-md border">
-          <Table>
+        <div className="md:overflow-x-auto md:rounded-md md:border">
+          <Table apilada>
             <TableHeader>
               <TableRow>
                 <TableHead>Nombre</TableHead>
@@ -92,15 +92,17 @@ export function TablaDescuentos({
             <TableBody>
               {descuentos.map((descuento) => (
                 <TableRow key={descuento.id} data-testid={`descuento-${descuento.nombre}`}>
-                  <TableCell className="font-medium">{descuento.nombre}</TableCell>
-                  <TableCell>{TIPOS_DESCUENTO[descuento.tipo]}</TableCell>
-                  <TableCell className="text-right tabular-nums">
+                  <TableCell data-label="Nombre" className="font-medium">
+                    {descuento.nombre}
+                  </TableCell>
+                  <TableCell data-label="Tipo">{TIPOS_DESCUENTO[descuento.tipo]}</TableCell>
+                  <TableCell data-label="Valor" className="text-right tabular-nums">
                     {formatearValorDescuento(descuento)}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">
+                  <TableCell data-label="Servicios" className="text-right tabular-nums">
                     {descuento.servicioIds.length}
                   </TableCell>
-                  <TableCell>
+                  <TableCell data-label="Activo">
                     <Switch
                       checked={descuento.activo}
                       disabled={actualizar.isPending}
@@ -108,7 +110,7 @@ export function TablaDescuentos({
                       onCheckedChange={(activo) => void cambiarActivo(descuento, activo)}
                     />
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell data-acciones="" className="text-right">
                     <div className="flex flex-wrap justify-end gap-1">
                       <Button
                         variant="ghost"

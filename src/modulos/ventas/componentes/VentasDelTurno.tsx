@@ -5,16 +5,25 @@ import { mensajeDeError } from "@/compartido/lib/errores";
 import { Alert, AlertDescription } from "@/compartido/ui/alert";
 import { Button } from "@/compartido/ui/button";
 import { useVentasDeTurno, type Venta } from "@/modulos/caja/api/consultas";
+import { FiltrosVentas } from "@/modulos/caja/componentes/FiltrosVentas";
+import { ResumenVentasTurno } from "@/modulos/caja/componentes/ResumenVentasTurno";
 import { TablaVentas } from "@/modulos/caja/componentes/TablaVentas";
+import {
+  filtrarVentas,
+  hayFiltros,
+  SIN_FILTROS,
+  type FiltroVentas,
+} from "@/modulos/caja/lib/filtrar-ventas";
 import { useComprobantesDeTurno } from "@/modulos/facturacion/api/consultas";
 import { FacturaDeVenta } from "@/modulos/facturacion/componentes/FacturaDeVenta";
 import { DialogoAnularVenta } from "@/modulos/caja/componentes/DialogoAnularVenta";
 
-/** Ventas de un turno con su factura y "Anular" (solo admin). */
+/** Ventas de un turno con filtros (patente, categoría, medio), su factura y "Anular" (solo admin). */
 export function VentasDelTurno({ turnoId }: { turnoId: number }) {
   const ventas = useVentasDeTurno(turnoId);
   const comprobantes = useComprobantesDeTurno(turnoId);
   const [anulando, setAnulando] = useState<Venta | null>(null);
+  const [filtro, setFiltro] = useState<FiltroVentas>(SIN_FILTROS);
 
   if (ventas.isPending || comprobantes.isPending) return <Cargando texto="Cargando ventas…" />;
   if (ventas.isError || comprobantes.isError) {
@@ -27,9 +36,12 @@ export function VentasDelTurno({ turnoId }: { turnoId: number }) {
   const listaComprobantes = comprobantes.data;
 
   return (
-    <>
+    <div className="flex flex-col gap-3">
+      <ResumenVentasTurno turnoId={turnoId} />
+      <FiltrosVentas ventas={ventas.data} onCambiar={setFiltro} />
       <TablaVentas
-        ventas={ventas.data}
+        ventas={filtrarVentas(ventas.data, filtro)}
+        vacio={hayFiltros(filtro) ? "No hay ventas en este turno con esos filtros." : undefined}
         acciones={(venta) => (
           <div className="flex flex-wrap items-center justify-end gap-1">
             <FacturaDeVenta
@@ -62,6 +74,6 @@ export function VentasDelTurno({ turnoId }: { turnoId: number }) {
           }}
         />
       )}
-    </>
+    </div>
   );
 }
