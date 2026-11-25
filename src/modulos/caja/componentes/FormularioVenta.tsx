@@ -17,6 +17,7 @@ import {
 import type { Categoria, Servicio } from "@/modulos/servicios/api/consultas";
 import {
   consultaCondicionales,
+  consultaVentasAnteriores,
   esPrecioCambiado,
   esTurnoNoDisponible,
   esVueltaDeCondicional,
@@ -28,6 +29,7 @@ import {
   type CobroVenta,
   type CondicionalDePatente,
   type MedioPago,
+  type VentaAnteriorDePatente,
 } from "../api/consultas";
 import { mitadCondicional, saldoCondicional } from "../lib/condicional";
 import { CAMPO_GRANDE } from "../lib/estilos";
@@ -38,6 +40,8 @@ import { calcularVuelto, limpiarPatente } from "../lib/vuelto";
 import { AvisoCertificado } from "./AvisoCertificado";
 import { BotonVolverPaso } from "./BotonVolverPaso";
 import { DatoVenta } from "./DatoVenta";
+import { DialogoCondicionalVencida } from "./DialogoCondicionalVencida";
+import { DialogoPatenteRepetida } from "./DialogoPatenteRepetida";
 import { ListaOpciones } from "./ListaOpciones";
 import { PasoConfirmarVenta } from "./PasoConfirmarVenta";
 import { PasoEfectivo } from "./PasoEfectivo";
@@ -70,9 +74,6 @@ const OPCIONES_MEDIO: { valor: OpcionMedio; etiqueta: string }[] = [
 const SIN_DESCUENTO = 0;
 /** "Es otra venta" en las listas de la condicional (las condicionales tienen id > 0). */
 const OTRA_VENTA = 0;
-/** Opciones de una condicional vencida. */
-const NUEVA_CONDICIONAL = -1;
-const APROBO_COMPLETO = -2;
 
 const AVISO_DESCUENTO_NO_DISPONIBLE = "El descuento elegido ya no está disponible: elegí otro.";
 const AVISO_DESCUENTO_SIN_OTROS =
@@ -88,7 +89,7 @@ interface Pendiente {
 
 /**
  * Venta paso a paso, pensada para usar solo con el teclado y leer de lejos:
- * patente → (si tiene una condicional vigente) la vuelta del servicio, que cobra lo que faltaba, o (si
+ * patente → (si ya tiene ventas) aviso con sus ventas anteriores y "¿Continuar?" → (si tiene una condicional vigente) la vuelta del servicio, que cobra lo que faltaba, o (si
  * venció) otra condicional o el servicio completo → categoría → servicio → (si el servicio tiene un
  * certificado condicional) el de siempre o el condicional → (si el servicio tiene) descuento →
  * (condicional sin descuento) total o 50% → medio de pago → (mixto) cuánto paga en efectivo → con qué
@@ -140,7 +141,14 @@ export function FormularioVenta({
   const [condicionales, setCondicionales] = useState<CondicionalDePatente[]>([]);
   // La vuelta se eligió en la pantalla "Vuelve de condicional" (Esc desde el medio vuelve ahí).
   const [vueltaElegida, setVueltaElegida] = useState(false);
+  // "Continuar con el certificado" en el aviso de condicional vencida: vuelta fuera de plazo (migración 46).
+  const [vueltaVencida, setVueltaVencida] = useState(false);
   const [buscandoCondicional, setBuscandoCondicional] = useState(false);
+  // Patente repetida (migración 45): sus ventas anteriores y el paso al que sigue si continúa.
+  const [repetida, setRepetida] = useState<{
+    ventas: VentaAnteriorDePatente[];
+    siguiente: Paso;
+  } | null>(null);
   const descuentos = useDescuentosParaServicio(servicioId);
 
   // Solo se ofrece lo que se puede vender: servicio activo de una categoría activa.
@@ -158,7 +166,11 @@ export function FormularioVenta({
   const vigentes = condicionales.filter((c) => c.vigente);
   const vencida = vigentes.length === 0 ? (condicionales.find((c) => !c.vigente) ?? null) : null;
   // Vuelve de una condicional de este servicio: cobra lo que faltaba, sin descuento (lo confirma la BD).
-  const vuelta = vigentes.find((c) => c.servicio_id === servicioId) ?? null;
+  // Fuera de plazo, solo si se eligió continuar con el certificado de la vencida.
+  const vuelta =
+    vigentes.find((c) => c.servicio_id === servicioId) ??
+    (vueltaVencida && vencida?.servicio_id === servicioId ? vencida : null);
+  const esVueltaVencida = vuelta !== null && !vuelta.vigente;
   // Certificados del servicio: el de siempre y, si tiene, el condicional (solo los que llevan hoja).
   const conHoja = servicio?.requiere_certificado ? servicio.id : null;
   const certificadoDeSiempre = useCertificadoDeServicio(conHoja);
@@ -237,6 +249,8 @@ export function FormularioVenta({
     setMitad(false);
     setCondicionales([]);
     setVueltaElegida(false);
+    setVueltaVencida(false);
+    setRepetida(null);
     limpiarCobro();
     irA("patente");
   }
@@ -260,16 +274,22 @@ export function FormularioVenta({
    * certificado (si tiene uno condicional) y al descuento.
    */
   function despuesDeServicio(id: number, desde: "condicional" | "servicio") {
-    const esVuelta = vigentes.some((c) => c.servicio_id === id);
-    if (!esVuelta) {
+    const vigente = vigentes.find((c) => c.servicio_id === id);
+    if (!vigente) {
       irA("certificado");
       return;
     }
-    // La vuelta entrega el certificado de siempre, sin descuento ni 50%.
+    irAlCobroDeVuelta(vigente.saldo, desde);
+  }
+
+  /**
+   * La vuelta (dentro o fuera de plazo) entrega el certificado de siempre, sin descuento ni 50%: sin
+   * saldo va directo a confirmar; si falta el 50%, al medio de pago.
+   */
+  function irAlCobroDeVuelta(saldo: number, desde: Paso) {
     setCondicional(false);
     setDescuentoId(null);
     setMitad(false);
-    const saldo = vigentes.find((c) => c.servicio_id === id)?.saldo ?? 0;
     if (saldo === 0) {
       // Sin cargo: no hay medio que elegir (va como efectivo, $ 0); directo a confirmar.
       setPendiente({ cobro: { medio: "efectivo" }, recibido: null, desde });
@@ -297,25 +317,46 @@ export function FormularioVenta({
     );
   }
 
-  /** Al pasar la patente: busca sus condicionales sin usar (vigentes o vencidas). */
+  /**
+   * Al pasar la patente: busca sus condicionales sin usar (vigentes o vencidas) y sus ventas
+   * anteriores. Si ya tiene ventas, primero el aviso de patente repetida; al continuar, lo de siempre.
+   */
   async function revisarPatente() {
     if (buscandoCondicional) return;
     setBuscandoCondicional(true);
-    try {
-      const lista = await queryClient.query(consultaCondicionales(patente));
-      setCondicionales(lista);
-      setVueltaElegida(false);
-      irA(
-        lista.some((c) => c.vigente) ? "condicional" : lista.length > 0 ? "vencida" : "categoria",
-      );
-    } catch (e) {
+    const [condicionalesLeidas, anteriores] = await Promise.allSettled([
+      queryClient.query(consultaCondicionales(patente)),
+      queryClient.query(consultaVentasAnteriores(patente)),
+    ]);
+    setBuscandoCondicional(false);
+    if (condicionalesLeidas.status === "rejected") {
       setCondicionales([]);
       setErrorPatente(
-        `No se pudo revisar si la patente tiene una condicional: ${mensajeDeError(e)}`,
+        `No se pudo revisar si la patente tiene una condicional: ${mensajeDeError(condicionalesLeidas.reason)}`,
       );
-    } finally {
-      setBuscandoCondicional(false);
+      return;
     }
+    if (anteriores.status === "rejected") {
+      setCondicionales([]);
+      setErrorPatente(
+        `No se pudieron revisar las ventas anteriores de la patente: ${mensajeDeError(anteriores.reason)}`,
+      );
+      return;
+    }
+    const lista = condicionalesLeidas.value;
+    setCondicionales(lista);
+    setVueltaElegida(false);
+    setVueltaVencida(false);
+    const siguiente: Paso = lista.some((c) => c.vigente)
+      ? "condicional"
+      : lista.length > 0
+        ? "vencida"
+        : "categoria";
+    if (anteriores.value.length > 0) {
+      setRepetida({ ventas: anteriores.value, siguiente });
+      return;
+    }
+    irA(siguiente);
   }
 
   function prepararConfirmacion(cobro: CobroVenta, montoRecibido: number | null, desde: Paso) {
@@ -340,6 +381,7 @@ export function FormularioVenta({
       precioEsperado: precioFinal,
       condicional: esCondicional,
       condicionalMitad: alMitad,
+      vueltaVencida: esVueltaVencida ? vuelta.venta_id : null,
     });
     if (!resultado.datos) {
       setErrorServidor(Object.values(resultado.errores).join(" "));
@@ -378,7 +420,9 @@ export function FormularioVenta({
       };
       const marca =
         venta.vuelta_de !== null
-          ? " (vuelta de condicional)"
+          ? esVueltaVencida
+            ? " (vuelta de condicional fuera de plazo)"
+            : " (vuelta de condicional)"
           : (venta.condicional_saldo ?? 0) > 0
             ? " (condicional al 50%)"
             : venta.condicional_vence !== null
@@ -407,6 +451,7 @@ export function FormularioVenta({
       if (esVueltaDeCondicional(e)) {
         // La caja no vio la condicional o su saldo cambió: se revisa la patente otra vez.
         setCondicionales([]);
+        setVueltaVencida(false);
         setServicioId(null);
         setCategoriaId(null);
         setDescuentoId(null);
@@ -484,7 +529,8 @@ export function FormularioVenta({
 
   /** Esc desde el medio de pago. */
   const volverDeMedio = () => {
-    if (vuelta !== null) irA(vueltaElegida ? "condicional" : "servicio");
+    if (vuelta !== null)
+      irA(esVueltaVencida ? "vencida" : vueltaElegida ? "condicional" : "servicio");
     else if (esCondicional && descuentoId === null) irA("pago-condicional");
     else irA(hayDescuentos ? "descuento" : antesDeDescuento);
   };
@@ -509,7 +555,7 @@ export function FormularioVenta({
   const detalleConfirmacion = [
     ...(vuelta !== null
       ? [
-          `Vuelta de la condicional del ${formatearDia(vuelta.fecha)}${vuelta.saldo > 0 ? ": cobra el 50% que faltaba" : ": sin cargo"}.`,
+          `${esVueltaVencida ? "Vuelta fuera de plazo" : "Vuelta"} de la condicional del ${formatearDia(vuelta.fecha)}${esVueltaVencida ? ` (venció el ${formatearDia(vuelta.vence)})` : ""}${vuelta.saldo > 0 ? ": cobra el 50% que faltaba" : ": sin cargo"}.`,
         ]
       : []),
     ...(esCondicional
@@ -578,7 +624,7 @@ export function FormularioVenta({
               </p>
             )}
             <p className="text-base text-muted-foreground">
-              Enter para seguir: se revisa si tiene una condicional.
+              Enter para seguir: se revisa si ya tiene ventas o una condicional.
             </p>
             <Button
               type="submit"
@@ -640,58 +686,44 @@ export function FormularioVenta({
         )}
 
         {pasoVisible === "vencida" && vencida && (
-          <div className="flex flex-col gap-4" data-testid="paso-condicional-vencida">
-            <BotonVolverPaso
-              onVolver={() => {
-                irA("patente");
-              }}
-            />
-            <p className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-xl">
-              {`La condicional de “${vencida.servicio_nombre}” del ${formatearDia(vencida.fecha)} (certificado “${vencida.condicional_nombre}”) venció el ${formatearDia(vencida.vence)}. Lo pagado (${formatearMoneda(vencida.pagado)}) queda registrado en la patente, pero ya no cuenta para la vuelta.`}
-            </p>
-            {certificadoCondicionalVencida.isError && (
-              <p className="text-base text-destructive">
-                {`No se pudo revisar el certificado condicional: ${mensajeDeError(certificadoCondicionalVencida.error)}`}
-              </p>
-            )}
-            {servicioVencida?.requiere_certificado && certificadoCondicionalVencida.isPending ? (
-              <p className="text-2xl text-muted-foreground">
-                Revisando el certificado condicional…
-              </p>
-            ) : (
-              <ListaOpciones
-                key="vencida"
-                titulo="La condicional venció"
-                opciones={[
-                  ...(vendible(vencida.servicio_id) && certificadoCondicionalVencida.data
-                    ? [{ valor: NUEVA_CONDICIONAL, etiqueta: "Generar otra condicional" }]
-                    : []),
-                  ...(vendible(vencida.servicio_id)
-                    ? [
-                        {
-                          valor: APROBO_COMPLETO,
-                          etiqueta: `Aprobó: cobrar ${vencida.servicio_nombre} completo`,
-                        },
-                      ]
-                    : []),
-                  { valor: OTRA_VENTA, etiqueta: "Es otra venta" },
-                ]}
-                onElegir={(valor) => {
-                  if (valor === NUEVA_CONDICIONAL || valor === APROBO_COMPLETO) {
-                    elegirServicio(vencida.servicio_id);
-                    // Después de elegirServicio (que lo reinicia al cambiar de servicio).
-                    setCondicional(valor === NUEVA_CONDICIONAL);
-                    irA("descuento");
-                  } else {
-                    irA("categoria");
-                  }
-                }}
-                onVolver={() => {
-                  irA("patente");
-                }}
-              />
-            )}
-          </div>
+          <DialogoCondicionalVencida
+            vencida={vencida}
+            patente={patente}
+            vendible={vendible(vencida.servicio_id)}
+            ofrecerNueva={Boolean(certificadoCondicionalVencida.data)}
+            revisando={
+              servicioVencida?.requiere_certificado === true &&
+              certificadoCondicionalVencida.isPending
+            }
+            aviso={
+              certificadoCondicionalVencida.isError && (
+                <p className="text-base text-destructive">
+                  {`No se pudo revisar el certificado condicional: ${mensajeDeError(certificadoCondicionalVencida.error)}`}
+                </p>
+              )
+            }
+            onElegir={(opcion) => {
+              if (opcion === "otra") {
+                setVueltaVencida(false);
+                irA("categoria");
+                return;
+              }
+              elegirServicio(vencida.servicio_id);
+              if (opcion === "continuar") {
+                // Vuelta fuera de plazo: cobra lo que faltaba con el certificado de siempre.
+                setVueltaVencida(true);
+                irAlCobroDeVuelta(vencida.saldo, "vencida");
+                return;
+              }
+              setVueltaVencida(false);
+              // Después de elegirServicio (que lo reinicia al cambiar de servicio).
+              setCondicional(opcion === "nueva");
+              irA("descuento");
+            }}
+            onVolver={() => {
+              irA("patente");
+            }}
+          />
         )}
 
         {pasoVisible === "categoria" && (
@@ -956,6 +988,21 @@ export function FormularioVenta({
         )}
 
         <ErrorFormulario mensaje={errorServidor} />
+        {repetida && pasoVisible === "patente" && (
+          <DialogoPatenteRepetida
+            patente={patente}
+            ventas={repetida.ventas}
+            onContinuar={() => {
+              const { siguiente } = repetida;
+              setRepetida(null);
+              irA(siguiente);
+            }}
+            onCancelar={() => {
+              setRepetida(null);
+              setCondicionales([]);
+            }}
+          />
+        )}
       </section>
 
       <aside className="flex flex-col gap-4">
@@ -983,9 +1030,7 @@ export function FormularioVenta({
                 </dd>
                 {vuelta && (
                   <dd className="text-lg text-muted-foreground" data-testid="vuelta-en-curso">
-                    {vuelta.saldo > 0
-                      ? "Vuelta de condicional: el 50% que faltaba"
-                      : "Vuelta de condicional: sin cargo"}
+                    {`Vuelta de condicional${esVueltaVencida ? " fuera de plazo" : ""}: ${vuelta.saldo > 0 ? "el 50% que faltaba" : "sin cargo"}`}
                   </dd>
                 )}
                 {alMitad && (

@@ -1,7 +1,7 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DialogoAnularVenta } from "@/modulos/ventas/componentes/DialogoAnularVenta";
+import { DialogoAnularVenta } from "@/modulos/caja/componentes/DialogoAnularVenta";
 import { renderConQuery } from "@tests/soporte/render";
 import {
   argumentosDe,
@@ -10,7 +10,7 @@ import {
   responder,
   responderRpc,
 } from "@tests/soporte/supabase-falso";
-import { ventaDePrueba } from "./datos";
+import { ventaDePrueba } from "../ventas/datos";
 
 vi.mock("@/compartido/lib/supabase", async () => ({
   supabase: (await import("@tests/soporte/supabase-falso")).supabaseFalso,
@@ -122,6 +122,31 @@ describe("DialogoAnularVenta", () => {
     });
     expect(argumentosDe("comprobantes", "select", "eq")).toEqual(["venta_id", 81]);
     expect(onCerrar).toHaveBeenCalled();
+  });
+
+  it("anulada por el cajero: no emite la nota de crédito (queda pendiente para el admin)", async () => {
+    responderRpc("anular_venta", { data: { id: 81, anulada: true } });
+    const onCerrar = vi.fn();
+    renderConQuery(
+      <DialogoAnularVenta
+        venta={venta()}
+        onCerrar={onCerrar}
+        emitirNotaDeCredito={false}
+        facturada
+      />,
+    );
+    expect(
+      screen.getByText(
+        /Está facturada: la nota de crédito queda pendiente y la emite el administrador/,
+      ),
+    ).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("Motivo"), "Cobro duplicado");
+    await userEvent.click(screen.getByRole("button", { name: "Anular venta" }));
+    await waitFor(() => {
+      expect(onCerrar).toHaveBeenCalled();
+    });
+    expect(argumentosDe("comprobantes", "select")).toBeUndefined();
+    expect(invocarFuncion).not.toHaveBeenCalled();
   });
 
   it("sin factura autorizada no llama a ARCA", async () => {

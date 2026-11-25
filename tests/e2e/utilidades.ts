@@ -1,4 +1,13 @@
+import { execSync } from "node:child_process";
 import { expect, type Locator, type Page } from "@playwright/test";
+
+/**
+ * SQL de preparación contra la BD **local** (la CLI de Supabase, como postgres), para lo que la app no
+ * puede hacer en un test: ej. dejar vencida una condicional sin esperar sus días. Nunca la nube.
+ */
+export function sqlLocal(sql: string) {
+  execSync(`npx supabase db query ${JSON.stringify(sql)}`, { stdio: ["ignore", "ignore", "pipe"] });
+}
 
 export const ADMIN = { email: "admin@vtv.local", password: "admin1234" };
 export const CAJERO = { email: "cajero@vtv.local", password: "cajero1234" };
@@ -148,12 +157,46 @@ export async function venderEnCaja(page: Page, venta: VentaEnCaja) {
   ).toBeVisible();
 }
 
-/** Paso 1: escribe la patente y Enter (la caja revisa si tiene una condicional). */
+/** Aviso de patente repetida: la patente ya tiene ventas (migración 45). */
+export function dialogoPatenteRepetida(page: Page) {
+  return page.getByTestId("dialogo-patente-repetida");
+}
+
+/**
+ * Paso 1: escribe la patente y Enter (la caja revisa si ya tiene ventas o una condicional). Si la
+ * patente ya tiene ventas aparece el aviso de patente repetida y el cajero sigue con la venta (Enter,
+ * "Continuar con la venta"); para revisar el aviso, `escribirPatenteRepetida`.
+ */
 export async function escribirPatente(page: Page, patente: string) {
   await page.getByRole("tab", { name: "Ventas" }).click();
   const campoPatente = page.getByLabel("1. Patente");
   await campoPatente.fill(patente);
   await campoPatente.press("Enter");
+  // Lo que puede venir después de la patente: el aviso o directamente el paso siguiente (o el error).
+  const aviso = dialogoPatenteRepetida(page);
+  await expect(
+    aviso
+      .or(page.getByRole("listbox", { name: "2. Categoría" }))
+      .or(page.getByTestId("paso-condicional"))
+      .or(page.getByTestId("paso-condicional-vencida"))
+      .or(page.locator("#venta-patente-error")),
+  ).toBeVisible();
+  if (await aviso.isVisible()) {
+    await expect(aviso.getByRole("button", { name: "Continuar con la venta" })).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(aviso).toBeHidden();
+  }
+}
+
+/** Paso 1 con una patente que ya tiene ventas: deja el aviso abierto y lo devuelve. */
+export async function escribirPatenteRepetida(page: Page, patente: string) {
+  await page.getByRole("tab", { name: "Ventas" }).click();
+  const campoPatente = page.getByLabel("1. Patente");
+  await campoPatente.fill(patente);
+  await campoPatente.press("Enter");
+  const aviso = dialogoPatenteRepetida(page);
+  await expect(aviso).toBeVisible();
+  return aviso;
 }
 
 /** Último paso: la patente en grande; Enter registra la venta. */

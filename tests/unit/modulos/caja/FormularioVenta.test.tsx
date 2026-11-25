@@ -112,6 +112,7 @@ beforeEach(() => {
   responderRpc("certificado_condicional_para_servicio", { data: null });
   responderRpc("descuentos_para_servicio", { data: [] });
   responderRpc("condicionales_de_patente", { data: [] });
+  responderRpc("ventas_anteriores_de_patente", { data: [] });
 });
 
 /** El servicio tiene el certificado condicional "Hoja B" (30 días para volver). */
@@ -191,6 +192,7 @@ describe("FormularioVenta (caja por teclado)", () => {
     reiniciarSupabaseFalso();
     responderRpc("descuentos_para_servicio", { data: [] });
     responderRpc("condicionales_de_patente", { data: [] });
+    responderRpc("ventas_anteriores_de_patente", { data: [] });
     renderFormulario();
     await elegirServicioDeAutos("2");
     expect(screen.getByText("Este servicio no lleva certificado.")).toBeInTheDocument();
@@ -1378,7 +1380,7 @@ describe("FormularioVenta: vuelve de condicional", () => {
     expect(await screen.findByRole("listbox", { name: "3. Servicio · Autos" })).toBeInTheDocument();
   });
 
-  it("vencida: avisa que lo pagado queda en la patente y ofrece otra condicional o cobrar el servicio completo", async () => {
+  it("vencida: modal de que se pasó el límite; otra condicional o cobrar el servicio completo", async () => {
     conCertificadoCondicional();
     responderRpc("condicionales_de_patente", {
       data: [condicional({ vigente: false, vence: "2026-11-10" })],
@@ -1387,19 +1389,25 @@ describe("FormularioVenta: vuelve de condicional", () => {
     renderFormulario();
     await patenteConCondicional();
 
-    const paso = await screen.findByTestId("paso-condicional-vencida");
-    expect(normal(paso.textContent)).toContain(
-      "La condicional de “VTV auto” del 02/11/2026 (certificado “Hoja B”) venció el 10/11/2026. Lo pagado ($ 71.000,00) queda registrado en la patente, pero ya no cuenta para la vuelta.",
+    const dialogo = await screen.findByRole("dialog", {
+      name: "Se pasó el límite de días de la condicional",
+    });
+    expect(normal(dialogo.textContent)).toContain(
+      "La condicional de “VTV auto” de la patente AB123CD del 02/11/2026 (certificado “Hoja B”) venció el 10/11/2026. Pagó el total ($ 71.000,00): si continúa con el certificado, es sin cargo.",
     );
-    const lista = screen.getByRole("listbox", { name: "La condicional venció" });
+    const lista = await within(dialogo).findByRole("listbox", {
+      name: "¿Qué hacés con la condicional vencida?",
+    });
+    expect(lista).toHaveFocus();
     expect(opciones(lista)).toEqual([
-      "1Generar otra condicional",
-      "2Aprobó: cobrar VTV auto completo",
-      "3Es otra venta",
+      "1Continuar con el certificadoSin cargo",
+      "2Cobrar VTV auto completo",
+      "3Generar otra condicional",
+      "4Es otra venta",
     ]);
 
     // Otra condicional del mismo servicio: va directo a cuánto paga
-    await userEvent.keyboard("1{Enter}");
+    await userEvent.keyboard("3{Enter}");
     expect(
       await screen.findByRole("listbox", { name: "¿Cuánto paga? · VTV auto" }),
     ).toBeInTheDocument();
@@ -1416,7 +1424,7 @@ describe("FormularioVenta: vuelve de condicional", () => {
     await userEvent.keyboard("{Escape}");
     await screen.findByTestId("paso-condicional-vencida");
 
-    // Aprobó: el servicio completo con el certificado de siempre
+    // Cobrar completo: el servicio entero con el certificado de siempre
     await userEvent.keyboard("2{Enter}");
     await screen.findByRole("listbox", { name: "4. Medio de pago" });
     expect(normal(screen.getByTestId("precio").textContent)).toBe("$ 30.000,00");
@@ -1435,16 +1443,127 @@ describe("FormularioVenta: vuelve de condicional", () => {
     });
   });
 
+  it("vencida pagada completa: continuar con el certificado es la vuelta fuera de plazo, sin cargo", async () => {
+    responderRpc("condicionales_de_patente", {
+      data: [condicional({ vigente: false, vence: "2026-11-10" })],
+    });
+    responderRpc("registrar_venta", {
+      data: ventaRegistrada({ id: 93, precio: 0, precio_lista: 0, vuelta_de: 70 }),
+    });
+    renderFormulario();
+    await patenteConCondicional();
+    await screen.findByRole("listbox", { name: "¿Qué hacés con la condicional vencida?" });
+    await userEvent.keyboard("{Enter}");
+
+    const confirmacion = await screen.findByTestId("paso-confirmar");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(normal(confirmacion.textContent)).toContain("Cobra:$ 0,00");
+    expect(normal(confirmacion.textContent)).toContain("Medio:Sin cargo");
+    expect(normal(confirmacion.textContent)).toContain(
+      "Vuelta fuera de plazo de la condicional del 02/11/2026 (venció el 10/11/2026): sin cargo.",
+    );
+    expect(screen.getByTestId("vuelta-en-curso")).toHaveTextContent(
+      "Vuelta de condicional fuera de plazo: sin cargo",
+    );
+    // Esc vuelve al aviso de la vencida
+    await userEvent.keyboard("{Escape}");
+    await screen.findByRole("listbox", { name: "¿Qué hacés con la condicional vencida?" });
+    await userEvent.keyboard("1{Enter}");
+    await confirmar();
+    await waitFor(() => {
+      expect(argumentosRpc("registrar_venta")).toEqual({
+        p_turno_id: TURNO_ID,
+        p_servicio_id: 1,
+        p_medio_pago: "efectivo",
+        p_patente: "AB123CD",
+        p_precio_esperado: 0,
+        p_vuelta_vencida: 70,
+      });
+    });
+    expect(ultimoAviso(toast.success)).toBe(
+      "Venta N° 93: VTV auto · $ 0,00 (vuelta de condicional fuera de plazo)",
+    );
+  });
+
+  it("vencida al 50%: continuar cobra lo que faltaba con el medio que elija", async () => {
+    responderRpc("condicionales_de_patente", {
+      data: [condicional({ vigente: false, vence: "2026-11-10", pagado: 35500, saldo: 35500 })],
+    });
+    responderRpc("registrar_venta", {
+      data: ventaRegistrada({ id: 94, precio: 35500, precio_lista: 35500, vuelta_de: 70 }),
+    });
+    renderFormulario();
+    await patenteConCondicional();
+    const dialogo = await screen.findByRole("dialog");
+    expect(normal(dialogo.textContent)).toContain(
+      "Pagó $ 35.500,00 (50%): si continúa con el certificado, paga los $ 35.500,00 que faltan.",
+    );
+    expect(
+      opciones(
+        await screen.findByRole("listbox", { name: "¿Qué hacés con la condicional vencida?" }),
+      )[0],
+    ).toBe("1Continuar con el certificado$ 35.500,00");
+    await userEvent.keyboard("{Enter}");
+    await screen.findByRole("listbox", { name: "4. Medio de pago" });
+    expect(normal(screen.getByTestId("precio").textContent)).toBe("$ 35.500,00");
+    // Esc desde el medio vuelve al aviso
+    await userEvent.keyboard("{Escape}");
+    await screen.findByRole("listbox", { name: "¿Qué hacés con la condicional vencida?" });
+    await userEvent.keyboard("{Enter}");
+    await screen.findByRole("listbox", { name: "4. Medio de pago" });
+    await userEvent.keyboard("3{Enter}");
+    await confirmar();
+    await waitFor(() => {
+      expect(argumentosRpc("registrar_venta")).toEqual({
+        p_turno_id: TURNO_ID,
+        p_servicio_id: 1,
+        p_medio_pago: "tarjeta",
+        p_patente: "AB123CD",
+        p_precio_esperado: 35500,
+        p_vuelta_vencida: 70,
+      });
+    });
+  });
+
+  it("vencida: Esc vuelve a la patente; Es otra venta sigue con la categoría y no es vuelta", async () => {
+    responderRpc("condicionales_de_patente", {
+      data: [condicional({ vigente: false, vence: "2026-11-10" })],
+    });
+    renderFormulario();
+    await patenteConCondicional();
+    await screen.findByRole("listbox", { name: "¿Qué hacés con la condicional vencida?" });
+    await userEvent.keyboard("{Escape}");
+    expect(await screen.findByLabelText("1. Patente")).toHaveValue("AB123CD");
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    await screen.findByRole("listbox", { name: "¿Qué hacés con la condicional vencida?" });
+    await userEvent.keyboard("3{Enter}");
+    await screen.findByRole("listbox", { name: "2. Categoría" });
+    await userEvent.keyboard("{Enter}");
+    await screen.findByRole("listbox", { name: "3. Servicio · Autos" });
+    await userEvent.keyboard("1{Enter}");
+    await screen.findByRole("listbox", { name: "4. Medio de pago" });
+    expect(normal(screen.getByTestId("precio").textContent)).toBe("$ 30.000,00");
+    expect(screen.queryByTestId("vuelta-en-curso")).not.toBeInTheDocument();
+  });
+
   it("vencida sin certificado condicional en el servicio: no ofrece otra condicional", async () => {
     responderRpc("condicionales_de_patente", {
       data: [condicional({ vigente: false, vence: "2026-11-10" })],
     });
     renderFormulario();
     await patenteConCondicional();
-    await screen.findByTestId("paso-condicional-vencida");
-    expect(opciones(await screen.findByRole("listbox", { name: "La condicional venció" }))).toEqual(
-      ["1Aprobó: cobrar VTV auto completo", "2Es otra venta"],
-    );
+    expect(
+      opciones(
+        await screen.findByRole("listbox", { name: "¿Qué hacés con la condicional vencida?" }),
+      ),
+    ).toEqual([
+      "1Continuar con el certificadoSin cargo",
+      "2Cobrar VTV auto completo",
+      "3Es otra venta",
+    ]);
   });
 
   it("si no se puede revisar la condicional, no avanza y lo dice", async () => {
@@ -1471,5 +1590,128 @@ describe("FormularioVenta: vuelve de condicional", () => {
     await confirmar();
     expect(await screen.findByLabelText("1. Patente")).toHaveValue("AB123CD");
     expect(screen.getByRole("alert")).toHaveTextContent(mensaje);
+  });
+});
+
+/** Venta anterior de la patente, como la devuelve `ventas_anteriores_de_patente`. */
+const ventaAnterior = (cambios: Record<string, unknown> = {}) => ({
+  venta_id: 40,
+  fecha: "2026-03-15",
+  servicio_nombre: "VTV auto",
+  certificado_nombre: "Hoja E",
+  condicional: false,
+  vuelta: false,
+  ...cambios,
+});
+
+describe("FormularioVenta: patente repetida", () => {
+  it("avisa con la fecha, el servicio y el certificado de cada venta; Continuar sigue como siempre", async () => {
+    responderRpc("ventas_anteriores_de_patente", {
+      data: [
+        ventaAnterior(),
+        ventaAnterior({
+          venta_id: 30,
+          fecha: "2025-11-02",
+          certificado_nombre: "Hoja B",
+          condicional: true,
+        }),
+        ventaAnterior({ venta_id: 10, fecha: "2024-05-20", certificado_nombre: null }),
+      ],
+    });
+    renderFormulario();
+    await screen.findByLabelText("1. Patente");
+    await userEvent.keyboard("ab123cd{Enter}");
+
+    const dialogo = await screen.findByRole("dialog", {
+      name: "La patente AB123CD ya tiene 3 ventas",
+    });
+    expect(argumentosRpc("ventas_anteriores_de_patente")).toEqual({ p_patente: "AB123CD" });
+    const filas = within(dialogo)
+      .getAllByRole("row")
+      .slice(1)
+      .map((f) => normal(f.textContent));
+    expect(filas).toEqual([
+      "15/03/2026VTV autoHoja E",
+      "02/11/2025VTV autoHoja B (condicional)",
+      "20/05/2024VTV autoSin certificado",
+    ]);
+    expect(screen.queryByRole("listbox", { name: "2. Categoría" })).not.toBeInTheDocument();
+    expect(within(dialogo).getByRole("button", { name: "Continuar con la venta" })).toHaveFocus();
+
+    // Enter continúa: lo mismo que pasa después de la patente
+    await userEvent.keyboard("{Enter}");
+    expect(await screen.findByRole("listbox", { name: "2. Categoría" })).toHaveFocus();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("una sola venta: lo dice en singular y marca la vuelta de condicional", async () => {
+    responderRpc("ventas_anteriores_de_patente", {
+      data: [ventaAnterior({ vuelta: true })],
+    });
+    renderFormulario();
+    await screen.findByLabelText("1. Patente");
+    await userEvent.keyboard("AB123CD{Enter}");
+    const dialogo = await screen.findByRole("dialog", {
+      name: "La patente AB123CD ya tiene una venta",
+    });
+    expect(dialogo).toHaveTextContent("Hoja E (vuelta de condicional)");
+  });
+
+  it("Esc o Cancelar vuelve a la patente sin seguir", async () => {
+    responderRpc("ventas_anteriores_de_patente", { data: [ventaAnterior()] });
+    renderFormulario();
+    await screen.findByLabelText("1. Patente");
+    await userEvent.keyboard("AB123CD{Enter}");
+    await screen.findByRole("dialog");
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(screen.getByLabelText("1. Patente")).toHaveValue("AB123CD");
+    expect(screen.queryByRole("listbox", { name: "2. Categoría" })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    const dialogo = await screen.findByRole("dialog");
+    await userEvent.click(within(dialogo).getByRole("button", { name: "Cancelar" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(screen.getByLabelText("1. Patente")).toHaveValue("AB123CD");
+  });
+
+  it("con una condicional vigente, al continuar muestra la vuelta como siempre", async () => {
+    responderRpc("ventas_anteriores_de_patente", {
+      data: [ventaAnterior({ venta_id: 70, certificado_nombre: "Hoja B", condicional: true })],
+    });
+    responderRpc("condicionales_de_patente", { data: [condicional()] });
+    renderFormulario();
+    await patenteConCondicional();
+    const dialogo = await screen.findByRole("dialog");
+    expect(screen.queryByTestId("paso-condicional")).not.toBeInTheDocument();
+    await userEvent.click(within(dialogo).getByRole("button", { name: "Continuar con la venta" }));
+    expect(await screen.findByTestId("paso-condicional")).toBeInTheDocument();
+    expect(screen.getByRole("listbox", { name: "Vuelve de condicional" })).toHaveFocus();
+  });
+
+  it("sin ventas anteriores no muestra el aviso", async () => {
+    renderFormulario();
+    await screen.findByLabelText("1. Patente");
+    await userEvent.keyboard("AA111AA{Enter}");
+    await screen.findByRole("listbox", { name: "2. Categoría" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("si no se pueden revisar las ventas anteriores, no avanza y lo dice", async () => {
+    responderRpc("ventas_anteriores_de_patente", {
+      error: { code: "P0001", message: "Tu usuario está desactivado" },
+    });
+    renderFormulario();
+    await screen.findByLabelText("1. Patente");
+    await userEvent.keyboard("AB123CD{Enter}");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "No se pudieron revisar las ventas anteriores de la patente: Tu usuario está desactivado",
+    );
+    expect(screen.queryByRole("listbox", { name: "2. Categoría" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

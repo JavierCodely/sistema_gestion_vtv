@@ -16,10 +16,10 @@ import {
   DialogTitle,
 } from "@/compartido/ui/dialog";
 import { Input } from "@/compartido/ui/input";
-import { useAnularVenta, type Venta } from "@/modulos/caja/api/consultas";
-import { detallePagos, parteEnEfectivo } from "@/modulos/caja/lib/pagos";
 import { useEmitirNotaDeCredito } from "@/modulos/facturacion/api/consultas";
 import { nombreComprobante, numeroComprobante } from "@/modulos/facturacion/lib/formato";
+import { useAnularVenta, type Venta } from "../api/consultas";
+import { detallePagos, parteEnEfectivo } from "../lib/pagos";
 
 /** De dónde sale el efectivo al anular: todo el monto, o solo la parte en efectivo de un pago mixto. */
 function avisoEfectivo(venta: Venta): string | null {
@@ -36,10 +36,24 @@ function avisoEfectivo(venta: Venta): string | null {
 }
 
 /**
- * Anula una venta (solo admin). La hoja no vuelve al stock; el efectivo sale del turno abierto o de la
- * caja de cambio (siempre de la caja de cambio en una venta con fecha pasada, que no tiene turno).
+ * Anula una venta con motivo (queda quién, cuándo y por qué). El admin, cualquiera; el cajero, solo
+ * las suyas de un turno abierto (lo controla la RPC, migración 47). La hoja no vuelve al stock; el
+ * efectivo sale del turno abierto o de la caja de cambio (siempre de la caja de cambio en una venta con
+ * fecha pasada, que no tiene turno). Si estaba facturada, el admin emite la nota de crédito en el
+ * momento; anulada por el cajero (`emitirNotaDeCredito` false), queda pendiente para el admin.
  */
-export function DialogoAnularVenta({ venta, onCerrar }: { venta: Venta; onCerrar: () => void }) {
+export function DialogoAnularVenta({
+  venta,
+  onCerrar,
+  emitirNotaDeCredito = true,
+  facturada = false,
+}: {
+  venta: Venta;
+  onCerrar: () => void;
+  emitirNotaDeCredito?: boolean;
+  /** Tiene factura autorizada (solo para avisarle al cajero que la nota de crédito queda pendiente). */
+  facturada?: boolean;
+}) {
   const anular = useAnularVenta();
   const emitirNota = useEmitirNotaDeCredito();
   const [motivo, setMotivo] = useState("");
@@ -57,6 +71,13 @@ export function DialogoAnularVenta({ venta, onCerrar }: { venta: Venta; onCerrar
       toast.success(`Venta N° ${String(venta.id)} anulada`);
     } catch (e) {
       setErrorServidor(mensajeDeError(e));
+      return;
+    }
+    if (!emitirNotaDeCredito) {
+      if (facturada) {
+        toast.info("La nota de crédito quedó pendiente: la emite el administrador.");
+      }
+      onCerrar();
       return;
     }
     // Si estaba facturada, la BD dejó la nota de crédito pendiente: se emite ya. Si ARCA falla,
@@ -95,6 +116,9 @@ export function DialogoAnularVenta({ venta, onCerrar }: { venta: Venta; onCerrar
             {venta.servicio_nombre} · {formatearMoneda(venta.precio)}. Deja de sumar en los totales
             y la hoja de certificado no vuelve al stock.
             {avisoEfectivo(venta)}
+            {!emitirNotaDeCredito &&
+              facturada &&
+              " Está facturada: la nota de crédito queda pendiente y la emite el administrador."}
           </DialogDescription>
         </DialogHeader>
         <form className="flex flex-col gap-4" onSubmit={(e) => void enviar(e)} noValidate>

@@ -6,8 +6,10 @@ import {
   cobrarYConfirmar,
   confirmarVenta,
   escribirPatente,
+  escribirPatenteRepetida,
   ingresar,
   ingresarEfectivo,
+  sqlLocal,
   trabajarEnCaja,
   unico,
   venderEnCaja,
@@ -75,6 +77,7 @@ test("condicional con certificado B: total o 50%; al volver, el servicio cobra l
   const hojaCondicional = `Hoja B ${sufijo}`;
   const patente = `C${sufijo.slice(-7)}`;
   const patenteMitad = `M${sufijo.slice(-7)}`;
+  const patenteVencida = `V${sufijo.slice(-7)}`;
 
   await ingresar(page, ADMIN);
   await expect(page).toHaveURL("/admin");
@@ -122,8 +125,20 @@ test("condicional con certificado B: total o 50%; al volver, el servicio cobra l
     ),
   ).toBeVisible();
 
-  // 2) Vuelve y aprueba: la caja lo detecta con la patente (primer paso) y es sin cargo
-  await escribirPatente(page, patente.toLowerCase());
+  // 2) Vuelve y aprueba: la patente ya tiene una venta (aviso con la fecha, el servicio y el
+  // certificado); Esc vuelve a la patente; al continuar, la caja detecta la condicional y es sin cargo
+  let aviso = await escribirPatenteRepetida(page, patente.toLowerCase());
+  await expect(aviso).toContainText(`La patente ${patente} ya tiene una venta`);
+  const filaAviso = aviso.getByRole("row").filter({ hasText: servicio });
+  await expect(filaAviso).toHaveCount(1);
+  await expect(filaAviso).toContainText(`${hojaCondicional} (condicional)`);
+  await expect(filaAviso).toContainText(/\d{2}\/\d{2}\/\d{4}/);
+  await page.keyboard.press("Escape");
+  await expect(aviso).toBeHidden();
+  await expect(page.getByLabel("1. Patente")).toHaveValue(patente);
+  await expect(page.getByTestId("paso-condicional")).toBeHidden();
+  aviso = await escribirPatenteRepetida(page, patente);
+  await aviso.getByRole("button", { name: "Continuar con la venta" }).click();
   const vuelta = page.getByTestId("paso-condicional");
   await expect(vuelta).toContainText(`“${servicio}”`);
   await expect(vuelta).toContainText(`certificado “${hojaCondicional}”`);
@@ -181,23 +196,76 @@ test("condicional con certificado B: total o 50%; al volver, el servicio cobra l
     ),
   ).toBeVisible();
 
+  // 5) Condicional vencida: el modal avisa que se pasó el límite de días; continuar con el
+  // certificado es la vuelta fuera de plazo, sin cargo (pagó el total), con la hoja E
+  await venderEnCaja(page, {
+    categoria,
+    servicio,
+    medio: "Tarjeta",
+    patente: patenteVencida,
+    certificado: "condicional",
+    pagoCondicional: "Total",
+  });
+  sqlLocal(
+    `update public.ventas set condicional_vence = public.fecha_local(now()) - 1 where patente = '${patenteVencida}'`,
+  );
+  await escribirPatente(page, patenteVencida);
+  const vencida = page.getByRole("dialog", {
+    name: "Se pasó el límite de días de la condicional",
+  });
+  await expect(vencida).toContainText(`certificado “${hojaCondicional}”`);
+  await expect(vencida).toContainText("si continúa con el certificado, es sin cargo.");
+  const opcionesVencida = vencida.getByRole("listbox", {
+    name: "¿Qué hacés con la condicional vencida?",
+  });
+  await expect(opcionesVencida).toBeFocused();
+  await expect(opcionesVencida.getByRole("option")).toHaveText([
+    /^1Continuar con el certificadoSin cargo$/,
+    new RegExp(`^2Cobrar ${servicio} completo$`),
+    /^3Generar otra condicional$/,
+    /^4Es otra venta$/,
+  ]);
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("vuelta-en-curso")).toHaveText(
+    "Vuelta de condicional fuera de plazo: sin cargo",
+  );
+  await expect(page.getByTestId("paso-confirmar")).toContainText("Vuelta fuera de plazo");
+  await confirmarVenta(page, patenteVencida);
+  await expect(
+    page.getByText(
+      new RegExp(
+        `^Venta N° \\d+: ${servicio} · \\$\\s?0,00 \\(vuelta de condicional fuera de plazo\\)$`,
+      ),
+    ),
+  ).toBeVisible();
+
   // El historial de la caja marca la condicional y la vuelta
   await page.getByRole("tab", { name: "Historial" }).click();
   const historial = page.getByRole("region", { name: "Ventas de la caja" });
   await expect(historial.getByText("Vuelta de condicional").first()).toBeVisible();
+  await expect(historial.getByText("Vuelta de condicional fuera de plazo")).toBeVisible();
   await expect(
     historial.getByText(/^Condicional hasta \d{2}\/\d{2}\/\d{4}$/).first(),
   ).toBeVisible();
   await expect(historial.getByText(/^Al 50%: al volver paga \$\s?35\.500,00$/)).toBeVisible();
+  // El certificado entregado en cada venta: la B marcada como condicional, la E en las vueltas
+  const filaCondicional = historial
+    .getByRole("row")
+    .filter({ hasText: /Condicional hasta/ })
+    .first();
+  await expect(filaCondicional).toContainText(`${hojaCondicional}Condicional`);
+  await expect(
+    historial.getByRole("row").filter({ hasText: "Vuelta de condicional" }).first(),
+  ).toContainText(hojaAprobado);
 
   // Stock: las condicionales descontaron la B; las vueltas y la venta común, la E
   await page.goto("/admin/certificados");
   await expect(
     page.getByTestId(`certificado-${hojaCondicional}`).locator('[data-columna="stock"]'),
-  ).toHaveText("8");
+  ).toHaveText("7");
   await expect(
     page.getByTestId(`certificado-${hojaAprobado}`).locator('[data-columna="stock"]'),
-  ).toHaveText("7");
+  ).toHaveText("6");
 
   // Búsqueda por patente: las tres ventas con servicio y certificado entregado
   await page.getByRole("navigation").getByRole("link", { name: "Patentes" }).click();

@@ -35,6 +35,7 @@ const VENTA = {
   precioEsperado: 30000,
   condicional: false,
   condicionalMitad: false,
+  vueltaVencida: null,
 };
 
 beforeEach(() => {

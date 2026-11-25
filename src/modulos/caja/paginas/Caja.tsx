@@ -1,10 +1,13 @@
-import { History, ShoppingCart, Wallet } from "lucide-react";
+import { Ban, History, Search, ShoppingCart, Wallet } from "lucide-react";
 import { useState } from "react";
 import { Cargando } from "@/compartido/componentes/Cargando";
 import { mensajeDeError } from "@/compartido/lib/errores";
-import { formatearFechaHora } from "@/compartido/lib/formato";
+import { formatearFechaHora, formatearMoneda } from "@/compartido/lib/formato";
+import { LARGO_MAXIMO_PATENTE } from "@/compartido/lib/validaciones";
 import { Alert, AlertDescription } from "@/compartido/ui/alert";
 import { Button } from "@/compartido/ui/button";
+import { Input } from "@/compartido/ui/input";
+import { Label } from "@/compartido/ui/label";
 import { useAuth } from "@/modulos/auth/contexto";
 import { useComprobantesDeTurno } from "@/modulos/facturacion/api/consultas";
 import { FacturaDeVenta } from "@/modulos/facturacion/componentes/FacturaDeVenta";
@@ -12,12 +15,20 @@ import { useGastosDeTurno } from "@/modulos/gastos/api/consultas";
 import { DialogoGasto } from "@/modulos/gastos/componentes/DialogoGasto";
 import { TablaGastos } from "@/modulos/gastos/componentes/TablaGastos";
 import { useCategorias, useServicios } from "@/modulos/servicios/api/consultas";
-import { useCajasAbiertas, useVentasDeTurno, type CajaAbierta } from "../api/consultas";
+import {
+  useCajasAbiertas,
+  useEfectivoEnCaja,
+  useVentasDeTurno,
+  type CajaAbierta,
+  type Venta,
+} from "../api/consultas";
+import { DialogoAnularVenta } from "../componentes/DialogoAnularVenta";
 import { ElegirCaja } from "../componentes/ElegirCaja";
 import { FormularioVenta } from "../componentes/FormularioVenta";
 import { SelectorCaja } from "../componentes/SelectorCaja";
 import { SinCajasAbiertas } from "../componentes/SinCajasAbiertas";
 import { TablaVentas } from "../componentes/TablaVentas";
+import { filtrarPorPatente, MINIMO_BUSQUEDA_PATENTE, patenteABuscar } from "../lib/buscar-patente";
 import {
   aEleccion,
   cajaInicial,
@@ -47,12 +58,14 @@ function CajaDeTrabajo({
   caja,
   cajas,
   esAdmin,
+  usuarioId,
   onCambiarCaja,
   onTurnoNoDisponible,
 }: {
   caja: CajaAbierta;
   cajas: readonly CajaAbierta[];
   esAdmin: boolean;
+  usuarioId: string;
   onCambiarCaja: (caja: CajaAbierta) => void;
   onTurnoNoDisponible: (mensaje: string) => void;
 }) {
@@ -103,7 +116,9 @@ function CajaDeTrabajo({
         {vista === "ventas" && (
           <PanelVentas key={caja.id} turnoId={caja.id} onTurnoNoDisponible={onTurnoNoDisponible} />
         )}
-        {vista === "historial" && <PanelHistorial turnoId={caja.id} />}
+        {vista === "historial" && (
+          <PanelHistorial key={caja.id} turnoId={caja.id} esAdmin={esAdmin} usuarioId={usuarioId} />
+        )}
         {vista === "gastos" && (
           <PanelGastos key={caja.id} turnoId={caja.id} caja={caja.caja_nombre} esAdmin={esAdmin} />
         )}
@@ -135,14 +150,90 @@ function PanelVentas({
   );
 }
 
-function PanelHistorial({ turnoId }: { turnoId: number }) {
+/**
+ * Efectivo del cajón de la caja donde se trabaja (decisión 2026-11-24, migración 47): es el único
+ * total que ve el cajero; los totales por medio siguen siendo del admin.
+ */
+function EfectivoEnCaja({ turnoId }: { turnoId: number }) {
+  const efectivo = useEfectivoEnCaja(turnoId);
+  return (
+    <div
+      className="flex flex-col gap-1 rounded-md border bg-muted/40 px-5 py-3"
+      data-testid="efectivo-en-caja"
+    >
+      <span className="text-base text-muted-foreground">Efectivo en caja</span>
+      {efectivo.isPending ? (
+        <span className="text-xl text-muted-foreground">Cargando…</span>
+      ) : efectivo.isError ? (
+        <span className="text-base text-destructive">{mensajeDeError(efectivo.error)}</span>
+      ) : (
+        <span className="text-3xl font-bold tabular-nums">{formatearMoneda(efectivo.data)}</span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Historial de la caja: efectivo en caja, búsqueda por patente (desde 3 caracteres, solo las ventas de
+ * este turno) y las ventas con factura y "Anular". El cajero anula solo las suyas (la BD lo controla);
+ * el admin, cualquiera.
+ */
+function PanelHistorial({
+  turnoId,
+  esAdmin,
+  usuarioId,
+}: {
+  turnoId: number;
+  esAdmin: boolean;
+  usuarioId: string;
+}) {
   const ventas = useVentasDeTurno(turnoId);
   const comprobantes = useComprobantesDeTurno(turnoId);
+  const [busqueda, setBusqueda] = useState("");
+  const [anulando, setAnulando] = useState<Venta | null>(null);
+  const patente = patenteABuscar(busqueda);
+
+  const facturada = (venta: Venta) =>
+    comprobantes.data?.some(
+      (c) => c.venta_id === venta.id && c.tipo === "factura" && c.estado === "autorizado",
+    ) ?? false;
+
   return (
     <section aria-labelledby="titulo-ventas" className="flex min-w-0 flex-col gap-3">
-      <h2 id="titulo-ventas" className="text-2xl font-semibold">
-        Ventas de la caja
-      </h2>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <h2 id="titulo-ventas" className="text-2xl font-semibold">
+          Ventas de la caja
+        </h2>
+        <EfectivoEnCaja turnoId={turnoId} />
+      </div>
+      <div className="flex max-w-md flex-col gap-1">
+        <Label htmlFor="buscar-patente" className="text-lg">
+          Buscar patente
+        </Label>
+        <div className="relative">
+          <Search
+            aria-hidden
+            className="absolute top-1/2 left-3 size-5 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            id="buscar-patente"
+            type="search"
+            autoComplete="off"
+            maxLength={LARGO_MAXIMO_PATENTE + 2}
+            className="h-12 pl-10 text-xl uppercase"
+            placeholder="Ej. AB1"
+            aria-describedby="buscar-patente-ayuda"
+            value={busqueda}
+            onChange={(e) => {
+              setBusqueda(e.target.value);
+            }}
+          />
+        </div>
+        <p id="buscar-patente-ayuda" className="text-sm text-muted-foreground">
+          Desde {MINIMO_BUSQUEDA_PATENTE} caracteres se muestran las ventas de este turno con esa
+          patente.
+        </p>
+      </div>
       {ventas.isPending ? (
         <Cargando texto="Cargando ventas…" />
       ) : ventas.isError ? (
@@ -152,19 +243,50 @@ function PanelHistorial({ turnoId }: { turnoId: number }) {
           {comprobantes.isError && <MensajeError error={comprobantes.error} />}
           <div className="[&_table]:text-lg">
             <TablaVentas
-              ventas={ventas.data}
-              acciones={(venta) =>
-                comprobantes.data && (
-                  <FacturaDeVenta
-                    venta={venta}
-                    anulada={venta.anulada}
-                    comprobantes={comprobantes.data.filter((c) => c.venta_id === venta.id)}
-                  />
-                )
+              ventas={filtrarPorPatente(ventas.data, patente)}
+              vacio={
+                patente === null
+                  ? undefined
+                  : `No hay ventas en este turno con una patente que empiece con ${patente}.`
               }
+              acciones={(venta) => (
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {comprobantes.data && (
+                    <FacturaDeVenta
+                      venta={venta}
+                      anulada={venta.anulada}
+                      comprobantes={comprobantes.data.filter((c) => c.venta_id === venta.id)}
+                    />
+                  )}
+                  {!venta.anulada && (esAdmin || venta.usuario_id === usuarioId) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive"
+                      aria-label={`Anular venta N° ${String(venta.id)}`}
+                      onClick={() => {
+                        setAnulando(venta);
+                      }}
+                    >
+                      <Ban aria-hidden />
+                      Anular
+                    </Button>
+                  )}
+                </div>
+              )}
             />
           </div>
         </>
+      )}
+      {anulando && (
+        <DialogoAnularVenta
+          venta={anulando}
+          emitirNotaDeCredito={esAdmin}
+          facturada={facturada(anulando)}
+          onCerrar={() => {
+            setAnulando(null);
+          }}
+        />
       )}
     </section>
   );
@@ -280,6 +402,7 @@ export function Caja() {
         caja={estado.caja}
         cajas={cajas.data}
         esAdmin={esAdmin}
+        usuarioId={perfil.id}
         onCambiarCaja={elegir}
         onTurnoNoDisponible={(mensaje) => {
           setEleccion({ ...aEleccion(estado.caja), aviso: mensaje });

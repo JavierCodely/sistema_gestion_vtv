@@ -1,6 +1,6 @@
 begin;
 \ir _helpers.psql
-select plan(28);
+select plan(27);
 
 select * from pg_temp.escenario() \gset
 insert into certificados (todos_servicios, nombre, hojas_por_unidad, stock_minimo) values (true, 'Hoja VTV', 25, 10) returning id as cert \gset
@@ -89,9 +89,7 @@ select pg_temp.como(:'cajero');
 select throws_ok(format($$select registrar_venta(%s, %s, 'tarjeta', p_patente => $p$AB123CD$p$)$$, :turno, :sin_hoja),
   '22023', 'El servicio no existe o está desactivado', 'no se vende un servicio desactivado');
 
--- Anulación
-select throws_ok(format($$select anular_venta(%s, 'error')$$, :venta1),
-  '42501', null, 'un cajero no puede anular ventas');
+-- Anulación (lo que puede anular el cajero: 35_caja_efectivo_anular.sql)
 reset role;
 
 select pg_temp.como(:'admin');

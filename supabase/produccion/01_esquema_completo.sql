@@ -52,10 +52,14 @@
 --   42. 20261123000042_certificados_condicionales.sql
 --   43. 20261124000043_gastos_eliminar_corregir.sql
 --   44. 20261124000044_certificados_costo_unidad.sql
+--   45. 20261124000045_ventas_anteriores_patente.sql
+--   46. 20261124000046_condicional_vencida_vuelta.sql
+--   47. 20261124000047_caja_efectivo_anular.sql
+--   48. 20261124000048_condicional_vencida_estado.sql
 --
 -- Después de ejecutarlo, registrá las migraciones como aplicadas para que
 -- `supabase db push` no intente aplicarlas de nuevo:
---   npx supabase migration repair --status applied 20261119000001 20261119000002 20261119000003 20261119000004 20261119000005 20261119000006 20261119000007 20261119000008 20261119000009 20261119000010 20261119000011 20261119000012 20261119000013 20261120000014 20261120000015 20261120000016 20261120000017 20261120000018 20261120000019 20261120000020 20261120000021 20261120000022 20261120000023 20261120000024 20261120000025 20261121000026 20261121000027 20261121000028 20261121000029 20261122000030 20261122000031 20261122000032 20261122000033 20261122000034 20261123000035 20261123000036 20261123000037 20261123000038 20261123000039 20261123000040 20261123000041 20261123000042 20261124000043 20261124000044
+--   npx supabase migration repair --status applied 20261119000001 20261119000002 20261119000003 20261119000004 20261119000005 20261119000006 20261119000007 20261119000008 20261119000009 20261119000010 20261119000011 20261119000012 20261119000013 20261120000014 20261120000015 20261120000016 20261120000017 20261120000018 20261120000019 20261120000020 20261120000021 20261120000022 20261120000023 20261120000024 20261120000025 20261121000026 20261121000027 20261121000028 20261121000029 20261122000030 20261122000031 20261122000032 20261122000033 20261122000034 20261123000035 20261123000036 20261123000037 20261123000038 20261123000039 20261123000040 20261123000041 20261123000042 20261124000043 20261124000044 20261124000045 20261124000046 20261124000047 20261124000048
 -- =====================================================================
 
 begin;
@@ -11541,5 +11545,651 @@ $$;
 
 revoke all on function public.stock_certificados_valorizado() from public, anon;
 grant execute on function public.stock_certificados_valorizado() to authenticated;
+
+-- ---------------------------------------------------------------------
+-- 20261124000045_ventas_anteriores_patente.sql
+-- ---------------------------------------------------------------------
+-- Patente repetida en la caja (decisión del negocio, 2026-11-24).
+--
+-- Al pasar el paso de la patente, si el vehículo ya tiene ventas, la caja muestra un aviso con la
+-- fecha de cada venta, el servicio y el certificado que se entregó, y pregunta si se sigue con la
+-- venta. Si se sigue, el flujo es el mismo de siempre (condicional vigente o vencida, categoría…).
+--
+-- * `ventas_anteriores_de_patente(p_patente)`: para todos los usuarios activos (cajero incluido),
+--   ventas sin anular de la patente exacta (normalizada), de la más nueva a la más vieja, hasta 20.
+--   Solo fecha, servicio, certificado y si fue condicional o vuelta: **sin montos, sin medio, sin caja
+--   ni quién vendió y sin costos** (la búsqueda completa por patente sigue siendo del admin,
+--   `ventas_por_patente`). El cajero ve ventas de turnos ya cerrados solo en estos datos.
+-- * Las ventas con fecha pasada no llevan certificado: `certificado_nombre` NULL.
+
+create function public.ventas_anteriores_de_patente(p_patente text)
+returns table (
+  venta_id           bigint,
+  fecha              date,
+  servicio_nombre    text,
+  certificado_nombre text,
+  condicional        boolean,
+  vuelta             boolean
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_patente text := public._normalizar_patente(p_patente);
+begin
+  perform public._exigir_usuario();
+  if v_patente is null then
+    raise exception 'Ingresá la patente del vehículo' using errcode = '22023';
+  end if;
+  return query
+    select v.id, public.fecha_local(v.creado_en), v.servicio_nombre, c.nombre,
+           v.condicional_vence is not null, v.vuelta_de is not null
+    from public.ventas v
+    left join public.certificados c on c.id = v.certificado_id
+    where v.patente = v_patente
+      and not v.anulada
+    order by v.creado_en desc, v.id desc
+    limit 20;
+end;
+$$;
+
+revoke execute on function public.ventas_anteriores_de_patente(text) from public, anon;
+grant execute on function public.ventas_anteriores_de_patente(text) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- 20261124000046_condicional_vencida_vuelta.sql
+-- ---------------------------------------------------------------------
+-- Condicional vencida: vuelta fuera de plazo (decisiones del negocio, 2026-11-24).
+--
+-- Si la patente vuelve con una condicional **vencida** (pasaron los días del certificado), la caja
+-- avisa con un modal que se pasó el límite y deja elegir: continuar con el certificado (la vuelta
+-- fuera de plazo), cobrar el servicio completo, generar otra condicional o es otra venta.
+--
+-- * `registrar_venta(..., p_vuelta_vencida bigint)`: el id de la condicional vencida que se honra. La
+--   venta es su vuelta (`vuelta_de`) igual que dentro del plazo: cobra el saldo ($ 0 si se pagó entera;
+--   el 50% que faltaba si se pagó la mitad), sin descuento, con el certificado de siempre. Puede
+--   hacerlo cualquier usuario activo (cajero o admin); queda quién la hizo.
+-- * Tiene que ser una condicional de esa patente y ese servicio, sin anular y sin vuelta (si no, 22023
+--   o P0001). Si la patente tiene además una condicional **vigente** del servicio, la vuelta es esa
+--   (P0001 "…: registrá la vuelta", la caja vuelve a revisar la patente). No se combina con
+--   `p_condicional` (22023).
+-- * Sin `p_vuelta_vencida` nada cambia: vencida, se cobra entera (o se hace otra condicional).
+-- * Una sola vuelta por condicional (índice `ventas_una_vuelta_por_condicional`); anular la vuelta la
+--   libera, como siempre. Fuera de plazo se reconoce porque el día de la vuelta es posterior a
+--   `condicional_vence` de la condicional.
+
+drop function public.registrar_venta(bigint, bigint, public.medio_pago, text, jsonb, bigint, numeric, boolean, boolean);
+
+create function public.registrar_venta(
+  p_turno_id          bigint,
+  p_servicio_id       bigint,
+  p_medio_pago        public.medio_pago default null,
+  p_patente           text default null,
+  p_pagos             jsonb default null,
+  p_descuento_id      bigint default null,
+  p_precio_esperado   numeric default null,
+  p_condicional_mitad boolean default false,
+  p_condicional       boolean default false,
+  p_vuelta_vencida    bigint default null
+)
+returns public.ventas
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_turno       public.turnos;
+  v_servicio    public.servicios;
+  v_descuento   public.descuentos;
+  v_monto_desc  numeric(12,2) := 0;
+  v_precio      numeric(12,2);
+  v_lista       numeric(12,2);
+  v_saldo       numeric(12,2);
+  v_cert        public.certificados;
+  v_cert_id     bigint;
+  v_venta       public.ventas;
+  v_pagos       jsonb;
+  v_suma        numeric;
+  v_condicional public.ventas;
+  v_es_cond     boolean := coalesce(p_condicional, false);
+  v_mitad       boolean := coalesce(p_condicional_mitad, false);
+  v_cert_cond   public.certificados;
+  v_patente     text := public._normalizar_patente(p_patente);
+begin
+  perform public._exigir_usuario();
+
+  if p_medio_pago is not null and p_pagos is not null then
+    raise exception 'Elegí un medio de pago o un pago mixto, no los dos' using errcode = '22023';
+  end if;
+  if p_medio_pago is null and p_pagos is null then
+    raise exception 'Elegí un medio de pago' using errcode = '22023';
+  end if;
+  if p_pagos is not null then
+    v_pagos := public._validar_pagos_mixtos(p_pagos);
+  end if;
+  -- $ 0 exacto se acepta (servicio sin cargo o vuelta sin saldo); cualquier otro, un monto válido.
+  if p_precio_esperado is not null and p_precio_esperado <> 0 then
+    perform public._validar_monto(p_precio_esperado, 'El precio esperado');
+  end if;
+
+  -- for share: varias ventas a la vez en la misma caja; serializa con cerrar_turno.
+  v_turno := public._turno_para_trabajar(p_turno_id, false);
+
+  select * into v_servicio from public.servicios where id = p_servicio_id;
+  if v_servicio.id is null or not v_servicio.activo then
+    raise exception 'El servicio no existe o está desactivado' using errcode = '22023';
+  end if;
+  if not exists (select 1 from public.categorias_servicio
+                 where id = v_servicio.categoria_id and activa) then
+    raise exception 'La categoría de este servicio está desactivada' using errcode = '22023';
+  end if;
+
+  if v_mitad and not v_es_cond then
+    raise exception 'Solo una condicional se puede pagar al 50%%' using errcode = '22023';
+  end if;
+  if p_vuelta_vencida is not null and v_es_cond then
+    raise exception 'Una vuelta de condicional no es otra condicional: elegí una de las dos' using errcode = '22023';
+  end if;
+  if v_es_cond then
+    v_cert_id := public._certificado_para(v_servicio.id, true);
+    if v_cert_id is null then
+      raise exception 'El servicio "%" no tiene un certificado condicional: elegí el certificado de siempre',
+        v_servicio.nombre using errcode = '22023';
+    end if;
+    select * into v_cert_cond from public.certificados where id = v_cert_id;
+  end if;
+
+  -- ¿Tiene una condicional vigente y sin usar de este servicio? La más vieja (for update: dos ventas a
+  -- la vez de la misma condicional se serializan; el índice único es la garantía final).
+  if v_patente is not null then
+    select v.* into v_condicional
+    from public.ventas v
+    where v.patente = v_patente
+      and v.condicional_servicio_id = v_servicio.id
+      and not v.anulada
+      and v.condicional_vence >= public.fecha_local(now())
+      and not exists (select 1 from public.ventas r where r.vuelta_de = v.id and not r.anulada)
+    order by v.creado_en, v.id
+    limit 1
+    for update of v;
+  end if;
+
+  if p_vuelta_vencida is not null then
+    -- Con una vigente del servicio, la vuelta es esa (la caja no la vio): se revisa la patente.
+    if v_condicional.id is not null then
+      raise exception 'La patente % tiene una condicional vigente de "%" (del %): registrá la vuelta',
+        v_patente, v_servicio.nombre, to_char(public.fecha_local(v_condicional.creado_en), 'DD/MM/YYYY')
+        using errcode = 'P0001';
+    end if;
+    -- Vuelta fuera de plazo: la condicional vencida, sin anular y sin usar, de esta patente y servicio.
+    select v.* into v_condicional
+    from public.ventas v
+    where v.id = p_vuelta_vencida
+    for update of v;
+    if v_condicional.id is null
+       or v_condicional.patente is distinct from v_patente
+       or v_condicional.condicional_servicio_id is distinct from v_servicio.id then
+      raise exception 'La condicional elegida no es de la patente % y el servicio "%"', coalesce(v_patente, ''), v_servicio.nombre
+        using errcode = '22023';
+    end if;
+    if v_condicional.anulada then
+      raise exception 'La condicional elegida está anulada: revisá la patente' using errcode = 'P0001';
+    end if;
+    if exists (select 1 from public.ventas r where r.vuelta_de = v_condicional.id and not r.anulada) then
+      raise exception 'La condicional de la patente % ya se usó en otra venta: revisá el historial', v_patente
+        using errcode = 'P0001';
+    end if;
+  end if;
+
+  if v_condicional.id is not null and v_es_cond then
+    raise exception 'La patente % ya tiene una condicional vigente de "%" (del %): registrá la vuelta',
+      v_patente, v_servicio.nombre, to_char(public.fecha_local(v_condicional.creado_en), 'DD/MM/YYYY')
+      using errcode = 'P0001';
+  end if;
+
+  v_lista := v_servicio.precio;
+  v_precio := v_servicio.precio;
+
+  if v_mitad then
+    if p_descuento_id is not null then
+      raise exception 'Con un descuento la condicional se paga completa: no se puede pagar al 50%%'
+        using errcode = 'P0001';
+    end if;
+    if v_servicio.precio = 0 then
+      raise exception 'Un servicio sin cargo no se paga al 50%%' using errcode = '22023';
+    end if;
+  end if;
+
+  if v_condicional.id is not null then
+    -- Lo que faltaba de la condicional ($ 0 si la pagó completa).
+    v_lista := v_condicional.condicional_saldo;
+    v_precio := v_condicional.condicional_saldo;
+    if p_descuento_id is not null then
+      raise exception 'La patente % vuelve de la condicional del %: no lleva descuento',
+        v_patente, to_char(public.fecha_local(v_condicional.creado_en), 'DD/MM/YYYY')
+        using errcode = 'P0001';
+    end if;
+    if p_precio_esperado is not null and p_precio_esperado <> v_precio then
+      raise exception 'La patente % vuelve de la condicional del %: corresponde cobrar $ %. Revisá la venta.',
+        v_patente, to_char(public.fecha_local(v_condicional.creado_en), 'DD/MM/YYYY'), public._pesos(v_precio)
+        using errcode = 'P0001';
+    end if;
+  elsif v_mitad then
+    -- La mitad (redondeada a centavos) ahora; el resto queda como saldo para la vuelta.
+    v_precio := round(v_servicio.precio / 2, 2);
+    v_saldo := v_servicio.precio - v_precio;
+  elsif p_descuento_id is not null then
+    -- for share: la foto no se mezcla con una edición simultánea del descuento.
+    select * into v_descuento from public.descuentos where id = p_descuento_id for share;
+    if v_descuento.id is null or not v_descuento.activo then
+      raise exception 'El descuento no existe o está desactivado' using errcode = '22023';
+    end if;
+    if not exists (select 1 from public.descuento_servicios
+                   where descuento_id = v_descuento.id and servicio_id = v_servicio.id) then
+      raise exception 'El descuento "%" no está habilitado para "%"', v_descuento.nombre, v_servicio.nombre
+        using errcode = '22023';
+    end if;
+    v_monto_desc := public._monto_descuento(v_descuento.tipo, v_descuento.valor, v_servicio.precio);
+    v_precio := v_servicio.precio - v_monto_desc;
+    if v_monto_desc <= 0 then
+      raise exception 'El descuento "%" no descuenta nada sobre el precio de "%"', v_descuento.nombre, v_servicio.nombre
+        using errcode = 'P0001';
+    end if;
+    if v_precio <= 0 then
+      raise exception 'Con el descuento "%" el precio de "%" queda en $ %: tiene que ser mayor a cero',
+        v_descuento.nombre, v_servicio.nombre, public._pesos(greatest(v_precio, 0))
+        using errcode = 'P0001';
+    end if;
+  end if;
+
+  if p_precio_esperado is not null and p_precio_esperado <> v_precio then
+    raise exception 'El precio cambió: ahora es $ %. Revisá la venta.', public._pesos(v_precio)
+      using errcode = 'P0001';
+  end if;
+
+  if v_pagos is not null then
+    select sum((x ->> 'monto')::numeric) into v_suma from jsonb_array_elements(v_pagos) x;
+    if v_suma <> v_precio then
+      raise exception 'Las partes del pago suman $ % y el precio es $ %: tienen que coincidir',
+        public._pesos(v_suma), public._pesos(v_precio)
+        using errcode = '22023';
+    end if;
+  end if;
+
+  -- usuario_id = quien vende (no el turno: el turno es de la caja).
+  begin
+    insert into public.ventas
+      (turno_id, caja_id, usuario_id, servicio_id, servicio_nombre, categoria_id,
+       precio, medio_pago, patente,
+       precio_lista, monto_descuento, descuento_id, descuento_nombre, descuento_tipo, descuento_valor,
+       condicional_servicio_id, condicional_vence, condicional_saldo, vuelta_de)
+    values
+      (v_turno.id, v_turno.caja_id, auth.uid(), v_servicio.id, v_servicio.nombre, v_servicio.categoria_id,
+       v_precio, p_medio_pago, v_patente,
+       v_lista, v_monto_desc, v_descuento.id, v_descuento.nombre, v_descuento.tipo, v_descuento.valor,
+       case when v_es_cond then v_servicio.id end,
+       case when v_es_cond then public.fecha_local(now()) + v_cert_cond.dias_vuelta end,
+       case when v_es_cond then coalesce(v_saldo, 0) end,
+       v_condicional.id)
+    returning * into v_venta;
+  exception when unique_violation then
+    raise exception 'La condicional de la patente % ya se usó en otra venta: revisá el historial', v_patente
+      using errcode = 'P0001';
+  end;
+
+  if v_pagos is null then
+    insert into public.venta_pagos (venta_id, medio, monto)
+    values (v_venta.id, p_medio_pago, v_venta.precio);
+  else
+    insert into public.venta_pagos (venta_id, medio, monto)
+    select v_venta.id, (x ->> 'medio')::public.medio_pago, (x ->> 'monto')::numeric
+    from jsonb_array_elements(v_pagos) x;
+  end if;
+
+  if v_servicio.requiere_certificado then
+    -- La condicional entrega su certificado; el resto (la vuelta incluida), el de siempre.
+    if not v_es_cond then
+      v_cert_id := public._certificado_para(v_servicio.id, false);
+    end if;
+
+    if v_cert_id is not null then
+      select * into v_cert from public.certificados where id = v_cert_id for update;
+    end if;
+
+    if v_cert.id is not null and v_cert.stock_hojas > 0 then
+      update public.certificados set stock_hojas = stock_hojas - 1 where id = v_cert.id;
+
+      insert into public.movimientos_certificado
+        (certificado_id, tipo, hojas, costo_unitario, costo_total,
+         stock_resultante, costo_promedio_resultante, venta_id, usuario_id)
+      values
+        (v_cert.id, 'venta', -1, v_cert.costo_promedio, -round(v_cert.costo_promedio, 2),
+         v_cert.stock_hojas - 1, v_cert.costo_promedio, v_venta.id, auth.uid());
+
+      update public.ventas
+      set certificado_id = v_cert.id, costo_certificado = v_cert.costo_promedio
+      where id = v_venta.id
+      returning * into v_venta;
+
+      -- Aviso al cruzar el stock mínimo.
+      if v_cert.stock_hojas > v_cert.stock_minimo and v_cert.stock_hojas - 1 <= v_cert.stock_minimo then
+        insert into public.alertas (tipo, mensaje, certificado_id, venta_id)
+        values ('stock_bajo',
+                format('Stock bajo de "%s": quedan %s hojas (mínimo %s)',
+                       v_cert.nombre, v_cert.stock_hojas - 1, v_cert.stock_minimo),
+                v_cert.id, v_venta.id);
+      end if;
+    else
+      update public.ventas
+      set certificado_id = v_cert.id, sin_stock = true
+      where id = v_venta.id
+      returning * into v_venta;
+
+      insert into public.alertas (tipo, mensaje, certificado_id, venta_id)
+      values ('venta_sin_stock',
+              case when v_cert.id is null
+                then format('Venta #%s (%s) sin certificado: no hay un certificado configurado para este servicio',
+                            v_venta.id, v_servicio.nombre)
+                else format('Venta #%s (%s) sin certificado: no hay stock de "%s"',
+                            v_venta.id, v_servicio.nombre, v_cert.nombre)
+              end,
+              v_cert.id, v_venta.id);
+    end if;
+  end if;
+
+  -- La parte en efectivo queda en el cajón de la caja hasta el cierre del turno.
+  return v_venta;
+end;
+$$;
+
+grant execute on function public.registrar_venta(bigint, bigint, public.medio_pago, text, jsonb, bigint, numeric, boolean, boolean, bigint)
+  to authenticated;
+
+-- ---------------------------------------------------------------------
+-- 20261124000047_caja_efectivo_anular.sql
+-- ---------------------------------------------------------------------
+-- Caja del cajero: efectivo del cajón y anular sus ventas (decisiones del negocio, 2026-11-24).
+--
+-- * `efectivo_en_caja_de_turno(p_turno_id)`: cualquier usuario activo, de un turno **abierto**, ve el
+--   efectivo del cajón (efectivo inicial + parte en efectivo de las ventas − gastos en efectivo, sin
+--   anulados; `_efectivo_en_caja`). Es lo único de dinero del turno que ve el cajero: los totales por
+--   medio, las observaciones y la foto del cierre siguen siendo solo del admin (`turnos`, `v_turnos`).
+--   Un turno cerrado o inexistente se rechaza (como `registrar_venta`).
+-- * `anular_venta`: el cajero anula **solo sus ventas** de un turno abierto (motivo obligatorio; queda
+--   `anulada_por`, `anulada_en`, `anulada_motivo`). Las de otros, las de turnos cerrados y las cargadas
+--   con fecha pasada las sigue anulando solo el admin (42501). Si la venta estaba facturada, la nota de
+--   crédito queda pendiente: emitirla sigue siendo del admin (`puede_emitir_comprobante`).
+-- * `nombre_usuario`: el cajero ve también el nombre de quien anuló una venta de un turno abierto
+--   ("Anuló" en el historial de la caja).
+
+-- Efectivo del cajón -----------------------------------------------------------------------------------
+
+create function public.efectivo_en_caja_de_turno(p_turno_id bigint)
+returns numeric
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_turno public.turnos;
+begin
+  perform public._exigir_usuario();
+  -- Turno abierto (mismas validaciones y mensajes que vender en la caja); lo bloquea `for share`
+  -- para leer el cajón coherente con un cierre en curso.
+  v_turno := public._turno_para_trabajar(p_turno_id, false);
+  return public._efectivo_en_caja(v_turno.id)::numeric(14,2);
+end;
+$$;
+
+revoke execute on function public.efectivo_en_caja_de_turno(bigint) from public, anon;
+grant execute on function public.efectivo_en_caja_de_turno(bigint) to authenticated;
+
+-- Anular venta: el cajero, las suyas de un turno abierto -------------------------------------------------
+
+create or replace function public.anular_venta(p_venta_id bigint, p_motivo text)
+returns public.ventas
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_venta    public.ventas;
+  v_turno    public.turnos;
+  v_motivo   text;
+  v_factura  public.comprobantes;
+  v_efectivo numeric(12,2);
+  v_admin    boolean;
+begin
+  perform public._exigir_usuario();
+  v_admin := public.es_admin();
+  v_motivo := public._texto_obligatorio(p_motivo, 'El motivo es obligatorio');
+
+  select * into v_venta from public.ventas where id = p_venta_id;
+  if v_venta.id is null then
+    raise exception 'La venta no existe' using errcode = '22023';
+  end if;
+  -- El turno primero (mismo orden que cerrar_turno y los gastos): serializa el cálculo del cajón.
+  if v_venta.turno_id is not null then
+    select * into v_turno from public.turnos where id = v_venta.turno_id for update;
+  end if;
+  select * into v_venta from public.ventas where id = p_venta_id for update;
+
+  if not v_admin then
+    -- Se mira después del bloqueo: si el turno se cerró mientras se esperaba, ya se ve cerrado.
+    if v_turno.id is null or v_turno.cerrado_en is not null then
+      raise exception 'Solo el administrador anula ventas de un turno cerrado'
+        using errcode = '42501';
+    end if;
+    if v_venta.usuario_id is distinct from auth.uid() then
+      raise exception 'Solo podés anular las ventas que registraste vos: pedile al administrador que la anule'
+        using errcode = '42501';
+    end if;
+  end if;
+
+  if v_venta.anulada then
+    raise exception 'La venta ya estaba anulada' using errcode = 'P0001';
+  end if;
+
+  select * into v_factura from public.comprobantes
+  where venta_id = p_venta_id and tipo = 'factura' for update;
+  if v_factura.estado = 'procesando' or v_factura.numero_intentado is not null then
+    raise exception 'La factura de esta venta se envió a ARCA y falta confirmar el resultado: reintentá la emisión y después anulá la venta'
+      using errcode = 'P0001';
+  end if;
+
+  update public.ventas
+  set anulada = true, anulada_motivo = v_motivo, anulada_por = auth.uid(), anulada_en = now()
+  where id = p_venta_id
+  returning * into v_venta;
+
+  select coalesce(sum(p.monto), 0) into v_efectivo
+  from public.venta_pagos p
+  where p.venta_id = p_venta_id and p.medio = 'efectivo';
+
+  if v_efectivo > 0 then
+    if v_turno.id is not null and v_turno.cerrado_en is null then
+      if public._efectivo_en_caja(v_turno.id) < 0 then
+        raise exception 'La caja del turno no tiene efectivo suficiente para devolver esta venta (en el cajón hay $ %)',
+          public._pesos(public._efectivo_en_caja(v_turno.id) + v_efectivo)
+          using errcode = 'P0001';
+      end if;
+    else
+      -- Turno cerrado o venta cargada con fecha pasada (solo admin): el dinero está en la caja de cambio.
+      perform public._mover_efectivo('anulacion_venta', -v_efectivo,
+        'Anulación de venta #' || v_venta.id || ': ' || v_motivo, null, v_venta.id, null);
+    end if;
+  end if;
+
+  if v_factura.estado = 'autorizado' then
+    -- Queda pendiente; la emite el admin (o el admin que anuló, desde la pantalla, en el momento).
+    insert into public.comprobantes (
+      venta_id, tipo, asociado_id, clase, cbte_tipo, ambiente, cuit_emisor, punto_venta,
+      fecha_servicio, doc_tipo, doc_nro, receptor_nombre, condicion_iva_receptor_id,
+      neto, iva, total, creado_por)
+    values (
+      v_venta.id, 'nota_credito', v_factura.id, v_factura.clase,
+      case v_factura.clase when 'A' then 3 else 8 end, v_factura.ambiente, v_factura.cuit_emisor,
+      v_factura.punto_venta, v_factura.fecha_servicio, v_factura.doc_tipo, v_factura.doc_nro,
+      v_factura.receptor_nombre, v_factura.condicion_iva_receptor_id,
+      v_factura.neto, v_factura.iva, v_factura.total, auth.uid());
+  elsif v_factura.id is not null then
+    -- Nunca llegó a ARCA: no hay nada que compensar.
+    update public.comprobantes
+    set estado = 'cancelado', mensaje = 'Venta anulada antes de facturarse', actualizado_en = now()
+    where id = v_factura.id;
+  end if;
+
+  return v_venta;
+end;
+$$;
+
+-- Nombre de quien anuló ----------------------------------------------------------------------------------
+
+create or replace function public.nombre_usuario(p_usuario_id uuid)
+returns text
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  perform public._exigir_usuario();
+
+  return (
+    select p.nombre_completo
+    from public.perfiles p
+    where p.id = p_usuario_id
+      and (public.es_admin()
+           or p.id = auth.uid()
+           or exists (select 1 from public.turnos t join public.ventas v on v.turno_id = t.id
+                      where t.cerrado_en is null and (v.usuario_id = p.id or v.anulada_por = p.id))
+           or exists (select 1 from public.turnos t join public.gastos g on g.turno_id = t.id
+                      where t.cerrado_en is null and g.usuario_id = p.id))
+  -- security definer: lee `turnos` sin su RLS (solo admin); devuelve un nombre, nunca datos del turno.
+  );
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- 20261124000048_condicional_vencida_estado.sql
+-- ---------------------------------------------------------------------
+-- Condicional vencida: qué se hizo queda registrado en la venta (decisión del negocio, 2026-11-24).
+--
+-- Cuando una patente vuelve con una condicional **vencida** del servicio, la caja avisa que se pasó el
+-- límite de días y el cajero elige continuar con el certificado (vuelta fuera de plazo, migración 46) o
+-- cobrar de nuevo (el servicio completo u otra condicional). Lo elegido queda en la venta y se ve en
+-- "Estado" del historial:
+--
+-- * `ventas.vuelta_fuera_de_plazo`: la vuelta se hizo después del vencimiento de su condicional.
+-- * `ventas.condicional_vencida_de`: la venta (con turno, del mismo servicio y la misma patente) se
+--   cobró de nuevo teniendo una condicional vencida y sin usar; esa condicional queda **resuelta**: deja
+--   de aparecer en `condicionales_de_patente` y ya no admite la vuelta. Anular esta venta la libera.
+--
+-- Los llena el trigger `ventas_condicional_vencida` (BEFORE INSERT) con lo que ya decidió
+-- `registrar_venta`: no cambia ninguna firma. Las ventas con fecha pasada no se marcan.
+
+alter table public.ventas
+  add column vuelta_fuera_de_plazo boolean not null default false,
+  add column condicional_vencida_de bigint references public.ventas (id),
+  add constraint ventas_vuelta_o_recobro check (vuelta_de is null or condicional_vencida_de is null);
+
+create index ventas_condicional_vencida_de on public.ventas (condicional_vencida_de)
+  where condicional_vencida_de is not null;
+
+grant select (vuelta_fuera_de_plazo, condicional_vencida_de) on public.ventas to authenticated;
+
+-- Las vueltas que ya se hicieron fuera de plazo (migración 46).
+update public.ventas r
+set vuelta_fuera_de_plazo = true
+from public.ventas c
+where r.vuelta_de = c.id
+  and public.fecha_local(r.creado_en) > c.condicional_vence;
+
+create function public._ventas_condicional_vencida()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_vence date;
+begin
+  if new.vuelta_de is not null then
+    -- Una condicional que se cobró de nuevo ya está resuelta: no tiene vuelta.
+    if exists (select 1 from public.ventas x
+               where x.condicional_vencida_de = new.vuelta_de and not x.anulada) then
+      raise exception 'La condicional de la patente % ya se cobró de nuevo en otra venta: revisá el historial',
+        new.patente using errcode = 'P0001';
+    end if;
+    select c.condicional_vence into v_vence from public.ventas c where c.id = new.vuelta_de;
+    new.vuelta_fuera_de_plazo := public.fecha_local(now()) > v_vence;
+  elsif new.turno_id is not null and new.patente is not null then
+    -- La condicional vencida y sin usar de esta patente y servicio (la más nueva), si la hay.
+    new.condicional_vencida_de := (
+      select v.id
+      from public.ventas v
+      where v.patente = new.patente
+        and v.condicional_servicio_id = new.servicio_id
+        and not v.anulada
+        and v.condicional_vence < public.fecha_local(now())
+        and not exists (select 1 from public.ventas r where r.vuelta_de = v.id and not r.anulada)
+        and not exists (select 1 from public.ventas x
+                        where x.condicional_vencida_de = v.id and not x.anulada)
+      order by v.creado_en desc, v.id desc
+      limit 1);
+  end if;
+  return new;
+end;
+$$;
+
+revoke execute on function public._ventas_condicional_vencida() from public, anon, authenticated;
+
+create trigger ventas_condicional_vencida
+  before insert on public.ventas
+  for each row execute function public._ventas_condicional_vencida();
+
+-- Condicionales de una patente: sin las vencidas que ya se cobraron de nuevo ----------------------------
+
+create or replace function public.condicionales_de_patente(p_patente text)
+returns table (
+  venta_id           bigint,
+  fecha              date,
+  condicional_nombre text,
+  servicio_id        bigint,
+  servicio_nombre    text,
+  vence              date,
+  vigente            boolean,
+  pagado             numeric,
+  saldo              numeric
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_patente text := public._normalizar_patente(p_patente);
+  v_hoy     date := public.fecha_local(now());
+begin
+  perform public._exigir_usuario();
+  return query
+    select v.id, public.fecha_local(v.creado_en), coalesce(c.nombre, 'Condicional'),
+           s.id, s.nombre, v.condicional_vence, v.condicional_vence >= v_hoy,
+           v.precio::numeric, v.condicional_saldo::numeric
+    from public.ventas v
+    join public.servicios s on s.id = v.condicional_servicio_id
+    left join public.certificados c on c.id = v.certificado_id
+    where v.patente = v_patente
+      and not v.anulada
+      and not exists (select 1 from public.ventas r where r.vuelta_de = v.id and not r.anulada)
+      and not exists (select 1 from public.ventas x where x.condicional_vencida_de = v.id and not x.anulada)
+    order by (v.condicional_vence >= v_hoy) desc,
+             case when v.condicional_vence >= v_hoy then v.creado_en end asc,
+             v.creado_en desc, v.id
+    limit 20;
+end;
+$$;
 
 commit;
