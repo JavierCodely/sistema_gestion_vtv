@@ -805,14 +805,14 @@ isOneToOne: false
                   ]
                 },"ventas": {
                   Row: {
-                    "anulada": boolean,"anulada_en": string | null,"anulada_motivo": string | null,"anulada_por": string | null,"caja_id": number,"cargada_en": string | null,"categoria_id": number,"certificado_id": number | null,"condicional_saldo": number | null,"condicional_servicio_id": number | null,"condicional_vence": string | null,"costo_certificado": number,"creado_en": string,"descuento_id": number | null,"descuento_nombre": string | null,"descuento_tipo": Database["public"]['Enums']["tipo_descuento"] | null,"descuento_valor": number | null,"id": number,"medio_pago": Database["public"]['Enums']["medio_pago"] | null,"monto_descuento": number,"patente": string | null,"precio": number,"precio_lista": number,"servicio_id": number,"servicio_nombre": string,"sin_stock": boolean,"turno_id": number | null,"usuario_id": string,"vuelta_de": number | null
+                    "anulada": boolean,"anulada_en": string | null,"anulada_motivo": string | null,"anulada_por": string | null,"caja_id": number,"cargada_en": string | null,"categoria_id": number,"certificado_id": number | null,"condicional_saldo": number | null,"condicional_servicio_id": number | null,"condicional_vence": string | null,"condicional_vencida_de": number | null,"costo_certificado": number,"creado_en": string,"descuento_id": number | null,"descuento_nombre": string | null,"descuento_tipo": Database["public"]['Enums']["tipo_descuento"] | null,"descuento_valor": number | null,"id": number,"medio_pago": Database["public"]['Enums']["medio_pago"] | null,"monto_descuento": number,"patente": string | null,"precio": number,"precio_lista": number,"servicio_id": number,"servicio_nombre": string,"sin_stock": boolean,"turno_id": number | null,"usuario_id": string,"vuelta_de": number | null,"vuelta_fuera_de_plazo": boolean
                   }
                   ComputedFields: never
                   Insert: {
-                    "anulada"?: boolean,"anulada_en"?: string | null,"anulada_motivo"?: string | null,"anulada_por"?: string | null,"caja_id": number,"cargada_en"?: string | null,"categoria_id": number,"certificado_id"?: number | null,"condicional_saldo"?: number | null,"condicional_servicio_id"?: number | null,"condicional_vence"?: string | null,"costo_certificado"?: number,"creado_en"?: string,"descuento_id"?: number | null,"descuento_nombre"?: string | null,"descuento_tipo"?: Database["public"]['Enums']["tipo_descuento"] | null,"descuento_valor"?: number | null,"id"?: never,"medio_pago"?: Database["public"]['Enums']["medio_pago"] | null,"monto_descuento"?: number,"patente"?: string | null,"precio": number,"precio_lista": number,"servicio_id": number,"servicio_nombre": string,"sin_stock"?: boolean,"turno_id"?: number | null,"usuario_id": string,"vuelta_de"?: number | null
+                    "anulada"?: boolean,"anulada_en"?: string | null,"anulada_motivo"?: string | null,"anulada_por"?: string | null,"caja_id": number,"cargada_en"?: string | null,"categoria_id": number,"certificado_id"?: number | null,"condicional_saldo"?: number | null,"condicional_servicio_id"?: number | null,"condicional_vence"?: string | null,"condicional_vencida_de"?: number | null,"costo_certificado"?: number,"creado_en"?: string,"descuento_id"?: number | null,"descuento_nombre"?: string | null,"descuento_tipo"?: Database["public"]['Enums']["tipo_descuento"] | null,"descuento_valor"?: number | null,"id"?: never,"medio_pago"?: Database["public"]['Enums']["medio_pago"] | null,"monto_descuento"?: number,"patente"?: string | null,"precio": number,"precio_lista": number,"servicio_id": number,"servicio_nombre": string,"sin_stock"?: boolean,"turno_id"?: number | null,"usuario_id": string,"vuelta_de"?: number | null,"vuelta_fuera_de_plazo"?: boolean
                   }
                   Update: {
-                    "anulada"?: boolean,"anulada_en"?: string | null,"anulada_motivo"?: string | null,"anulada_por"?: string | null,"caja_id"?: number,"cargada_en"?: string | null,"categoria_id"?: number,"certificado_id"?: number | null,"condicional_saldo"?: number | null,"condicional_servicio_id"?: number | null,"condicional_vence"?: string | null,"costo_certificado"?: number,"creado_en"?: string,"descuento_id"?: number | null,"descuento_nombre"?: string | null,"descuento_tipo"?: Database["public"]['Enums']["tipo_descuento"] | null,"descuento_valor"?: number | null,"id"?: never,"medio_pago"?: Database["public"]['Enums']["medio_pago"] | null,"monto_descuento"?: number,"patente"?: string | null,"precio"?: number,"precio_lista"?: number,"servicio_id"?: number,"servicio_nombre"?: string,"sin_stock"?: boolean,"turno_id"?: number | null,"usuario_id"?: string,"vuelta_de"?: number | null
+                    "anulada"?: boolean,"anulada_en"?: string | null,"anulada_motivo"?: string | null,"anulada_por"?: string | null,"caja_id"?: number,"cargada_en"?: string | null,"categoria_id"?: number,"certificado_id"?: number | null,"condicional_saldo"?: number | null,"condicional_servicio_id"?: number | null,"condicional_vence"?: string | null,"condicional_vencida_de"?: number | null,"costo_certificado"?: number,"creado_en"?: string,"descuento_id"?: number | null,"descuento_nombre"?: string | null,"descuento_tipo"?: Database["public"]['Enums']["tipo_descuento"] | null,"descuento_valor"?: number | null,"id"?: never,"medio_pago"?: Database["public"]['Enums']["medio_pago"] | null,"monto_descuento"?: number,"patente"?: string | null,"precio"?: number,"precio_lista"?: number,"servicio_id"?: number,"servicio_nombre"?: string,"sin_stock"?: boolean,"turno_id"?: number | null,"usuario_id"?: string,"vuelta_de"?: number | null,"vuelta_fuera_de_plazo"?: boolean
                   }
                   Relationships: [
                     {
@@ -850,6 +850,18 @@ isOneToOne: false
       columns: ["condicional_servicio_id"]
 isOneToOne: false
       referencedRelation: "servicios"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "ventas_condicional_vencida_de_fkey"
+      columns: ["condicional_vencida_de"]
+isOneToOne: false
+      referencedRelation: "v_ventas_mixtas"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "ventas_condicional_vencida_de_fkey"
+      columns: ["condicional_vencida_de"]
+isOneToOne: false
+      referencedRelation: "ventas"
       referencedColumns: ["id"]
     },{
       foreignKeyName: "ventas_descuento_id_fkey"
@@ -1736,6 +1748,7 @@ isOneToOne: false
 "condicional_saldo": number | null,
 "condicional_servicio_id": number | null,
 "condicional_vence": string | null,
+"condicional_vencida_de": number | null,
 "costo_certificado": number,
 "creado_en": string,
 "descuento_id": number | null,
@@ -1753,7 +1766,8 @@ isOneToOne: false
 "sin_stock": boolean,
 "turno_id": number | null,
 "usuario_id": string,
-"vuelta_de": number | null
+"vuelta_de": number | null,
+"vuelta_fuera_de_plazo": boolean
             }
                           SetofOptions: {
         from: "*"
@@ -1857,6 +1871,9 @@ isOneToOne: false
 { Args: { "p_servicio_id": number }; Returns: {
               "id": number,"monto_descuento": number,"nombre": string,"precio_final": number,"precio_lista": number,"tipo": Database["public"]['Enums']["tipo_descuento"],"valor": number
             }[]
+                           },
+"efectivo_en_caja_de_turno":
+{ Args: { "p_turno_id": number }; Returns: number
                            },
 "eliminar_categoria_gasto":
 { Args: { "p_categoria_id": number }; Returns: {
@@ -2115,7 +2132,7 @@ isOneToOne: false
         isSetofReturn: false
       } },
 "registrar_venta":
-{ Args: { "p_condicional"?: boolean,"p_condicional_mitad"?: boolean,"p_descuento_id"?: number,"p_medio_pago"?: Database["public"]['Enums']["medio_pago"],"p_pagos"?: Json,"p_patente"?: string,"p_precio_esperado"?: number,"p_servicio_id": number,"p_turno_id": number }; Returns: {
+{ Args: { "p_condicional"?: boolean,"p_condicional_mitad"?: boolean,"p_descuento_id"?: number,"p_medio_pago"?: Database["public"]['Enums']["medio_pago"],"p_pagos"?: Json,"p_patente"?: string,"p_precio_esperado"?: number,"p_servicio_id": number,"p_turno_id": number,"p_vuelta_vencida"?: number }; Returns: {
               "anulada": boolean,
 "anulada_en": string | null,
 "anulada_motivo": string | null,
@@ -2127,6 +2144,7 @@ isOneToOne: false
 "condicional_saldo": number | null,
 "condicional_servicio_id": number | null,
 "condicional_vence": string | null,
+"condicional_vencida_de": number | null,
 "costo_certificado": number,
 "creado_en": string,
 "descuento_id": number | null,
@@ -2144,7 +2162,8 @@ isOneToOne: false
 "sin_stock": boolean,
 "turno_id": number | null,
 "usuario_id": string,
-"vuelta_de": number | null
+"vuelta_de": number | null,
+"vuelta_fuera_de_plazo": boolean
             }
                           SetofOptions: {
         from: "*"
@@ -2165,6 +2184,7 @@ isOneToOne: false
 "condicional_saldo": number | null,
 "condicional_servicio_id": number | null,
 "condicional_vence": string | null,
+"condicional_vencida_de": number | null,
 "costo_certificado": number,
 "creado_en": string,
 "descuento_id": number | null,
@@ -2182,7 +2202,8 @@ isOneToOne: false
 "sin_stock": boolean,
 "turno_id": number | null,
 "usuario_id": string,
-"vuelta_de": number | null
+"vuelta_de": number | null,
+"vuelta_fuera_de_plazo": boolean
             }
                           SetofOptions: {
         from: "*"
@@ -2244,6 +2265,11 @@ isOneToOne: false
 "turnos_abiertos":
 { Args: Record<PropertyKey, never>; Returns: {
               "abierto_en": string,"caja_id": number,"caja_nombre": string,"id": number
+            }[]
+                           },
+"ventas_anteriores_de_patente":
+{ Args: { "p_patente": string }; Returns: {
+              "certificado_nombre": string,"condicional": boolean,"fecha": string,"servicio_nombre": string,"venta_id": number,"vuelta": boolean
             }[]
                            },
 "ventas_por_dia":

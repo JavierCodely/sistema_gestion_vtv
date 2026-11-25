@@ -18,7 +18,7 @@ import {
 } from "@/compartido/ui/table";
 import { MedioDeVenta } from "@/modulos/caja/componentes/MedioDeVenta";
 import { useVentasPasadas, type VentaPasada } from "../api/consultas";
-import { DialogoAnularVenta } from "../componentes/DialogoAnularVenta";
+import { DialogoAnularVenta } from "@/modulos/caja/componentes/DialogoAnularVenta";
 import { DialogoVentaPasada } from "../componentes/DialogoVentaPasada";
 
 /** Ventas cargadas con fecha pasada (sin turno): carga y anulación. Solo admin. */

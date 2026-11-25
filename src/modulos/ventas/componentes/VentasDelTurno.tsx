@@ -8,7 +8,7 @@ import { useVentasDeTurno, type Venta } from "@/modulos/caja/api/consultas";
 import { TablaVentas } from "@/modulos/caja/componentes/TablaVentas";
 import { useComprobantesDeTurno } from "@/modulos/facturacion/api/consultas";
 import { FacturaDeVenta } from "@/modulos/facturacion/componentes/FacturaDeVenta";
-import { DialogoAnularVenta } from "./DialogoAnularVenta";
+import { DialogoAnularVenta } from "@/modulos/caja/componentes/DialogoAnularVenta";
 
 /** Ventas de un turno con su factura y "Anular" (solo admin). */
 export function VentasDelTurno({ turnoId }: { turnoId: number }) {

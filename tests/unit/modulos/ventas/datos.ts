@@ -51,12 +51,16 @@ export function ventaDePrueba(cambios: Partial<Venta> = {}): Venta {
     vuelta_de: null,
     condicional_vence: null,
     condicional_saldo: null,
+    vuelta_fuera_de_plazo: false,
+    condicional_vencida_de: null,
     patente: null,
     sin_stock: false,
     anulada: false,
     anulada_motivo: null,
     anulada_en: null,
+    anulada_por: null,
     venta_pagos: medio === null ? [] : [{ medio, monto: precio }],
+    certificados: null,
     ...cambios,
   };
 }

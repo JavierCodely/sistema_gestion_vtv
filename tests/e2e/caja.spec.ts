@@ -17,7 +17,7 @@ async function elegir(page: Page, contenedor: Locator, etiqueta: string, opcion:
   await page.getByRole("option", { name: opcion }).click();
 }
 
-test("turno completo: el admin abre la caja con efectivo inicial, el cajero vende sin ver totales; el admin ve totales y efectivo, anula y cierra", async ({
+test("turno completo: el admin abre la caja con efectivo inicial, el cajero vende viendo solo el efectivo en caja, busca por patente y anula su venta; el admin ve totales y efectivo, anula y cierra", async ({
   page,
   browser,
 }) => {
@@ -105,9 +105,38 @@ test("turno completo: el admin abre la caja con efectivo inicial, el cajero vend
   const ventasCajero = pc.getByRole("region", { name: "Ventas de la caja" });
   await expect(ventasCajero.getByRole("row").filter({ hasText: servicio })).toHaveCount(2);
   await expect(ventasCajero).toContainText("AB123CD");
-  // Decisión del negocio: en la caja no se ven totales
+  // Decisión del negocio: en la caja no se ven totales, solo el efectivo en caja (10.000 + 25.000)
   await expect(pc.getByText(/total/i)).toHaveCount(0);
   await expect(pc.getByText(/50\.000/)).toHaveCount(0);
+  await expect(pc.getByTestId("efectivo-en-caja")).toHaveText(/Efectivo en caja\s*\$\s?35\.000,00/);
+
+  // Busca por patente: desde 3 caracteres, las ventas del turno con esa patente
+  const buscar = ventasCajero.getByLabel("Buscar patente");
+  await buscar.fill("ab 1");
+  await expect(ventasCajero.getByRole("row").filter({ hasText: servicio })).toHaveCount(1);
+  await expect(ventasCajero).toContainText("AB123CD");
+  await buscar.fill("zz9");
+  await expect(ventasCajero).toContainText(
+    "No hay ventas en este turno con una patente que empiece con ZZ9.",
+  );
+  await buscar.fill("");
+
+  // El cajero anula una venta suya en efectivo: queda quién, por qué, y el efectivo sale del cajón
+  await pc.getByRole("tab", { name: "Ventas" }).click();
+  await venderEnCaja(pc, { categoria, servicio, medio: "Efectivo", patente: "ZZ 999 YY" });
+  await pc.getByRole("tab", { name: "Historial" }).click();
+  await expect(pc.getByTestId("efectivo-en-caja")).toHaveText(/\$\s?60\.000,00/);
+  const ventaZZ = ventasCajero.getByRole("row").filter({ hasText: "ZZ999YY" });
+  await ventaZZ.getByRole("button", { name: /^Anular venta/ }).click();
+  const anularCajero = pc.getByRole("dialog", { name: /^Anular venta/ });
+  await anularCajero.getByLabel("Motivo").fill("Se cargó dos veces");
+  await anularCajero.getByRole("button", { name: "Anular venta" }).click();
+  await expect(pc.getByText(/^Venta N° \d+ anulada$/)).toBeVisible();
+  await expect(ventaZZ).toContainText("Anulada");
+  await expect(ventaZZ).toContainText("Se cargó dos veces");
+  await expect(ventaZZ).toContainText(`Anuló: Cajero ${sufijo}`);
+  await expect(ventaZZ.getByRole("button", { name: /^Anular venta/ })).toHaveCount(0);
+  await expect(pc.getByTestId("efectivo-en-caja")).toHaveText(/\$\s?35\.000,00/);
 
   // --- Admin: ve el turno con sus totales
   await page.goto("/admin/ventas");
@@ -145,7 +174,8 @@ test("turno completo: el admin abre la caja con efectivo inicial, el cajero vend
   // --- Cajero: ve la anulación (sin totales)
   await pc.reload();
   await pc.getByRole("tab", { name: "Historial" }).click();
-  await expect(ventasCajero.getByRole("row").filter({ hasText: "Anulada" })).toHaveCount(1);
+  await expect(ventasCajero.getByRole("row").filter({ hasText: "Anulada" })).toHaveCount(2);
+  await expect(pc.getByTestId("efectivo-en-caja")).toHaveText(/\$\s?35\.000,00/);
 
   // --- Admin: cierra el turno desde el detalle ("Cerrar este turno"), sin totales en el diálogo
   await page.getByRole("button", { name: "Cerrar este turno" }).click();

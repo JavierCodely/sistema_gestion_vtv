@@ -27,7 +27,7 @@ select ok(not has_function_privilege('authenticated',
 select ok(not has_function_privilege('authenticated',
   'public._insertar_gasto(bigint, numeric, public.fuente_fondos, text, bigint)', 'execute'),
   '_insertar_gasto no se puede llamar desde el cliente');
-select ok(not has_function_privilege('anon', 'public.registrar_venta(bigint, bigint, public.medio_pago, text, jsonb, bigint, numeric, boolean, boolean)', 'execute'),
+select ok(not has_function_privilege('anon', 'public.registrar_venta(bigint, bigint, public.medio_pago, text, jsonb, bigint, numeric, boolean, boolean, bigint)', 'execute'),
   'anon no puede vender');
 
 -- Pagos de ventas y disponibilidad de descuentos: solo por RPC (migraciones 30 y 31)

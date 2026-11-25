@@ -20,6 +20,8 @@ export interface FormularioVenta {
   condicional: boolean;
   /** Condicional pagada al 50%. */
   condicionalMitad: boolean;
+  /** Vuelta fuera de plazo: id de la condicional vencida que se honra (migración 46). */
+  vueltaVencida: number | null;
 }
 
 export type ErroresVenta = Errores<"servicioId" | "cobro" | "patente">;
@@ -52,6 +54,8 @@ export function validarVenta(
       precioEsperado: formulario.precioEsperado,
       condicional: formulario.condicional,
       condicionalMitad: formulario.condicional && formulario.condicionalMitad,
+      // Una vuelta no es otra condicional (la BD rechaza las dos juntas).
+      vueltaVencida: formulario.condicional ? null : formulario.vueltaVencida,
     },
   };
 }

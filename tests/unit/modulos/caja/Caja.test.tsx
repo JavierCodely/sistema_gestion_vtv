@@ -10,6 +10,7 @@ import {
   responder,
   responderRpc,
 } from "@tests/soporte/supabase-falso";
+import { comprobanteDePrueba } from "../facturacion/datos";
 import { CAJERO_ID, ventaDePrueba } from "../ventas/datos";
 
 vi.mock("@/compartido/lib/supabase", async () => ({
@@ -50,6 +51,7 @@ beforeEach(() => {
   responder("v_movimientos_caja", "select", { data: [] });
   responder("ventas", "select", { data: [] });
   responderRpc("condicionales_de_patente", { data: [] });
+  responderRpc("ventas_anteriores_de_patente", { data: [] });
   responder("categorias_servicio", "select", { data: [{ id: 1, nombre: "Autos", activa: true }] });
   responder("servicios", "select", {
     data: [
@@ -66,6 +68,7 @@ beforeEach(() => {
     ],
   });
   responderRpc("descuentos_para_servicio", { data: [] });
+  responderRpc("efectivo_en_caja_de_turno", { data: 12500 });
 });
 
 describe("Caja: sin cajas abiertas", () => {
@@ -222,7 +225,7 @@ describe("Caja: elegir en qué caja se trabaja", () => {
   });
 });
 
-describe("Caja: historial y gastos de la caja (de todos, sin totales)", () => {
+describe("Caja: historial y gastos de la caja (de todos; el único total es el efectivo en caja)", () => {
   it("HISTORIAL muestra las ventas de la caja con quién vendió, el medio mixto y el descuento", async () => {
     cajasAbiertas([CAJA_1]);
     responder("ventas", "select", {
@@ -241,7 +244,11 @@ describe("Caja: historial y gastos de la caja (de todos, sin totales)", () => {
             { medio: "efectivo", monto: 5000 },
           ],
         }),
-        ventaDePrueba({ id: 2, patente: "AB123CD" }),
+        ventaDePrueba({
+          id: 2,
+          patente: "AB123CD",
+          certificados: { nombre: "Hoja B", condicional: true },
+        }),
         ventaDePrueba({
           id: 1,
           creado_en: "2026-11-20T12:10:00Z",
@@ -249,6 +256,7 @@ describe("Caja: historial y gastos de la caja (de todos, sin totales)", () => {
           anulada: true,
           anulada_motivo: "Error",
           anulada_en: "2026-11-20T12:20:00Z",
+          anulada_por: "a1",
         }),
       ],
     });
@@ -275,19 +283,129 @@ describe("Caja: historial y gastos de la caja (de todos, sin totales)", () => {
     });
     expect(within(ventas).getByTestId("venta-2")).toHaveTextContent("Cajero Prueba");
     expect(within(ventas).getByTestId("venta-1")).toHaveTextContent("Anulada");
+    // El certificado entregado (la condicional, marcada); sin certificado, "—".
+    expect(within(ventas).getByRole("columnheader", { name: "Certificado" })).toBeInTheDocument();
+    expect(within(ventas).getByTestId("venta-2")).toHaveTextContent("Hoja BCondicional");
+    expect(within(ventas).getByTestId("venta-1")).toHaveTextContent("Anuló: Ana Administradora");
+    // El cajero anula solo sus ventas sin anular (la del admin y la anulada no tienen el botón).
+    expect(within(ventas).getByRole("button", { name: "Anular venta N° 2" })).toBeInTheDocument();
+    expect(within(ventas).queryByRole("button", { name: "Anular venta N° 3" })).toBeNull();
+    expect(within(ventas).queryByRole("button", { name: "Anular venta N° 1" })).toBeNull();
     // Pago mixto: "Mixto" con el detalle por medio (en orden: efectivo, transferencia, tarjeta);
     // el descuento con su nombre, lo descontado y el precio de lista.
     const mixta = within(ventas).getByTestId("venta-3");
     expect(normal(mixta.textContent)).toContain("MixtoEfectivo $ 5.000,00 + Tarjeta $ 22.000,00");
     expect(normal(mixta.textContent)).toContain("Jubilados−$ 3.000,00 · lista $ 30.000,00");
     expect(normal(mixta.textContent)).toContain("$ 27.000,00");
-    // Decisión del negocio: el cajero no ve totales. El único dinero en pantalla es el de cada
-    // venta, dentro de su fila.
+    // Decisión del negocio (2026-11-24): el único total que ve el cajero es el efectivo en caja de
+    // la caja donde trabaja. El resto del dinero en pantalla es el de cada venta, dentro de su fila.
+    await waitFor(() => {
+      expect(normal(screen.getByTestId("efectivo-en-caja").textContent)).toBe(
+        "Efectivo en caja$ 12.500,00",
+      );
+    });
+    expect(argumentosRpc("efectivo_en_caja_de_turno")).toEqual({ p_turno_id: 5 });
     expect(screen.queryByText(/total/i)).not.toBeInTheDocument();
     // (las <option> del <select> nativo oculto de Radix no se ven ni las lee el lector de pantalla)
     const montos = screen.getAllByText(/\$/, { ignore: "script, style, option" });
-    expect(montos).toHaveLength(5);
-    for (const monto of montos) expect(monto.closest("[data-testid^='venta-']")).not.toBeNull();
+    expect(montos).toHaveLength(6);
+    for (const monto of montos) {
+      expect(
+        monto.closest("[data-testid^='venta-']") ??
+          monto.closest("[data-testid='efectivo-en-caja']"),
+      ).not.toBeNull();
+    }
+  });
+
+  it("HISTORIAL: en Estado, la vuelta fuera de plazo y la condicional vencida que se cobró de nuevo", async () => {
+    cajasAbiertas([CAJA_1]);
+    responder("ventas", "select", {
+      data: [
+        ventaDePrueba({ id: 3, vuelta_de: 70, vuelta_fuera_de_plazo: true }),
+        ventaDePrueba({ id: 2, vuelta_de: 71 }),
+        ventaDePrueba({ id: 1, condicional_vencida_de: 72 }),
+      ],
+    });
+    responderRpc("nombre_usuario", { data: "Cajero Prueba" });
+    renderRuta("/caja", cajero());
+    await userEvent.click(await screen.findByRole("tab", { name: "Historial" }));
+    const ventas = await screen.findByRole("region", { name: "Ventas de la caja" });
+    expect(await within(ventas).findByTestId("venta-3")).toHaveTextContent(
+      "Vuelta de condicional fuera de plazo",
+    );
+    expect(within(ventas).getByTestId("venta-2")).toHaveTextContent("Vuelta de condicional");
+    expect(within(ventas).getByTestId("venta-2")).not.toHaveTextContent("fuera de plazo");
+    expect(within(ventas).getByTestId("venta-1")).toHaveTextContent(
+      "Condicional vencida: se cobró de nuevo",
+    );
+  });
+
+  it("HISTORIAL busca por patente desde 3 caracteres, solo en las ventas del turno", async () => {
+    cajasAbiertas([CAJA_1]);
+    responder("ventas", "select", {
+      data: [
+        ventaDePrueba({ id: 3, patente: "AB123CD" }),
+        ventaDePrueba({ id: 2, patente: "AC456EF" }),
+        ventaDePrueba({ id: 1, patente: "AB999ZZ" }),
+      ],
+    });
+    responderRpc("nombre_usuario", { data: "Cajero Prueba" });
+    renderRuta("/caja", cajero());
+
+    await userEvent.click(await screen.findByRole("tab", { name: "Historial" }));
+    const ventas = await screen.findByRole("region", { name: "Ventas de la caja" });
+    await within(ventas).findByTestId("venta-3");
+    const buscar = within(ventas).getByLabelText("Buscar patente");
+    // Con menos de 3 caracteres se ven todas.
+    await userEvent.type(buscar, "a b");
+    expect(within(ventas).getAllByTestId(/^venta-/)).toHaveLength(3);
+    // Desde 3 (sin espacios, en mayúsculas): las que empiezan así.
+    await userEvent.type(buscar, "1");
+    expect(
+      within(ventas)
+        .getAllByTestId(/^venta-/)
+        .map((fila) => fila.dataset.testid),
+    ).toEqual(["venta-3"]);
+    await userEvent.clear(buscar);
+    await userEvent.type(buscar, "zz9");
+    expect(
+      within(ventas).getByText("No hay ventas en este turno con una patente que empiece con ZZ9."),
+    ).toBeInTheDocument();
+    await userEvent.clear(buscar);
+    expect(within(ventas).getAllByTestId(/^venta-/)).toHaveLength(3);
+  });
+
+  it("HISTORIAL: el cajero anula su venta con motivo y la nota de crédito queda para el admin", async () => {
+    cajasAbiertas([CAJA_1]);
+    responder("ventas", "select", { data: [ventaDePrueba({ id: 2, medio_pago: "tarjeta" })] });
+    responder("v_comprobantes", "select", {
+      data: [comprobanteDePrueba({ id: 40, venta_id: 2 })],
+    });
+    responderRpc("nombre_usuario", { data: "Cajero Prueba" });
+    responderRpc("anular_venta", { data: { id: 2, anulada: true } });
+    renderRuta("/caja", cajero());
+
+    await userEvent.click(await screen.findByRole("tab", { name: "Historial" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Anular venta N° 2" }));
+    const dialogo = await screen.findByRole("dialog", { name: "Anular venta N° 2" });
+    expect(dialogo).toHaveTextContent(
+      "Está facturada: la nota de crédito queda pendiente y la emite el administrador.",
+    );
+    await userEvent.type(within(dialogo).getByLabelText("Motivo"), "Se cargó mal");
+    await userEvent.click(within(dialogo).getByRole("button", { name: "Anular venta" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(argumentosRpc("anular_venta")).toEqual({ p_venta_id: 2, p_motivo: "Se cargó mal" });
+  });
+
+  it("HISTORIAL: el admin atendiendo la caja puede anular cualquier venta", async () => {
+    cajasAbiertas([CAJA_1]);
+    responder("ventas", "select", { data: [ventaDePrueba({ id: 2 })] });
+    responderRpc("nombre_usuario", { data: "Cajero Prueba" });
+    renderRuta("/caja", admin());
+    await userEvent.click(await screen.findByRole("tab", { name: "Historial" }));
+    expect(await screen.findByRole("button", { name: "Anular venta N° 2" })).toBeInTheDocument();
   });
 
   it("GASTOS muestra los gastos de la caja con quién los cargó, sin totales, y permite registrar uno", async () => {

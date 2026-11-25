@@ -13,6 +13,7 @@ const venta = (cambios: Partial<FormularioVenta> = {}): FormularioVenta => ({
   precioEsperado: 18000,
   condicional: false,
   condicionalMitad: false,
+  vueltaVencida: null,
   ...cambios,
 });
 
@@ -35,6 +36,7 @@ describe("validarVenta", () => {
         precioEsperado: 18000,
         condicional: false,
         condicionalMitad: false,
+        vueltaVencida: null,
       },
     });
     expect(validarVenta(venta({ patente: "  " })).errores).toEqual({
@@ -57,6 +59,7 @@ describe("validarVenta", () => {
       precioEsperado: 16200,
       condicional: false,
       condicionalMitad: false,
+      vueltaVencida: null,
     });
   });
 
@@ -94,6 +97,23 @@ describe("validarVenta: condicional", () => {
     expect(validarVenta(venta({ condicionalMitad: true })).datos).toMatchObject({
       condicional: false,
       condicionalMitad: false,
+    });
+  });
+});
+
+describe("validarVenta: vuelta fuera de plazo", () => {
+  it("pasa la condicional vencida que se honra", () => {
+    expect(validarVenta(venta({ vueltaVencida: 70, precioEsperado: 0 })).datos).toMatchObject({
+      vueltaVencida: 70,
+      condicional: false,
+      precioEsperado: 0,
+    });
+  });
+
+  it("una condicional nueva nunca va como vuelta", () => {
+    expect(validarVenta(venta({ condicional: true, vueltaVencida: 70 })).datos).toMatchObject({
+      condicional: true,
+      vueltaVencida: null,
     });
   });
 });
