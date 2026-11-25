@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { ADMIN, CAJERO, ingresar, salir } from "./utilidades";
 
 test("el admin entra al panel con menú lateral y puede ir a operar una caja", async ({ page }) => {
@@ -73,4 +73,33 @@ test("al salir no se puede volver a una pantalla privada", async ({ page }) => {
   await salir(page);
   await page.goto("/admin");
   await expect(page).toHaveURL("/login");
+});
+
+/** URL del `background-image` de un elemento, ya cargada por el navegador (responde 200). */
+async function fondoCargado(page: Page, testId: string, nombre: RegExp) {
+  const fondo = page.getByTestId(testId);
+  // La imagen va en el `style` del elemento (la pone React con la URL que arma Vite).
+  const estilo = (await fondo.getAttribute("style")) ?? "";
+  const url = /url\("?(.+?)"?\)/.exec(estilo)?.[1];
+  expect(url).toMatch(nombre);
+  const respuesta = await page.request.get(url ?? "");
+  expect(respuesta.ok()).toBe(true);
+}
+
+/** Capa `bg-background/N` sobre la imagen: el color del tema con esa opacidad. */
+async function veloConOpacidad(page: Page, testId: string, opacidad: string) {
+  const velo = page.getByTestId(testId);
+  const alfa = opacidad.replace(".", "\\.");
+  await expect(velo).toHaveCSS("background-color", new RegExp(`(/ |, )${alfa}\\)$`));
+}
+
+test("el login y la caja tienen su imagen de fondo con un velo (75% y 90%)", async ({ page }) => {
+  await page.goto("/login");
+  await fondoCargado(page, "fondo-login", /loginimagen.*\.jpg/);
+  await veloConOpacidad(page, "velo-login", "0.75");
+  await ingresar(page, CAJERO);
+  await expect(page).toHaveURL("/caja");
+  await fondoCargado(page, "fondo-caja", /cajaimagen.*\.webp/);
+  await veloConOpacidad(page, "velo-caja", "0.9");
+  await salir(page);
 });

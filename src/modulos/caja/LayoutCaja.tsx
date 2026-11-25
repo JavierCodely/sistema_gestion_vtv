@@ -5,6 +5,7 @@ import { useAuth } from "@/modulos/auth/contexto";
 import { BotonSalir } from "@/modulos/auth/componentes/BotonSalir";
 import { BotonTema } from "@/compartido/componentes/BotonTema";
 import { Cargando } from "@/compartido/componentes/Cargando";
+import imagenCaja from "@/img/cajaimagen.webp";
 import { AccionesTurnoAdmin } from "./componentes/AccionesTurnoAdmin";
 import { BotonBarra } from "./componentes/BotonBarra";
 
@@ -13,7 +14,16 @@ export function LayoutCaja() {
   const esAdmin = perfil?.rol === "admin";
 
   return (
-    <div className="flex min-h-svh flex-col">
+    <div className="relative isolate flex min-h-svh flex-col">
+      {/* Fondo fijo con la imagen de la planta y, encima, una capa del color de fondo al 90% (claro u
+          oscuro según el tema) para que todo se lea. */}
+      <div
+        aria-hidden
+        className="fixed inset-0 -z-10 bg-cover bg-center"
+        style={{ backgroundImage: `url(${imagenCaja})` }}
+        data-testid="fondo-caja"
+      />
+      <div aria-hidden className="fixed inset-0 -z-10 bg-background/90" data-testid="velo-caja" />
       {/* Barra fija: el admin tiene abrir y cerrar turno siempre a mano al hacer scroll. El cajero no
           cierra turnos: la caja donde trabaja se ve (y se cambia) en la pantalla. */}
       <header className="sticky top-0 z-40 flex items-center gap-2 border-b bg-background px-4 py-2">

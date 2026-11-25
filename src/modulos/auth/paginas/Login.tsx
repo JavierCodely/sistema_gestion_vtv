@@ -13,6 +13,7 @@ import { Label } from "@/compartido/ui/label";
 import { mensajeDeError } from "@/compartido/lib/errores";
 import { rutaInicio } from "../lib/navegacion";
 import { verificarConexion } from "@/compartido/lib/salud";
+import imagenLogin from "@/img/loginimagen.jpg";
 
 function destinoPrevio(state: unknown): string | null {
   if (typeof state === "object" && state !== null && "desde" in state) {
@@ -55,8 +56,18 @@ export function Login() {
   const mensaje = error ?? aviso;
 
   return (
-    <main className="flex min-h-svh items-center justify-center bg-muted/40 p-4">
-      <Card className="w-full max-w-sm">
+    <main
+      className="relative isolate flex min-h-svh items-center justify-center bg-muted bg-cover bg-center p-4"
+      style={{ backgroundImage: `url(${imagenLogin})` }}
+      data-testid="fondo-login"
+    >
+      {/* Capa del color de fondo al 75% (claro u oscuro según el tema) sobre la imagen. */}
+      <div
+        aria-hidden
+        className="absolute inset-0 -z-10 bg-background/75"
+        data-testid="velo-login"
+      />
+      <Card className="w-full max-w-sm shadow-lg">
         <CardHeader>
           <CardTitle>
             <h1 className="text-xl">Sistema VTV</h1>

@@ -22,6 +22,21 @@ beforeEach(() => {
   responder("v_turnos_abiertos", "select", { data: [CAJA_1] });
 });
 
+describe("fondo de la caja", () => {
+  it("muestra la imagen de fondo con una capa del 90% encima", async () => {
+    renderRuta("/caja", cajero());
+    await screen.findByRole("heading", { name: "Caja 1" });
+    const fondo = screen.getByTestId("fondo-caja");
+    expect(fondo.style.backgroundImage).toMatch(/cajaimagen.*\.webp/);
+    expect(fondo).toHaveClass("fixed", "inset-0", "-z-10", "bg-cover");
+    expect(fondo).toHaveAttribute("aria-hidden");
+    const velo = screen.getByTestId("velo-caja");
+    expect(velo).toHaveClass("fixed", "inset-0", "-z-10", "bg-background/90");
+    // El velo va después de la imagen: queda pintado encima.
+    expect(fondo.compareDocumentPosition(velo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
 describe("barra fija de la caja", () => {
   it("muestra el nombre y apellido de quien atiende bien grande", async () => {
     renderRuta("/caja", cajero());
