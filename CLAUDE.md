@@ -76,6 +76,7 @@ src/
     lib/                   lógica pura del módulo (validaciones, mapeos)
     paginas/               pantallas enrutables
   types/database.ts        generado (npm run db:types), no editar
+  img/                     imágenes de fondo: loginimagen.jpg (login, velo bg-background/75) y cajaimagen.webp (`/caja`, fija, velo bg-background/90; el .png es el original)
 tests/
   unit/                    Vitest; espeja src/ (tests/unit/modulos/auth/Login.test.tsx ↔ src/modulos/auth/paginas/Login.tsx)
   e2e/                     Playwright (utilidades.ts: ingresar, salir, credenciales del seed)

@@ -30,6 +30,16 @@ describe("login", () => {
     expect(await screen.findByText("Email o contraseña incorrectos.")).toBeInTheDocument();
   });
 
+  it("tiene la imagen de la planta de fondo con una capa del 75% encima", () => {
+    renderRuta("/login", authDePrueba());
+    const fondo = screen.getByTestId("fondo-login");
+    expect(fondo.style.backgroundImage).toMatch(/loginimagen.*\.jpg/);
+    expect(fondo).toHaveClass("bg-cover", "bg-center", "isolate");
+    const velo = screen.getByTestId("velo-login");
+    expect(velo).toHaveClass("absolute", "inset-0", "-z-10", "bg-background/75");
+    expect(fondo).toContainElement(velo);
+  });
+
   it("muestra el aviso de usuario desactivado", () => {
     renderRuta("/login", authDePrueba({ aviso: MENSAJE_DESACTIVADO }));
     expect(screen.getByText(MENSAJE_DESACTIVADO)).toBeInTheDocument();
