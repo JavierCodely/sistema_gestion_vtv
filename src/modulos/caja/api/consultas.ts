@@ -68,10 +68,13 @@ export type Venta = Pick<
   | "condicional_saldo"
   | "vuelta_fuera_de_plazo"
   | "condicional_vencida_de"
+  | "categoria_id"
 > & {
   venta_pagos: PagoDeVenta[];
   /** Certificado entregado (null: sin hoja, sin stock o venta con fecha pasada). */
   certificados: { nombre: string; condicional: boolean } | null;
+  /** Categoría del servicio vendido (nombre actual), para filtrar las listas. */
+  categorias_servicio: { nombre: string } | null;
 };
 
 /**
@@ -98,6 +101,11 @@ export const claves = {
   efectivoEnCaja: (turnoId: number) => ["caja", "efectivo", turnoId] as const,
   /** Historial de la caja: las ventas de un turno, de todos los que vendieron. */
   ventasDeTurno: (turnoId: number) => ["caja", "ventas", turnoId] as const,
+  /**
+   * Total de realizadas y anuladas de un turno (migración 50; bajo `["caja", "ventas"]`: vender, anular
+   * y el tiempo real del admin lo invalidan).
+   */
+  resumenVentasDeTurno: (turnoId: number) => ["caja", "ventas", turnoId, "resumen"] as const,
   certificadoDeServicio: (servicioId: number, condicional: boolean) =>
     ["caja", "certificado", servicioId, condicional ? "condicional" : "de-siempre"] as const,
   /** Condicionales vigentes de una patente (bajo `["caja"]`: vender y anular las invalidan). */
@@ -109,7 +117,7 @@ export const claves = {
 
 /** Columnas de `ventas` que se leen (nunca `*`: los costos no son legibles por columna). */
 export const COLUMNAS_VENTA =
-  "id, creado_en, turno_id, usuario_id, servicio_nombre, precio, precio_lista, monto_descuento, descuento_nombre, medio_pago, patente, sin_stock, anulada, anulada_motivo, anulada_en, anulada_por, vuelta_de, condicional_vence, condicional_saldo, vuelta_fuera_de_plazo, condicional_vencida_de, venta_pagos(medio, monto), certificados(nombre, condicional)";
+  "id, creado_en, turno_id, usuario_id, servicio_nombre, precio, precio_lista, monto_descuento, descuento_nombre, medio_pago, patente, sin_stock, anulada, anulada_motivo, anulada_en, anulada_por, vuelta_de, condicional_vence, condicional_saldo, vuelta_fuera_de_plazo, condicional_vencida_de, categoria_id, venta_pagos(medio, monto), certificados(nombre, condicional), categorias_servicio(nombre)";
 
 /**
  * Condicional sin usar de una patente (`condicionales_de_patente`, sin costos): vigentes primero.
@@ -290,6 +298,32 @@ export function useEfectivoEnCaja(turnoId: number) {
       });
       if (error) throw error;
       return data;
+    },
+  });
+}
+
+export type ResumenVentasDeTurno =
+  Database["public"]["Functions"]["resumen_ventas_de_turno"]["Returns"][number];
+
+/**
+ * Cantidad y monto de las ventas realizadas y anuladas del turno entero (`resumen_ventas_de_turno`,
+ * migración 50; no depende de los filtros de la lista). Lo ven el cajero (turno abierto) y el admin.
+ * Se reconsulta cada 15 s: otros usuarios venden en la misma caja.
+ */
+export function useResumenVentasDeTurno(turnoId: number) {
+  return useQuery({
+    queryKey: claves.resumenVentasDeTurno(turnoId),
+    enabled: turnoId > 0,
+    staleTime: 0,
+    refetchInterval: INTERVALO_CAJAS_ABIERTAS_MS,
+    queryFn: async (): Promise<ResumenVentasDeTurno> => {
+      const { data, error } = await supabase.rpc("resumen_ventas_de_turno", {
+        p_turno_id: turnoId,
+      });
+      if (error) throw error;
+      const [fila] = data;
+      if (!fila) throw new Error("No se pudo leer el resumen de ventas del turno.");
+      return fila;
     },
   });
 }

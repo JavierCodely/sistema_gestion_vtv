@@ -50,8 +50,8 @@ export function LibroCuenta({ cuenta, rango }: { cuenta: Cuenta; rango: RangoFec
         </p>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-md border">
-            <Table>
+          <div className="md:overflow-x-auto md:rounded-md md:border">
+            <Table apilada>
               <TableHeader>
                 <TableRow>
                   <TableHead>Fecha</TableHead>
@@ -66,10 +66,10 @@ export function LibroCuenta({ cuenta, rango }: { cuenta: Cuenta; rango: RangoFec
               <TableBody>
                 {libro.data.pages.flat().map((m) => (
                   <TableRow key={m.clave} data-testid={`movimiento-${m.clave}`}>
-                    <TableCell className="whitespace-nowrap">
+                    <TableCell data-label="Fecha" className="whitespace-nowrap">
                       {formatearFechaHora(m.fecha)}
                     </TableCell>
-                    <TableCell>
+                    <TableCell data-label="Origen">
                       <div className="flex flex-wrap items-center gap-1">
                         <span className="whitespace-nowrap">{nombreOrigen(m.origen)}</span>
                         {esReverso(m.origen) && <Badge variant="outline">Reverso</Badge>}
@@ -77,17 +77,20 @@ export function LibroCuenta({ cuenta, rango }: { cuenta: Cuenta; rango: RangoFec
                         {m.venta_pasada && <Badge variant="outline">Fecha pasada</Badge>}
                       </div>
                     </TableCell>
-                    <TableCell className="max-w-xs break-words">
+                    <TableCell data-label="Descripción" className="max-w-xs break-words">
                       <p>{m.descripcion ?? "—"}</p>
                       {m.nota && <p className="text-xs text-muted-foreground">{m.nota}</p>}
                     </TableCell>
-                    <TableCell>{m.caja_nombre ?? "—"}</TableCell>
-                    <TableCell>{m.usuario_nombre ?? "—"}</TableCell>
-                    <TableCell className="text-right whitespace-nowrap">
+                    <TableCell data-label="Caja">{m.caja_nombre ?? "—"}</TableCell>
+                    <TableCell data-label="Quién">{m.usuario_nombre ?? "—"}</TableCell>
+                    <TableCell data-label="Monto" className="text-right whitespace-nowrap">
                       <MontoConSigno monto={m.monto} />
                     </TableCell>
                     {conSaldo && (
-                      <TableCell className="text-right whitespace-nowrap tabular-nums">
+                      <TableCell
+                        data-label="Saldo"
+                        className="text-right whitespace-nowrap tabular-nums"
+                      >
                         {m.saldo_resultante === null ? "—" : formatearMoneda(m.saldo_resultante)}
                       </TableCell>
                     )}

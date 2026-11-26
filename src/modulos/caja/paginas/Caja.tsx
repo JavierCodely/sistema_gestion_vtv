@@ -1,13 +1,10 @@
-import { Ban, History, Search, ShoppingCart, Wallet } from "lucide-react";
+import { Ban, History, ShoppingCart, Wallet } from "lucide-react";
 import { useState } from "react";
 import { Cargando } from "@/compartido/componentes/Cargando";
 import { mensajeDeError } from "@/compartido/lib/errores";
 import { formatearFechaHora, formatearMoneda } from "@/compartido/lib/formato";
-import { LARGO_MAXIMO_PATENTE } from "@/compartido/lib/validaciones";
 import { Alert, AlertDescription } from "@/compartido/ui/alert";
 import { Button } from "@/compartido/ui/button";
-import { Input } from "@/compartido/ui/input";
-import { Label } from "@/compartido/ui/label";
 import { useAuth } from "@/modulos/auth/contexto";
 import { useComprobantesDeTurno } from "@/modulos/facturacion/api/consultas";
 import { FacturaDeVenta } from "@/modulos/facturacion/componentes/FacturaDeVenta";
@@ -28,7 +25,9 @@ import { FormularioVenta } from "../componentes/FormularioVenta";
 import { SelectorCaja } from "../componentes/SelectorCaja";
 import { SinCajasAbiertas } from "../componentes/SinCajasAbiertas";
 import { TablaVentas } from "../componentes/TablaVentas";
-import { filtrarPorPatente, MINIMO_BUSQUEDA_PATENTE, patenteABuscar } from "../lib/buscar-patente";
+import { FiltrosVentas } from "../componentes/FiltrosVentas";
+import { ResumenVentasTurno } from "../componentes/ResumenVentasTurno";
+import { filtrarVentas, hayFiltros, SIN_FILTROS, type FiltroVentas } from "../lib/filtrar-ventas";
 import {
   aEleccion,
   cajaInicial,
@@ -151,8 +150,9 @@ function PanelVentas({
 }
 
 /**
- * Efectivo del cajón de la caja donde se trabaja (decisión 2026-11-24, migración 47): es el único
- * total que ve el cajero; los totales por medio siguen siendo del admin.
+ * Efectivo del cajón de la caja donde se trabaja (decisión 2026-11-24, migración 47). Con el total de
+ * realizadas y anuladas (migración 50), es lo único de dinero del turno que ve el cajero; los totales
+ * por medio siguen siendo del admin.
  */
 function EfectivoEnCaja({ turnoId }: { turnoId: number }) {
   const efectivo = useEfectivoEnCaja(turnoId);
@@ -189,9 +189,8 @@ function PanelHistorial({
 }) {
   const ventas = useVentasDeTurno(turnoId);
   const comprobantes = useComprobantesDeTurno(turnoId);
-  const [busqueda, setBusqueda] = useState("");
+  const [filtro, setFiltro] = useState<FiltroVentas>(SIN_FILTROS);
   const [anulando, setAnulando] = useState<Venta | null>(null);
-  const patente = patenteABuscar(busqueda);
 
   const facturada = (venta: Venta) =>
     comprobantes.data?.some(
@@ -204,36 +203,12 @@ function PanelHistorial({
         <h2 id="titulo-ventas" className="text-2xl font-semibold">
           Ventas de la caja
         </h2>
-        <EfectivoEnCaja turnoId={turnoId} />
-      </div>
-      <div className="flex max-w-md flex-col gap-1">
-        <Label htmlFor="buscar-patente" className="text-lg">
-          Buscar patente
-        </Label>
-        <div className="relative">
-          <Search
-            aria-hidden
-            className="absolute top-1/2 left-3 size-5 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input
-            id="buscar-patente"
-            type="search"
-            autoComplete="off"
-            maxLength={LARGO_MAXIMO_PATENTE + 2}
-            className="h-12 pl-10 text-xl uppercase"
-            placeholder="Ej. AB1"
-            aria-describedby="buscar-patente-ayuda"
-            value={busqueda}
-            onChange={(e) => {
-              setBusqueda(e.target.value);
-            }}
-          />
+        <div className="flex flex-wrap items-stretch gap-3">
+          <EfectivoEnCaja turnoId={turnoId} />
+          <ResumenVentasTurno turnoId={turnoId} grande />
         </div>
-        <p id="buscar-patente-ayuda" className="text-sm text-muted-foreground">
-          Desde {MINIMO_BUSQUEDA_PATENTE} caracteres se muestran las ventas de este turno con esa
-          patente.
-        </p>
       </div>
+      {ventas.data && <FiltrosVentas grande ventas={ventas.data} onCambiar={setFiltro} />}
       {ventas.isPending ? (
         <Cargando texto="Cargando ventas…" />
       ) : ventas.isError ? (
@@ -243,11 +218,9 @@ function PanelHistorial({
           {comprobantes.isError && <MensajeError error={comprobantes.error} />}
           <div className="[&_table]:text-lg">
             <TablaVentas
-              ventas={filtrarPorPatente(ventas.data, patente)}
+              ventas={filtrarVentas(ventas.data, filtro)}
               vacio={
-                patente === null
-                  ? undefined
-                  : `No hay ventas en este turno con una patente que empiece con ${patente}.`
+                hayFiltros(filtro) ? "No hay ventas en este turno con esos filtros." : undefined
               }
               acciones={(venta) => (
                 <div className="flex flex-wrap items-center justify-end gap-2">

@@ -212,6 +212,7 @@ En el **SQL Editor**:
 |---|---|---|
 | `supabase/produccion/50_reiniciar_datos.sql` | Borra los **datos** (ventas, turnos, gastos, compras, caja de cambio a $ 0, Fondos, comprobantes; opcional el catálogo —con descuentos e impuestos— y los rubros de gasto creados) y deja la base instalada con todos los usuarios. Exige escribir `EMPEZAR DE CERO` | Fondos → "Fondo inicial" y abrir turnos |
 | `supabase/produccion/51_borrar_gastos.sql` | Borra los **gastos** (no los de compras de certificados) y, opcional, sus rubros y subcategorías; recalcula la caja de cambio. Exige escribir `BORRAR GASTOS` | — |
+| `supabase/produccion/53_borrar_ventas.sql` | Borra las **ventas** (con cobros, impuestos, facturas y alertas) y los **turnos**, y deja los **Fondos en $ 0** (caja de cambio y manuales vacíos; ajuste a $ 0 por los gastos por transferencia). No cambia el stock ni borra gastos, compras, catálogo o usuarios. Exige escribir `BORRAR VENTAS` | Fondos → "Fondo inicial" y abrir turnos |
 | `supabase/produccion/52_borrar_usuarios.sql` | Borra los **usuarios** (login, email y perfil): todos o todos menos tu admin. Solo sin operaciones: antes correr `50_reiniciar_datos.sql`. Exige escribir `BORRAR USUARIOS` | Si no quedó nadie: pasos D6 y D7 |
 | `supabase/produccion/90_deshacer_primer_admin.sql` | Borra solo el usuario indicado (si no tiene operaciones) | Repetir pasos D6 y D7 |
 | `supabase/produccion/99_borrar_todo.sql` | ⚠ Borra **todo**: tablas, datos, usuarios e historial de migraciones. Exige escribir `BORRAR TODO` | Repetir desde el paso D3 |

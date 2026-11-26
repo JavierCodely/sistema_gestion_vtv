@@ -60,8 +60,8 @@ export function Usuarios() {
           <AlertDescription>{mensajeDeError(usuarios.error)}</AlertDescription>
         </Alert>
       ) : (
-        <div className="overflow-x-auto rounded-md border">
-          <Table>
+        <div className="md:overflow-x-auto md:rounded-md md:border">
+          <Table apilada>
             <TableHeader>
               <TableRow>
                 <TableHead>Nombre y apellido</TableHead>
@@ -76,7 +76,7 @@ export function Usuarios() {
                 const esYo = u.id === perfil?.id;
                 return (
                   <TableRow key={u.id} data-testid={`usuario-${u.email ?? u.id}`}>
-                    <TableCell className="font-medium">
+                    <TableCell data-label="Nombre y apellido" className="font-medium">
                       {u.nombre_completo}
                       {esYo && <span className="text-muted-foreground"> (vos)</span>}
                       {u.apellido === null && (
@@ -88,13 +88,13 @@ export function Usuarios() {
                         </Badge>
                       )}
                     </TableCell>
-                    <TableCell>{u.email}</TableCell>
-                    <TableCell>
+                    <TableCell data-label="Email">{u.email}</TableCell>
+                    <TableCell data-label="Rol">
                       <Badge variant={u.rol === "admin" ? "default" : "secondary"}>
                         {u.rol === "admin" ? "Administrador" : "Cajero"}
                       </Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell data-label="Activo">
                       <Switch
                         checked={u.activo}
                         disabled={esYo || accion.isPending}
@@ -102,7 +102,7 @@ export function Usuarios() {
                         onCheckedChange={(activo) => void cambiarActivo(u, activo)}
                       />
                     </TableCell>
-                    <TableCell>
+                    <TableCell data-acciones="">
                       <div className="flex justify-end gap-1">
                         <Button
                           variant="ghost"

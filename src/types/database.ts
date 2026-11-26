@@ -2246,6 +2246,11 @@ isOneToOne: false
               "cantidad_turnos": number,"gastos_total": number,"neto": number,"turnos_abiertos": number,"ventas_cantidad": number,"ventas_efectivo": number,"ventas_tarjeta": number,"ventas_total": number,"ventas_transferencia": number
             }[]
                            },
+"resumen_ventas_de_turno":
+{ Args: { "p_turno_id": number }; Returns: {
+              "anuladas_cantidad": number,"anuladas_total": number,"realizadas_cantidad": number,"realizadas_total": number
+            }[]
+                           },
 "resumen_ventas_mixtas":
 { Args: { "p_desde"?: string,"p_hasta"?: string }; Returns: {
               "cantidad_ventas": number,"incluido_en_cuentas": boolean,"total": number,"total_efectivo": number,"total_tarjeta": number,"total_transferencia": number

@@ -69,6 +69,16 @@ beforeEach(() => {
   });
   responderRpc("descuentos_para_servicio", { data: [] });
   responderRpc("efectivo_en_caja_de_turno", { data: 12500 });
+  responderRpc("resumen_ventas_de_turno", {
+    data: [
+      {
+        realizadas_cantidad: 2,
+        realizadas_total: 57000,
+        anuladas_cantidad: 1,
+        anuladas_total: 30000,
+      },
+    ],
+  });
 });
 
 describe("Caja: sin cajas abiertas", () => {
@@ -297,22 +307,31 @@ describe("Caja: historial y gastos de la caja (de todos; el único total es el e
     expect(normal(mixta.textContent)).toContain("MixtoEfectivo $ 5.000,00 + Tarjeta $ 22.000,00");
     expect(normal(mixta.textContent)).toContain("Jubilados−$ 3.000,00 · lista $ 30.000,00");
     expect(normal(mixta.textContent)).toContain("$ 27.000,00");
-    // Decisión del negocio (2026-11-24): el único total que ve el cajero es el efectivo en caja de
-    // la caja donde trabaja. El resto del dinero en pantalla es el de cada venta, dentro de su fila.
+    // Decisiones del negocio (2026-11-24 y 2026-11-25): de dinero del turno, el cajero ve solo el
+    // efectivo en caja y el total de realizadas y anuladas (los calcula la BD). El resto del dinero en
+    // pantalla es el de cada venta, dentro de su fila: nada de totales por medio, gastos ni neto.
     await waitFor(() => {
       expect(normal(screen.getByTestId("efectivo-en-caja").textContent)).toBe(
         "Efectivo en caja$ 12.500,00",
       );
     });
     expect(argumentosRpc("efectivo_en_caja_de_turno")).toEqual({ p_turno_id: 5 });
+    expect(normal(screen.getByTestId("total-realizadas").textContent)).toBe(
+      "Realizadas$ 57.000,002 ventas",
+    );
+    expect(normal(screen.getByTestId("total-anuladas").textContent)).toBe(
+      "Anuladas$ 30.000,001 venta",
+    );
+    expect(argumentosRpc("resumen_ventas_de_turno")).toEqual({ p_turno_id: 5 });
     expect(screen.queryByText(/total/i)).not.toBeInTheDocument();
     // (las <option> del <select> nativo oculto de Radix no se ven ni las lee el lector de pantalla)
     const montos = screen.getAllByText(/\$/, { ignore: "script, style, option" });
-    expect(montos).toHaveLength(6);
+    expect(montos).toHaveLength(8);
     for (const monto of montos) {
       expect(
         monto.closest("[data-testid^='venta-']") ??
-          monto.closest("[data-testid='efectivo-en-caja']"),
+          monto.closest("[data-testid='efectivo-en-caja']") ??
+          monto.closest("[data-testid^='total-']"),
       ).not.toBeNull();
     }
   });
@@ -369,10 +388,62 @@ describe("Caja: historial y gastos de la caja (de todos; el único total es el e
     await userEvent.clear(buscar);
     await userEvent.type(buscar, "zz9");
     expect(
-      within(ventas).getByText("No hay ventas en este turno con una patente que empiece con ZZ9."),
+      within(ventas).getByText("No hay ventas en este turno con esos filtros."),
     ).toBeInTheDocument();
     await userEvent.clear(buscar);
     expect(within(ventas).getAllByTestId(/^venta-/)).toHaveLength(3);
+  });
+
+  it("HISTORIAL filtra por categoría y por medio de pago (una mixta aparece en cada medio que usó)", async () => {
+    cajasAbiertas([CAJA_1]);
+    responder("ventas", "select", {
+      data: [
+        ventaDePrueba({ id: 3, categoria_id: 1, categorias_servicio: { nombre: "Autos" } }),
+        ventaDePrueba({
+          id: 2,
+          categoria_id: 2,
+          categorias_servicio: { nombre: "Motos" },
+          medio_pago: "tarjeta",
+        }),
+        ventaDePrueba({
+          id: 1,
+          categoria_id: 1,
+          categorias_servicio: { nombre: "Autos" },
+          medio_pago: null,
+          precio: 18000,
+          venta_pagos: [
+            { medio: "efectivo", monto: 5000 },
+            { medio: "tarjeta", monto: 13000 },
+          ],
+        }),
+      ],
+    });
+    responderRpc("nombre_usuario", { data: "Cajero Prueba" });
+    renderRuta("/caja", cajero());
+
+    await userEvent.click(await screen.findByRole("tab", { name: "Historial" }));
+    const ventas = await screen.findByRole("region", { name: "Ventas de la caja" });
+    await within(ventas).findByTestId("venta-3");
+    const ids = () =>
+      within(ventas)
+        .getAllByTestId(/^venta-/)
+        .map((fila) => fila.dataset.testid);
+
+    await userEvent.click(within(ventas).getByRole("combobox", { name: "Categoría" }));
+    await userEvent.click(await screen.findByRole("option", { name: "Autos" }));
+    expect(ids()).toEqual(["venta-3", "venta-1"]);
+
+    await userEvent.click(within(ventas).getByRole("combobox", { name: "Medio de pago" }));
+    await userEvent.click(await screen.findByRole("option", { name: "Tarjeta" }));
+    // Autos + tarjeta: solo la mixta (efectivo + tarjeta).
+    expect(ids()).toEqual(["venta-1"]);
+
+    await userEvent.click(within(ventas).getByRole("button", { name: "Limpiar filtros" }));
+    expect(ids()).toEqual(["venta-3", "venta-2", "venta-1"]);
+
+    await userEvent.click(within(ventas).getByRole("combobox", { name: "Medio de pago" }));
+    await userEvent.click(await screen.findByRole("option", { name: "Mixto" }));
+    expect(ids()).toEqual(["venta-1"]);
   });
 
   it("HISTORIAL: el cajero anula su venta con motivo y la nota de crédito queda para el admin", async () => {

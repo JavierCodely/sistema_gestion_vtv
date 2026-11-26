@@ -45,8 +45,8 @@ export function TablaCompras({ onEditar }: { onEditar: (compra: Compra) => void 
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="overflow-x-auto rounded-md border">
-        <Table>
+      <div className="md:overflow-x-auto md:rounded-md md:border">
+        <Table apilada>
           <TableHeader>
             <TableRow>
               <TableHead>N°</TableHead>
@@ -64,14 +64,18 @@ export function TablaCompras({ onEditar }: { onEditar: (compra: Compra) => void 
           </TableHeader>
           <TableBody>
             {filas.map((compra) => {
-              const tachada = cn(compra.anulada && "text-muted-foreground line-through");
+              const tachada = cn(
+                compra.anulada && "text-muted-foreground line-through max-md:no-underline",
+              );
               return (
                 <TableRow key={compra.id} data-testid={`compra-${String(compra.id)}`}>
-                  <TableCell className="tabular-nums">#{compra.id}</TableCell>
-                  <TableCell className={cn("whitespace-nowrap", tachada)}>
+                  <TableCell data-label="N°" className="tabular-nums">
+                    #{compra.id}
+                  </TableCell>
+                  <TableCell data-label="Fecha" className={cn("whitespace-nowrap", tachada)}>
                     {formatearFechaHora(compra.creado_en)}
                   </TableCell>
-                  <TableCell>
+                  <TableCell data-label="Certificado">
                     <div className={tachada}>{compra.certificado}</div>
                     {compra.anulada && (
                       <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
@@ -83,22 +87,32 @@ export function TablaCompras({ onEditar }: { onEditar: (compra: Compra) => void 
                       </div>
                     )}
                   </TableCell>
-                  <TableCell className={cn("text-right tabular-nums", tachada)}>
+                  <TableCell
+                    data-label="Unidades"
+                    className={cn("text-right tabular-nums", tachada)}
+                  >
                     {formatearNumero(compra.unidades)}
                   </TableCell>
-                  <TableCell className={cn("text-right tabular-nums", tachada)}>
+                  <TableCell data-label="Hojas" className={cn("text-right tabular-nums", tachada)}>
                     {formatearNumero(compra.hojas)}
                   </TableCell>
-                  <TableCell className={cn("text-right tabular-nums", tachada)}>
+                  <TableCell
+                    data-label="Costo por unidad"
+                    className={cn("text-right tabular-nums", tachada)}
+                  >
                     {formatearMoneda(compra.costo_unidad)}
                   </TableCell>
-                  <TableCell className={cn("text-right tabular-nums", tachada)}>
+                  <TableCell data-label="Total" className={cn("text-right tabular-nums", tachada)}>
                     {formatearMoneda(compra.costo_total)}
                   </TableCell>
-                  <TableCell className={tachada}>{FUENTES[compra.fuente]}</TableCell>
-                  <TableCell className={tachada}>{compra.proveedor ?? "—"}</TableCell>
-                  <TableCell>{compra.usuario}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell data-label="Pago" className={tachada}>
+                    {FUENTES[compra.fuente]}
+                  </TableCell>
+                  <TableCell data-label="Proveedor" className={tachada}>
+                    {compra.proveedor ?? "—"}
+                  </TableCell>
+                  <TableCell data-label="Registró">{compra.usuario}</TableCell>
+                  <TableCell data-acciones="" className="text-right">
                     {compra.editable && (
                       <Button
                         variant="ghost"

@@ -77,8 +77,8 @@ export function TablaImpuestos({
           Todavía no hay impuestos.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-md border">
-          <Table>
+        <div className="md:overflow-x-auto md:rounded-md md:border">
+          <Table apilada>
             <TableHeader>
               <TableRow>
                 <TableHead>Nombre</TableHead>
@@ -93,14 +93,21 @@ export function TablaImpuestos({
             <TableBody>
               {impuestos.map((impuesto) => (
                 <TableRow key={impuesto.id} data-testid={`impuesto-${impuesto.nombre}`}>
-                  <TableCell className="font-medium">{impuesto.nombre}</TableCell>
-                  <TableCell>{TIPOS_IMPUESTO[impuesto.tipo]}</TableCell>
-                  <TableCell className="text-right whitespace-nowrap tabular-nums">
+                  <TableCell data-label="Nombre" className="font-medium">
+                    {impuesto.nombre}
+                  </TableCell>
+                  <TableCell data-label="Tipo">{TIPOS_IMPUESTO[impuesto.tipo]}</TableCell>
+                  <TableCell
+                    data-label="Valor"
+                    className="text-right whitespace-nowrap tabular-nums"
+                  >
                     {formatearValorImpuesto(impuesto)}
                   </TableCell>
-                  <TableCell>{formatearMedios(impuesto.medios)}</TableCell>
-                  <TableCell>{formatearServicios(impuesto)}</TableCell>
-                  <TableCell>
+                  <TableCell data-label="Medios de pago">
+                    {formatearMedios(impuesto.medios)}
+                  </TableCell>
+                  <TableCell data-label="Servicios">{formatearServicios(impuesto)}</TableCell>
+                  <TableCell data-label="Activo">
                     <Switch
                       checked={impuesto.activo}
                       disabled={actualizar.isPending}
@@ -108,7 +115,7 @@ export function TablaImpuestos({
                       onCheckedChange={(activo) => void cambiarActivo(impuesto, activo)}
                     />
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell data-acciones="" className="text-right">
                     <div className="flex flex-wrap justify-end gap-1">
                       <Button
                         variant="ghost"

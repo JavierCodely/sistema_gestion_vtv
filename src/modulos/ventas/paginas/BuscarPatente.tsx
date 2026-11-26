@@ -149,8 +149,8 @@ export function BuscarPatente() {
             <p className="text-sm text-muted-foreground" data-testid="cantidad-ventas-patente">
               {filas.length === 1 ? "1 venta" : `${String(filas.length)} ventas`}
             </p>
-            <div className="overflow-x-auto rounded-md border">
-              <Table>
+            <div className="md:overflow-x-auto md:rounded-md md:border">
+              <Table apilada>
                 <TableHeader>
                   <TableRow>
                     <TableHead>N°</TableHead>
@@ -166,44 +166,70 @@ export function BuscarPatente() {
                 </TableHeader>
                 <TableBody>
                   {filas.map((venta) => {
-                    const tachada = cn(venta.anulada && "text-muted-foreground line-through");
+                    const tachada = cn(
+                      venta.anulada && "text-muted-foreground line-through max-md:no-underline",
+                    );
                     return (
                       <TableRow key={venta.id} data-testid={`venta-patente-${String(venta.id)}`}>
-                        <TableCell className="tabular-nums">{venta.id}</TableCell>
-                        <TableCell className={cn("whitespace-nowrap", tachada)}>
-                          {formatearFechaHora(venta.creado_en)}
-                          {venta.venta_pasada && (
-                            <span className="block text-xs text-muted-foreground no-underline">
-                              Fecha pasada
-                            </span>
-                          )}
+                        <TableCell
+                          data-label="Venta N°"
+                          className="tabular-nums max-md:font-semibold"
+                        >
+                          {venta.id}
                         </TableCell>
-                        <TableCell className={cn("font-medium", tachada)}>
+                        <TableCell data-label="Fecha" className={cn("whitespace-nowrap", tachada)}>
+                          <div>
+                            {formatearFechaHora(venta.creado_en)}
+                            {venta.venta_pasada && (
+                              <span className="block text-xs text-muted-foreground no-underline">
+                                Fecha pasada
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell
+                          data-label="Patente"
+                          className={cn("font-medium max-md:text-base", tachada)}
+                        >
                           {venta.patente}
                         </TableCell>
-                        <TableCell className={tachada}>
-                          {venta.servicio_nombre}
-                          <span className="block text-xs text-muted-foreground">
-                            {venta.categoria_nombre}
-                          </span>
+                        <TableCell data-label="Servicio" className={tachada}>
+                          <div>
+                            {venta.servicio_nombre}
+                            <span className="block text-xs text-muted-foreground">
+                              {venta.categoria_nombre}
+                            </span>
+                          </div>
                         </TableCell>
-                        <TableCell className={tachada}>
-                          <Certificado venta={venta} />
+                        <TableCell data-label="Certificado" className={tachada}>
+                          <div>
+                            <Certificado venta={venta} />
+                          </div>
                         </TableCell>
-                        <TableCell className={cn("text-right tabular-nums", tachada)}>
+                        <TableCell
+                          data-label="Precio"
+                          className={cn(
+                            "text-right tabular-nums max-md:text-base max-md:font-semibold",
+                            tachada,
+                          )}
+                        >
                           {formatearMoneda(venta.precio)}
                         </TableCell>
-                        <TableCell className={tachada}>{textoMedio(venta.medio)}</TableCell>
-                        <TableCell className={tachada}>
-                          {venta.caja_nombre}
-                          <span className="block text-xs text-muted-foreground">
-                            {venta.usuario_nombre}
-                          </span>
+                        <TableCell data-label="Medio" className={tachada}>
+                          {textoMedio(venta.medio)}
                         </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col gap-1">
+                        <TableCell data-label="Caja · Vendió" className={tachada}>
+                          <div>
+                            {venta.caja_nombre}
+                            <span className="block text-xs text-muted-foreground">
+                              {venta.usuario_nombre}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell data-label="Condicional">
+                          <div className="flex flex-col items-end gap-1 md:items-start">
                             {venta.anulada && (
-                              <Badge variant="destructive" className="self-start">
+                              <Badge variant="destructive" className="md:self-start">
                                 Anulada
                               </Badge>
                             )}

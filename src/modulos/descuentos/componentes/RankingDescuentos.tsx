@@ -26,8 +26,8 @@ export function RankingDescuentos({
       <h3 id={id} className="font-semibold">
         {titulo}
       </h3>
-      <div className="overflow-x-auto rounded-md border">
-        <Table>
+      <div className="md:overflow-x-auto md:rounded-md md:border">
+        <Table apilada>
           <TableHeader>
             <TableRow>
               <TableHead className="w-10">#</TableHead>
@@ -39,12 +39,14 @@ export function RankingDescuentos({
           <TableBody>
             {filas.map((fila, indice) => (
               <TableRow key={`${fila.agrupacion}-${String(fila.id)}`}>
-                <TableCell className="text-muted-foreground tabular-nums">{indice + 1}</TableCell>
+                <TableCell data-label="#" className="text-muted-foreground tabular-nums">
+                  {indice + 1}
+                </TableCell>
                 <TableCell className="font-medium">{fila.nombre}</TableCell>
-                <TableCell className="text-right tabular-nums">
+                <TableCell data-label="Ventas" className="text-right tabular-nums">
                   {formatearNumero(fila.cantidad_ventas)}
                 </TableCell>
-                <TableCell className="text-right tabular-nums">
+                <TableCell data-label="Total descontado" className="text-right tabular-nums">
                   {formatearMoneda(fila.total_descontado)}
                 </TableCell>
               </TableRow>

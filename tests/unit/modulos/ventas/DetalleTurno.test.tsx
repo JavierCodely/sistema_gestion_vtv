@@ -38,6 +38,16 @@ beforeEach(() => {
   );
   // Al anular, se busca la nota de crédito a emitir: sin factura no hay.
   responder("comprobantes", "select", { data: null });
+  responderRpc("resumen_ventas_de_turno", {
+    data: [
+      {
+        realizadas_cantidad: 1,
+        realizadas_total: 20000,
+        anuladas_cantidad: 1,
+        anuladas_total: 30000,
+      },
+    ],
+  });
   responder("ventas", "select", {
     data: [
       ventaDePrueba({ id: 82, medio_pago: "tarjeta", precio: 20000, usuario_id: "a1" }),
@@ -175,6 +185,43 @@ describe("DetalleTurno (admin)", () => {
       within(screen.getByTestId("venta-81")).queryByRole("button", { name: /Facturar|Reintentar/ }),
     ).not.toBeInTheDocument();
   });
+  it("filtra las ventas del turno por medio de pago y por categoría", async () => {
+    responder("v_turnos", "select", { data: turnoDePrueba() });
+    responder("ventas", "select", {
+      data: [
+        ventaDePrueba({ id: 84, categoria_id: 2, categorias_servicio: { nombre: "Motos" } }),
+        ventaDePrueba({ id: 83, medio_pago: "transferencia" }),
+        ventaDePrueba({ id: 82, medio_pago: "tarjeta" }),
+      ],
+    });
+    renderRuta("/admin/ventas/turnos/5", admin());
+    await screen.findByTestId("venta-84");
+    const ids = () => screen.getAllByTestId(/^venta-\d+$/).map((fila) => fila.dataset.testid);
+
+    await userEvent.click(screen.getByRole("combobox", { name: "Medio de pago" }));
+    await userEvent.click(await screen.findByRole("option", { name: "Transferencia" }));
+    expect(ids()).toEqual(["venta-83"]);
+
+    await userEvent.click(screen.getByRole("combobox", { name: "Categoría" }));
+    await userEvent.click(await screen.findByRole("option", { name: "Motos" }));
+    expect(screen.getByText("No hay ventas en este turno con esos filtros.")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Limpiar filtros" }));
+    expect(ids()).toEqual(["venta-84", "venta-83", "venta-82"]);
+  });
+
+  it("muestra el total de ventas realizadas y anuladas del turno (lo calcula la BD)", async () => {
+    responder("v_turnos", "select", { data: turnoDePrueba() });
+    renderRuta("/admin/ventas/turnos/5", admin());
+    expect(normal((await screen.findByTestId("total-realizadas")).textContent)).toBe(
+      "Realizadas$ 20.000,001 venta",
+    );
+    expect(normal(screen.getByTestId("total-anuladas").textContent)).toBe(
+      "Anuladas$ 30.000,001 venta",
+    );
+    expect(argumentosRpc("resumen_ventas_de_turno")).toEqual({ p_turno_id: 5 });
+  });
+
   it("muestra el pago mixto con su detalle y el descuento; al anular avisa de la parte en efectivo", async () => {
     responder("v_turnos", "select", { data: turnoDePrueba() });
     responder("ventas", "select", {

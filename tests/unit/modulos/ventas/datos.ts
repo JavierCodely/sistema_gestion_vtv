@@ -43,6 +43,8 @@ export function ventaDePrueba(cambios: Partial<Venta> = {}): Venta {
     turno_id: 5,
     usuario_id: CAJERO_ID,
     servicio_nombre: "VTV auto",
+    categoria_id: 1,
+    categorias_servicio: { nombre: "Vehicular" },
     precio,
     precio_lista: precio,
     monto_descuento: 0,

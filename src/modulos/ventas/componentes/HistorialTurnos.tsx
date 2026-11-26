@@ -67,8 +67,8 @@ function TablaTurnos({ rango }: { rango: RangoFechas }) {
         </p>
       ) : (
         <div className="flex flex-col gap-2">
-          <div className="overflow-x-auto rounded-md border">
-            <Table>
+          <div className="md:overflow-x-auto md:rounded-md md:border">
+            <Table apilada="grilla">
               <TableHeader>
                 <TableRow>
                   <TableHead>Caja</TableHead>
@@ -90,48 +90,56 @@ function TablaTurnos({ rango }: { rango: RangoFechas }) {
               <TableBody>
                 {turnos.data.pages.flat().map((t) => (
                   <TableRow key={t.id} data-testid={`turno-${String(t.id)}`}>
-                    <TableCell className="font-medium">{t.caja_nombre}</TableCell>
-                    <TableCell>
+                    <TableCell
+                      data-label="Caja"
+                      className="font-medium max-md:col-span-2 max-md:text-base"
+                    >
+                      {t.caja_nombre}
+                    </TableCell>
+                    <TableCell data-label="Atendieron" className="max-md:col-span-2">
                       {t.atendido_por && t.atendido_por.length > 0
                         ? formatearLista(t.atendido_por)
                         : "—"}
                     </TableCell>
-                    <TableCell className="whitespace-nowrap">
+                    <TableCell data-label="Apertura" className="whitespace-nowrap">
                       {formatearFechaHora(t.abierto_en)}
                     </TableCell>
-                    <TableCell>{t.abierto_por_nombre ?? "—"}</TableCell>
-                    <TableCell>
+                    <TableCell data-label="Abrió">{t.abierto_por_nombre ?? "—"}</TableCell>
+                    <TableCell data-label="Estado">
                       {t.abierto ? (
                         <Badge>Abierto</Badge>
                       ) : (
                         <Badge variant="secondary">Cerrado</Badge>
                       )}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell data-label="Ventas" className="text-right tabular-nums">
                       {formatearNumero(t.ventas_cantidad ?? 0)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell data-label="Efectivo" className="text-right tabular-nums">
                       {formatearMoneda(t.ventas_efectivo)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell data-label="Transferencia" className="text-right tabular-nums">
                       {formatearMoneda(t.ventas_transferencia)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell data-label="Tarjeta" className="text-right tabular-nums">
                       {formatearMoneda(t.ventas_tarjeta)}
                     </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">
+                    <TableCell
+                      data-label="Total"
+                      className="text-right font-medium tabular-nums max-md:text-base"
+                    >
                       {formatearMoneda(t.ventas_total)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell data-label="Gastos" className="text-right tabular-nums">
                       {formatearMoneda(t.gastos_total)}
                     </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">
+                    <TableCell data-label="Neto" className="text-right font-medium tabular-nums">
                       {formatearMoneda(t.neto)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell data-label="Efectivo en caja" className="text-right tabular-nums">
                       {t.efectivo_en_caja === null ? "—" : formatearMoneda(t.efectivo_en_caja)}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell data-acciones="" className="text-right">
                       <Button asChild variant="ghost" size="sm">
                         <Link
                           to={`turnos/${String(t.id)}`}

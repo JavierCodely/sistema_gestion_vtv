@@ -83,8 +83,8 @@ export function VentasPasadas() {
         </p>
       ) : (
         <div className="flex flex-col gap-2">
-          <div className="overflow-x-auto rounded-md border">
-            <Table>
+          <div className="md:overflow-x-auto md:rounded-md md:border">
+            <Table apilada>
               <TableHeader>
                 <TableRow>
                   <TableHead>N°</TableHead>
@@ -101,34 +101,69 @@ export function VentasPasadas() {
               </TableHeader>
               <TableBody>
                 {filas.map((venta) => {
-                  const tachada = cn(venta.anulada && "text-muted-foreground line-through");
+                  const tachada = cn(
+                    venta.anulada && "text-muted-foreground line-through max-md:no-underline",
+                  );
                   return (
                     <TableRow key={venta.id} data-testid={`venta-pasada-${String(venta.id)}`}>
-                      <TableCell className="tabular-nums">{venta.id}</TableCell>
-                      <TableCell className={cn("whitespace-nowrap", tachada)}>
+                      <TableCell
+                        data-label="Venta N°"
+                        className="tabular-nums max-md:font-semibold"
+                      >
+                        {venta.id}
+                      </TableCell>
+                      <TableCell data-label="Fecha" className={cn("whitespace-nowrap", tachada)}>
                         {formatearFechaHora(venta.creado_en)}
                       </TableCell>
-                      <TableCell className={tachada}>{venta.cajas?.nombre ?? "—"}</TableCell>
-                      <TableCell className={tachada}>{venta.servicio_nombre}</TableCell>
-                      <TableCell className={tachada}>{venta.patente ?? "—"}</TableCell>
-                      <TableCell className={tachada}>
-                        <MedioDeVenta venta={venta} />
+                      <TableCell data-label="Caja" className={tachada}>
+                        {venta.cajas?.nombre ?? "—"}
                       </TableCell>
-                      <TableCell className={cn("text-right tabular-nums", tachada)}>
+                      <TableCell data-label="Servicio" className={tachada}>
+                        {venta.servicio_nombre}
+                      </TableCell>
+                      <TableCell
+                        data-label="Patente"
+                        className={cn("max-md:text-base max-md:font-semibold", tachada)}
+                      >
+                        {venta.patente ?? "—"}
+                      </TableCell>
+                      <TableCell data-label="Medio" className={tachada}>
+                        <div>
+                          <MedioDeVenta venta={venta} />
+                        </div>
+                      </TableCell>
+                      <TableCell
+                        data-label="Precio"
+                        className={cn(
+                          "text-right tabular-nums max-md:text-base max-md:font-semibold",
+                          tachada,
+                        )}
+                      >
                         {formatearMoneda(venta.precio)}
                       </TableCell>
-                      <TableCell className="whitespace-nowrap text-muted-foreground">
+                      <TableCell
+                        data-label="Cargada"
+                        className="whitespace-nowrap text-muted-foreground"
+                      >
                         {venta.cargada_en ? formatearFechaHora(venta.cargada_en) : "—"}
                       </TableCell>
-                      <TableCell>
-                        {venta.anulada && <Badge variant="destructive">Anulada</Badge>}
-                        {venta.anulada && venta.anulada_motivo && (
-                          <div className="text-xs text-muted-foreground">
-                            {venta.anulada_motivo}
-                          </div>
-                        )}
+                      <TableCell
+                        data-label="Estado"
+                        className={cn(!venta.anulada && "max-md:hidden!")}
+                      >
+                        <div className="flex flex-col items-end gap-1 md:items-start">
+                          {venta.anulada && <Badge variant="destructive">Anulada</Badge>}
+                          {venta.anulada && venta.anulada_motivo && (
+                            <div className="text-xs text-muted-foreground">
+                              {venta.anulada_motivo}
+                            </div>
+                          )}
+                        </div>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell
+                        data-acciones=""
+                        className={cn("text-right", venta.anulada && "max-md:hidden!")}
+                      >
                         {!venta.anulada && (
                           <Button
                             variant="ghost"
