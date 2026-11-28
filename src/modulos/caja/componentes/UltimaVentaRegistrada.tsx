@@ -13,9 +13,9 @@ export interface UltimaVenta {
   /** Lo cobrado (`ventas.precio`, ya con el descuento). */
   precio: number;
   descuento: { nombre: string; monto: number } | null;
-  /** "Efectivo", "Tarjeta"… o "Mixto". */
+  /** "Efectivo", "Transferencia" o "Mixto". */
   medio: string;
-  /** Detalle de un pago mixto ("Efectivo $ 5.000,00 + Tarjeta $ 13.000,00"). */
+  /** Detalle de un pago mixto ("Efectivo $ 5.000,00 + Transferencia $ 13.000,00"). */
   detallePagos: string | null;
   /** Lo que se cobró en efectivo (el precio o la parte en efectivo); null si no hubo efectivo. */
   efectivo: number | null;

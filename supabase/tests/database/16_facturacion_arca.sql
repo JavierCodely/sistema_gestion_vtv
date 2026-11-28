@@ -8,9 +8,9 @@ select * from pg_temp.escenario() \gset
 reset role;
 select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja) as turno \gset
 select (registrar_venta(:turno, :servicio, 'efectivo', p_patente => $p$AB123CD$p$)).id as venta \gset
-select (registrar_venta(:turno, :servicio, 'tarjeta', p_patente => $p$AB123CD$p$)).id as venta2 \gset
-select (registrar_venta(:turno, :servicio, 'tarjeta', p_patente => $p$AB123CD$p$)).id as venta3 \gset
-select (registrar_venta(:turno, :servicio, 'tarjeta', p_patente => $p$AB123CD$p$)).id as venta4 \gset
+select (registrar_venta(:turno, :servicio, 'transferencia', p_patente => $p$AB123CD$p$)).id as venta2 \gset
+select (registrar_venta(:turno, :servicio, 'transferencia', p_patente => $p$AB123CD$p$)).id as venta3 \gset
+select (registrar_venta(:turno, :servicio, 'transferencia', p_patente => $p$AB123CD$p$)).id as venta4 \gset
 reset role;
 select pg_temp.abrir_turno_para(:'admin', :'admin', :caja2) as turno_admin \gset
 select (registrar_venta(:turno_admin, :servicio, 'transferencia', p_patente => $p$AB123CD$p$)).id as venta_admin \gset

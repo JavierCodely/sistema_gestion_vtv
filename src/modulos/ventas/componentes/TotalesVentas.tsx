@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/compartido/ui/card";
 export interface ValoresTotales {
   ventas_efectivo: number | null;
   ventas_transferencia: number | null;
-  ventas_tarjeta: number | null;
   ventas_total: number | null;
   gastos_total: number | null;
   neto: number | null;
@@ -32,7 +31,6 @@ export function TotalesVentas({
   const filas: [string, number | null][] = [
     ["Efectivo", valores.ventas_efectivo],
     ["Transferencia", valores.ventas_transferencia],
-    ["Tarjeta", valores.ventas_tarjeta],
     ["Total ventas", valores.ventas_total],
     ["Gastos", valores.gastos_total],
     ["Neto", valores.neto],

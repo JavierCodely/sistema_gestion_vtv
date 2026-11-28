@@ -40,8 +40,9 @@ import {
   type ErroresVentaPasada,
   type FormularioVentaPasada,
 } from "../lib/venta-pasada";
+import { useEnvioUnico } from "@/compartido/lib/envio-unico";
 
-const ORDEN_MEDIOS: readonly MedioPago[] = ["efectivo", "transferencia", "tarjeta"];
+const ORDEN_MEDIOS: readonly MedioPago[] = ["efectivo", "transferencia"];
 
 const VACIO: FormularioVentaPasada = {
   fecha: "",
@@ -99,6 +100,8 @@ export function DialogoVentaPasada({ onCerrar }: { onCerrar: () => void }) {
     }));
   }
 
+  const unaVez = useEnvioUnico();
+
   async function enviar(evento: SubmitEvent<HTMLFormElement>) {
     evento.preventDefault();
     const resultado = validarVentaPasada(formulario, hoy);
@@ -142,7 +145,14 @@ export function DialogoVentaPasada({ onCerrar }: { onCerrar: () => void }) {
         ) : errorCarga ? (
           <ErrorFormulario mensaje={mensajeDeError(errorCarga)} />
         ) : (
-          <form className="flex flex-col gap-4" onSubmit={(e) => void enviar(e)} noValidate>
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void unaVez(() => enviar(e));
+            }}
+            noValidate
+          >
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Campo id="pasada-fecha" etiqueta="Fecha" error={errores.fecha}>
                 <Input

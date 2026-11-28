@@ -106,6 +106,9 @@ export const claves = {
    * y el tiempo real del admin lo invalidan).
    */
   resumenVentasDeTurno: (turnoId: number) => ["caja", "ventas", turnoId, "resumen"] as const,
+  /** Ventana "Certificados y servicios" de un turno (migración 53; bajo `["caja", "ventas"]`). */
+  certificadosServiciosDeTurno: (turnoId: number) =>
+    ["caja", "ventas", turnoId, "certificados-servicios"] as const,
   certificadoDeServicio: (servicioId: number, condicional: boolean) =>
     ["caja", "certificado", servicioId, condicional ? "condicional" : "de-siempre"] as const,
   /** Condicionales vigentes de una patente (bajo `["caja"]`: vender y anular las invalidan). */
@@ -178,11 +181,10 @@ export function consultaVentasAnteriores(patente: string) {
 export const MEDIOS_PAGO: Record<MedioPago, string> = {
   efectivo: "Efectivo",
   transferencia: "Transferencia",
-  tarjeta: "Tarjeta",
 };
 
 /** Orden en que se ofrecen y se muestran los medios de pago. */
-export const ORDEN_MEDIOS: readonly MedioPago[] = ["efectivo", "transferencia", "tarjeta"];
+export const ORDEN_MEDIOS: readonly MedioPago[] = ["efectivo", "transferencia"];
 
 export const MENSAJES_ERROR_VENTA = {
   restricciones: { ventas_patente_largo: "La patente no puede superar los 10 caracteres." },
@@ -329,6 +331,102 @@ export function useResumenVentasDeTurno(turnoId: number) {
 }
 
 /**
+ * Fila de `certificados_servicios_de_turno`. El esquema generado tipa todas las columnas como no
+ * nulas, pero la BD manda null en el precio y la categoría de un certificado y en los totales en $
+ * del cajero.
+ */
+export type FilaCertificadosServicios = Omit<
+  Database["public"]["Functions"]["certificados_servicios_de_turno"]["Returns"][number],
+  "precio" | "categoria_nombre" | "efectivo_total" | "transferencia_total"
+> & {
+  precio: number | null;
+  categoria_nombre: string | null;
+  efectivo_total: number | null;
+  transferencia_total: number | null;
+};
+
+/** Hojas de un certificado entregadas en el turno (en ventas sin anular y en anuladas). */
+export interface CertificadoDelTurno {
+  id: number;
+  nombre: string;
+  condicional: boolean;
+  cantidad: number;
+  anuladas: number;
+}
+
+/**
+ * Un servicio del catálogo con su precio actual y cuántas ventas sin anular se cobraron solo en
+ * efectivo y solo por transferencia (las mixtas no cuentan). Los totales en $ vienen solo para el
+ * admin: al cajero la BD se los devuelve en null.
+ */
+export interface ServicioDelTurno {
+  id: number;
+  nombre: string;
+  categoria: string;
+  precio: number;
+  efectivoCantidad: number;
+  transferenciaCantidad: number;
+  efectivoTotal: number | null;
+  transferenciaTotal: number | null;
+}
+
+export interface CertificadosServiciosDeTurno {
+  certificados: CertificadoDelTurno[];
+  servicios: ServicioDelTurno[];
+}
+
+/** Separa las filas de `certificados_servicios_de_turno` (el orden lo pone la BD). */
+export function separarCertificadosServicios(
+  filas: FilaCertificadosServicios[],
+): CertificadosServiciosDeTurno {
+  const certificados: CertificadoDelTurno[] = [];
+  const servicios: ServicioDelTurno[] = [];
+  for (const f of filas) {
+    if (f.agrupacion === "certificado") {
+      certificados.push({
+        id: f.id,
+        nombre: f.nombre,
+        condicional: f.condicional,
+        cantidad: f.cantidad,
+        anuladas: f.anuladas,
+      });
+    } else if (f.agrupacion === "servicio") {
+      servicios.push({
+        id: f.id,
+        nombre: f.nombre,
+        categoria: f.categoria_nombre ?? "",
+        precio: f.precio ?? 0,
+        efectivoCantidad: f.efectivo_cantidad,
+        transferenciaCantidad: f.transferencia_cantidad,
+        efectivoTotal: f.efectivo_total,
+        transferenciaTotal: f.transferencia_total,
+      });
+    }
+  }
+  return { certificados, servicios };
+}
+
+/**
+ * Ventana "Certificados y servicios" del turno (`certificados_servicios_de_turno`, migración 53):
+ * solo se lee mientras la ventana está abierta y se reconsulta cada 15 s (otros venden en la caja).
+ */
+export function useCertificadosServiciosDeTurno(turnoId: number, abierta: boolean) {
+  return useQuery({
+    queryKey: claves.certificadosServiciosDeTurno(turnoId),
+    enabled: abierta && turnoId > 0,
+    staleTime: 0,
+    refetchInterval: abierta ? INTERVALO_CAJAS_ABIERTAS_MS : false,
+    queryFn: async (): Promise<CertificadosServiciosDeTurno> => {
+      const { data, error } = await supabase.rpc("certificados_servicios_de_turno", {
+        p_turno_id: turnoId,
+      });
+      if (error) throw error;
+      return separarCertificadosServicios(data);
+    },
+  });
+}
+
+/**
  * `certificado_para_servicio` / `certificado_condicional_para_servicio` devuelven null cuando no hay
  * certificado, pero el esquema generado las tipa como `number`: se valida el valor real.
  */
@@ -368,7 +466,7 @@ export function useCertificadoDeServicio(servicioId: number | null, condicional 
  * cada caja (ventas del turno) y el certificado de cada servicio; `["turnos"]` cubre `v_turnos`
  * (lista, detalle y turnos abiertos) y las cajas abiertas de `/caja`; `["certificados"]`, el stock;
  * `claveEfectivo`, la caja de cambio (de ahí sale el efectivo inicial y ahí vuelve al cerrar);
- * `claveFondos`, saldos y libros de Fondos (ventas por transferencia/tarjeta, mixtas, anulaciones,
+ * `claveFondos`, saldos y libros de Fondos (ventas por transferencia, mixtas, anulaciones,
  * apertura y cierre);
  * `clavesDescuentos.resumenes`, las estadísticas de descuentos (una venta con descuento o su
  * anulación las cambia); `clavesImpuestos.resumenes`, el reporte de impuestos (ídem).

@@ -29,7 +29,7 @@ select fijar_servicios_descuento(:desc_j, array[:servicio]);
 reset role;
 select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja, 100) as turno \gset
 select (registrar_venta(:turno, :servicio, 'efectivo', p_patente => $p$AB123CD$p$)).id as v1 \gset
-select (registrar_venta(:turno, :servicio, 'tarjeta', p_descuento_id => :desc_j, p_patente => $p$AB123CD$p$)).id as v2 \gset
+select (registrar_venta(:turno, :servicio, 'transferencia', p_descuento_id => :desc_j, p_patente => $p$AB123CD$p$)).id as v2 \gset
 select (registrar_venta(:turno, :moto, 'transferencia', p_patente => $p$AB123CD$p$)).id as v3 \gset
 select (registrar_venta(:turno, :moto, 'efectivo', p_patente => $p$AB123CD$p$)).id as v4 \gset
 select (registrar_gasto(:comida, 1500, 'efectivo', 'Almuerzo', :turno)).id as g1 \gset

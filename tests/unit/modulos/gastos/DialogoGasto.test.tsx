@@ -1,10 +1,11 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DialogoGasto } from "@/modulos/gastos/componentes/DialogoGasto";
 import { renderConQuery } from "@tests/soporte/render";
 import {
   argumentosRpc,
+  llamadas,
   reiniciarSupabaseFalso,
   responder,
   responderRpc,
@@ -53,6 +54,29 @@ describe("DialogoGasto", () => {
     expect(screen.getByText("Elegí de dónde sale el dinero.")).toBeInTheDocument();
     expect(screen.getByText("Escribí una nota.")).toBeInTheDocument();
     expect(argumentosRpc("registrar_gasto")).toBeUndefined();
+  });
+
+  it("un doble clic o doble Enter registra un solo gasto", async () => {
+    responderRpc("registrar_gasto", { data: { id: 7, monto: 2500.5 } });
+    const onCerrar = vi.fn();
+    renderConQuery(<DialogoGasto soloCaja turnoId={5} descripcion="Caja 1" onCerrar={onCerrar} />);
+    await userEvent.click(await screen.findByLabelText("Categoría"));
+    await userEvent.click(await screen.findByRole("option", { name: "Papelería" }));
+    await userEvent.type(screen.getByLabelText("Monto ($)"), "2.500,50");
+    await userEvent.click(screen.getByLabelText("Pagado con"));
+    await userEvent.click(await screen.findByRole("option", { name: "Efectivo (de la caja)" }));
+    await userEvent.type(screen.getByLabelText("Nota"), "Resma A4");
+    const boton = screen.getByRole("button", { name: "Registrar gasto" });
+    // Los tres llegan antes de que React vuelva a dibujar (el botón sigue habilitado).
+    act(() => {
+      fireEvent.click(boton);
+      fireEvent.click(boton);
+      fireEvent.click(boton);
+    });
+    await waitFor(() => {
+      expect(onCerrar).toHaveBeenCalled();
+    });
+    expect(llamadas.filter((l) => l.tabla === "rpc:registrar_gasto")).toHaveLength(1);
   });
 
   it("registra el gasto en el turno de la caja elegida y cierra", async () => {

@@ -52,7 +52,7 @@ select registrar_gasto((select id from categorias_gasto where nombre = 'Comida')
   :turno);
 reset role;
 select pg_temp.como(:'otro');
-select registrar_venta(:turno, :servicio, 'tarjeta', p_patente => $p$AB123CD$p$);
+select registrar_venta(:turno, :servicio, 'transferencia', p_patente => $p$AB123CD$p$);
 select registrar_venta(:turno, :servicio, 'transferencia', p_patente => $p$AB123CD$p$);
 select throws_ok(format('select cerrar_turno(%s)', :turno), '42501', null,
   'un cajero no cierra turnos');
@@ -70,9 +70,9 @@ select throws_ok(format('select cerrar_turno(%s)', :turno), 'P0001', 'El turno y
 reset role;
 
 select is(
-  (select row(cantidad_ventas, total_efectivo, total_tarjeta, total_transferencia, total_gastos)::text
+  (select row(cantidad_ventas, total_efectivo, total_transferencia, total_gastos)::text
    from turnos where id = :turno),
-  row(4, 40000.00, 20000.00, 20000.00, 3000.00)::text,
+  row(4, 40000.00, 40000.00, 3000.00)::text,
   'al cerrar se guardan cantidad, totales por medio de pago y gastos de todos los que vendieron');
 select is((select observaciones from turnos where id = :turno), 'Todo en orden',
   'se guardan las observaciones');

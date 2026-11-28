@@ -9,7 +9,7 @@ export type MedioFiltro = MedioPago | "mixto";
  * - `patente`: ya normalizada (`patenteABuscar`), las que empiezan así.
  * - `categoriaId`: la categoría del servicio vendido.
  * - `medio`: las que se cobraron, en todo o en parte, con ese medio (una venta mixta de efectivo +
- *   tarjeta aparece en Efectivo y en Tarjeta); "mixto", solo las de pago mixto.
+ *   transferencia aparece en Efectivo y en Transferencia); "mixto", solo las de pago mixto.
  */
 export interface FiltroVentas {
   patente: string | null;

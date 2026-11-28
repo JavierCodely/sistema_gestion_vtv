@@ -25,6 +25,7 @@ import {
 } from "@/compartido/ui/select";
 import { useAjustarStock, type CertificadoConStock } from "../api/consultas";
 import { validarAjuste, type ErroresAjuste, type FormularioAjuste } from "../lib/validaciones";
+import { useEnvioUnico } from "@/compartido/lib/envio-unico";
 
 /** Ajuste manual de stock (rotura, conteo físico…). Se valúa al costo promedio y no genera gasto. */
 export function DialogoAjuste({
@@ -46,6 +47,8 @@ export function DialogoAjuste({
   function cambiar<K extends keyof FormularioAjuste>(clave: K, valor: FormularioAjuste[K]) {
     setFormulario((actual) => ({ ...actual, [clave]: valor }));
   }
+
+  const unaVez = useEnvioUnico();
 
   async function enviar(evento: SubmitEvent<HTMLFormElement>) {
     evento.preventDefault();
@@ -82,7 +85,14 @@ export function DialogoAjuste({
             Para roturas, pérdidas o diferencias de conteo; no genera gasto.
           </DialogDescription>
         </DialogHeader>
-        <form className="flex flex-col gap-4" onSubmit={(e) => void enviar(e)} noValidate>
+        <form
+          className="flex flex-col gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void unaVez(() => enviar(e));
+          }}
+          noValidate
+        >
           <div className="grid gap-4 sm:grid-cols-2">
             <Campo id="ajuste-sentido" etiqueta="Tipo de ajuste">
               <Select

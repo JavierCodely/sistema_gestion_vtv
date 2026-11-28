@@ -14,7 +14,7 @@ reset role;
 reset role;
 select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja) as turno \gset
 select (registrar_venta(:turno, :servicio, 'efectivo', p_patente => $p$AB123CD$p$)).id as v1 \gset
-select (registrar_venta(:turno, :servicio, 'tarjeta', p_patente => $p$AB123CD$p$)).id as v2 \gset
+select (registrar_venta(:turno, :servicio, 'transferencia', p_patente => $p$AB123CD$p$)).id as v2 \gset
 select (registrar_venta(:turno, :servicio, 'transferencia', p_patente => $p$AB123CD$p$)).id as v3 \gset
 select (registrar_gasto(:comida, 1500, 'efectivo', 'Almuerzo', :turno)).id as g1 \gset
 reset role;
@@ -42,16 +42,16 @@ select is((select count(*)::int from v_turnos), 0, 'el cajero no lee v_turnos');
 reset role;
 select pg_temp.como(:'admin');
 select is(
-  (select row(ventas_cantidad, ventas_efectivo, ventas_tarjeta, ventas_transferencia, gastos_total, neto, abierto)::text
+  (select row(ventas_cantidad, ventas_efectivo, ventas_transferencia, gastos_total, neto, abierto)::text
    from v_turnos where id = :turno),
-  row(2, 20000.00, 20000.00, 0.00, 1500.00, 38500.00, true)::text,
+  row(2, 20000.00, 20000.00, 1500.00, 38500.00, true)::text,
   'v_turnos calcula los totales en vivo');
 reset role;
 
 -- resumen_diario() (solo admin; incluye el gasto automático de la compra: $50.000)
 select pg_temp.como(:'admin');
 select is(
-  (select row(cantidad_ventas, total_ventas, total_efectivo, total_tarjeta, total_gastos,
+  (select row(cantidad_ventas, total_ventas, total_efectivo, total_transferencia, total_gastos,
               flujo_neto, costo_certificados, margen_bruto, ventas_sin_stock)::text
    from resumen_diario() where fecha = fecha_local(now())),
   row(2, 40000.00, 20000.00, 20000.00, 51500.00, -11500.00, 4000.00, 36000.00, 0)::text,

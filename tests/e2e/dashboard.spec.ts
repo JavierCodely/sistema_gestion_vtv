@@ -66,7 +66,7 @@ test("dashboard: ventas de la semana, servicios, categorías y gastos del turno 
   await ingresar(pc, CAJERO);
   await expect(pc).toHaveURL("/caja");
   await trabajarEnCaja(pc, caja);
-  await venderEnCaja(pc, { categoria, servicio: auto, medio: "Tarjeta" });
+  await venderEnCaja(pc, { categoria, servicio: auto, medio: "Transferencia" });
   await venderEnCaja(pc, { categoria, servicio: auto, medio: "Transferencia" });
   await venderEnCaja(pc, { categoria, servicio: moto, medio: "Efectivo" });
   await pc.getByRole("tab", { name: "Gastos" }).click();

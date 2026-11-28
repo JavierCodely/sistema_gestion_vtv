@@ -80,5 +80,10 @@ export default tseslint.config(
     extends: [js.configs.recommended],
     languageOptions: { ecmaVersion: 2023, globals: globals.node },
   },
+  {
+    // Service worker de la PWA (corre en el navegador, no en Node).
+    files: ["public/sw.js"],
+    languageOptions: { globals: globals.serviceworker },
+  },
   prettier,
 );

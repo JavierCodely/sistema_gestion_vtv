@@ -24,17 +24,17 @@ const IIBB = {
   nombre: "Ingresos brutos",
   tipo: "porcentaje",
   valor: 3,
-  medios: ["efectivo", "transferencia", "tarjeta"],
+  medios: ["efectivo", "transferencia"],
   todos_servicios: true,
   activo: true,
   impuesto_servicios: [],
 };
 const TASA = {
   id: 2,
-  nombre: "Tasa tarjeta",
+  nombre: "Tasa transferencia",
   tipo: "monto_fijo",
   valor: 150,
-  medios: ["tarjeta"],
+  medios: ["transferencia"],
   todos_servicios: false,
   activo: false,
   impuesto_servicios: [{ servicio_id: 11 }, { servicio_id: 12 }],
@@ -56,8 +56,7 @@ const TOTAL = {
   cantidad_ventas: 4,
   total: 1912.5,
   total_efectivo: 750,
-  total_transferencia: 300,
-  total_tarjeta: 862.5,
+  total_transferencia: 1162.5,
 };
 
 beforeEach(() => {
@@ -92,18 +91,16 @@ beforeEach(() => {
         cantidad_ventas: 4,
         total: 1650,
         total_efectivo: 750,
-        total_transferencia: 300,
-        total_tarjeta: 600,
+        total_transferencia: 900,
       },
       {
         agrupacion: "impuesto",
         id: 2,
-        nombre: "Tasa tarjeta",
+        nombre: "Tasa transferencia",
         cantidad_ventas: 2,
         total: 262.5,
         total_efectivo: 0,
-        total_transferencia: 0,
-        total_tarjeta: 262.5,
+        total_transferencia: 262.5,
       },
     ],
   });
@@ -128,12 +125,14 @@ describe("Impuestos (admin): catálogo", () => {
     renderConQuery(<Impuestos />);
     const iibb = await screen.findByTestId("impuesto-Ingresos brutos");
     expect(normal(iibb.textContent)).toContain("Porcentaje3 %TodosTodos");
-    const tasa = screen.getByTestId("impuesto-Tasa tarjeta");
+    const tasa = screen.getByTestId("impuesto-Tasa transferencia");
     expect(normal(tasa.textContent)).toContain(
-      "Monto fijo por venta$ 150,00 por ventaTarjeta2 servicios",
+      "Monto fijo por venta$ 150,00 por ventaTransferencia2 servicios",
     );
     expect(screen.getByRole("switch", { name: "Impuesto Ingresos brutos activo" })).toBeChecked();
-    expect(screen.getByRole("switch", { name: "Impuesto Tasa tarjeta activo" })).not.toBeChecked();
+    expect(
+      screen.getByRole("switch", { name: "Impuesto Tasa transferencia activo" }),
+    ).not.toBeChecked();
   });
 
   it("crea un impuesto eligiendo los medios de pago, validando como la BD", async () => {
@@ -152,7 +151,7 @@ describe("Impuestos (admin): catálogo", () => {
     expect(within(dialogo).getByText("Elegí al menos un medio de pago.")).toBeInTheDocument();
     expect(argumentosDe("impuestos", "insert")).toBeUndefined();
 
-    await userEvent.click(within(dialogo).getByRole("switch", { name: "Tarjeta" }));
+    expect(within(dialogo).queryByRole("switch", { name: "Tarjeta" })).not.toBeInTheDocument();
     await userEvent.click(within(dialogo).getByRole("switch", { name: "Efectivo" }));
     await userEvent.click(within(dialogo).getByRole("button", { name: "Crear impuesto" }));
     await waitFor(() => {
@@ -163,7 +162,7 @@ describe("Impuestos (admin): catálogo", () => {
         nombre: "Percepción",
         tipo: "porcentaje",
         valor: 2.5,
-        medios: ["efectivo", "tarjeta"],
+        medios: ["efectivo"],
         activo: true,
       },
     ]);
@@ -186,7 +185,7 @@ describe("Impuestos (admin): catálogo", () => {
           nombre: "Fijo",
           tipo: "monto_fijo",
           valor: 1500.5,
-          medios: ["efectivo", "transferencia", "tarjeta"],
+          medios: ["efectivo", "transferencia"],
           activo: true,
         },
       ]);
@@ -212,11 +211,11 @@ describe("Impuestos (admin): catálogo", () => {
     responder("impuestos", "update", { data: { ...TASA, valor: 200 } });
     renderConQuery(<Impuestos />);
     await userEvent.click(
-      await screen.findByRole("button", { name: "Editar impuesto Tasa tarjeta" }),
+      await screen.findByRole("button", { name: "Editar impuesto Tasa transferencia" }),
     );
     const dialogo = screen.getByRole("dialog", { name: "Editar impuesto" });
-    expect(within(dialogo).getByLabelText("Nombre")).toHaveValue("Tasa tarjeta");
-    expect(within(dialogo).getByRole("switch", { name: "Tarjeta" })).toBeChecked();
+    expect(within(dialogo).getByLabelText("Nombre")).toHaveValue("Tasa transferencia");
+    expect(within(dialogo).getByRole("switch", { name: "Transferencia" })).toBeChecked();
     expect(within(dialogo).getByRole("switch", { name: "Efectivo" })).not.toBeChecked();
     const valor = within(dialogo).getByLabelText("Monto por venta ($)");
     await userEvent.clear(valor);
@@ -225,10 +224,10 @@ describe("Impuestos (admin): catálogo", () => {
     await waitFor(() => {
       expect(argumentosDe("impuestos", "update")).toEqual([
         {
-          nombre: "Tasa tarjeta",
+          nombre: "Tasa transferencia",
           tipo: "monto_fijo",
           valor: 200,
-          medios: ["tarjeta"],
+          medios: ["transferencia"],
           activo: false,
         },
       ]);
@@ -240,9 +239,9 @@ describe("Impuestos (admin): catálogo", () => {
     responderRpc("fijar_servicios_impuesto", { data: TASA });
     renderConQuery(<Impuestos />);
     await userEvent.click(
-      await screen.findByRole("button", { name: "Servicios del impuesto Tasa tarjeta" }),
+      await screen.findByRole("button", { name: "Servicios del impuesto Tasa transferencia" }),
     );
-    let dialogo = screen.getByRole("dialog", { name: "Servicios de “Tasa tarjeta”" });
+    let dialogo = screen.getByRole("dialog", { name: "Servicios de “Tasa transferencia”" });
     expect(within(dialogo).getByRole("switch", { name: "Todos los servicios" })).not.toBeChecked();
     expect(within(dialogo).getByRole("switch", { name: "VTV auto" })).toBeChecked();
     await userEvent.click(
@@ -262,9 +261,9 @@ describe("Impuestos (admin): catálogo", () => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
     await userEvent.click(
-      screen.getByRole("button", { name: "Servicios del impuesto Tasa tarjeta" }),
+      screen.getByRole("button", { name: "Servicios del impuesto Tasa transferencia" }),
     );
-    dialogo = screen.getByRole("dialog", { name: "Servicios de “Tasa tarjeta”" });
+    dialogo = screen.getByRole("dialog", { name: "Servicios de “Tasa transferencia”" });
     await userEvent.click(within(dialogo).getByRole("switch", { name: "Todos los servicios" }));
     // Con "todos" no hace falta elegir: la lista se oculta.
     expect(within(dialogo).queryByRole("switch", { name: "VTV auto" })).not.toBeInTheDocument();
@@ -291,14 +290,15 @@ describe("Impuestos (admin): reporte", () => {
     });
     expect(normal((await screen.findByTestId("impuestos-Total")).textContent)).toBe("$ 1.912,50");
     expect(normal(screen.getByTestId("impuestos-Efectivo").textContent)).toBe("$ 750,00");
-    expect(normal(screen.getByTestId("impuestos-Tarjeta").textContent)).toBe("$ 862,50");
+    expect(normal(screen.getByTestId("impuestos-Transferencia").textContent)).toBe("$ 1.162,50");
+    expect(screen.queryByTestId("impuestos-Tarjeta")).not.toBeInTheDocument();
     expect(normal(screen.getByTestId("impuestos-Ventas alcanzadas").textContent)).toBe("4");
-    const tasa = screen.getByTestId("reporte-impuesto-Tasa tarjeta");
+    const tasa = screen.getByTestId("reporte-impuesto-Tasa transferencia");
     expect(
       within(tasa)
         .getAllByRole("cell")
         .map((c) => normal(c.textContent)),
-    ).toEqual(["Tasa tarjeta", "2", "$ 0,00", "$ 0,00", "$ 262,50", "$ 262,50"]);
+    ).toEqual(["Tasa transferencia", "2", "$ 0,00", "$ 262,50", "$ 262,50"]);
   });
 
   it("con un año y 'Todo el año' trae el año entero; con un mes, ese mes", async () => {
@@ -352,7 +352,6 @@ describe("Impuestos (admin): reporte", () => {
           total: 0,
           total_efectivo: 0,
           total_transferencia: 0,
-          total_tarjeta: 0,
         },
       ],
     });

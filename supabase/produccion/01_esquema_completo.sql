@@ -58,10 +58,15 @@
 --   48. 20261124000048_condicional_vencida_estado.sql
 --   49. 20261125000049_patente_repetida_del_dia.sql
 --   50. 20261125000050_resumen_ventas_de_turno.sql
+--   51. 20261125000051_estadisticas.sql
+--   52. 20261127000052_arreglos_auditoria_contable.sql
+--   53. 20261127000053_certificados_servicios_de_turno.sql
+--   54. 20261127000054_quitar_tarjeta.sql
+--   55. 20261127000055_certificados_servicios_volatile.sql
 --
 -- Después de ejecutarlo, registrá las migraciones como aplicadas para que
 -- `supabase db push` no intente aplicarlas de nuevo:
---   npx supabase migration repair --status applied 20261119000001 20261119000002 20261119000003 20261119000004 20261119000005 20261119000006 20261119000007 20261119000008 20261119000009 20261119000010 20261119000011 20261119000012 20261119000013 20261120000014 20261120000015 20261120000016 20261120000017 20261120000018 20261120000019 20261120000020 20261120000021 20261120000022 20261120000023 20261120000024 20261120000025 20261121000026 20261121000027 20261121000028 20261121000029 20261122000030 20261122000031 20261122000032 20261122000033 20261122000034 20261123000035 20261123000036 20261123000037 20261123000038 20261123000039 20261123000040 20261123000041 20261123000042 20261124000043 20261124000044 20261124000045 20261124000046 20261124000047 20261124000048 20261125000049 20261125000050
+--   npx supabase migration repair --status applied 20261119000001 20261119000002 20261119000003 20261119000004 20261119000005 20261119000006 20261119000007 20261119000008 20261119000009 20261119000010 20261119000011 20261119000012 20261119000013 20261120000014 20261120000015 20261120000016 20261120000017 20261120000018 20261120000019 20261120000020 20261120000021 20261120000022 20261120000023 20261120000024 20261120000025 20261121000026 20261121000027 20261121000028 20261121000029 20261122000030 20261122000031 20261122000032 20261122000033 20261122000034 20261123000035 20261123000036 20261123000037 20261123000038 20261123000039 20261123000040 20261123000041 20261123000042 20261124000043 20261124000044 20261124000045 20261124000046 20261124000047 20261124000048 20261125000049 20261125000050 20261125000051 20261127000052 20261127000053 20261127000054 20261127000055
 -- =====================================================================
 
 begin;
@@ -12299,5 +12304,1523 @@ $$;
 
 revoke execute on function public.resumen_ventas_de_turno(bigint) from public, anon;
 grant execute on function public.resumen_ventas_de_turno(bigint) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- 20261125000051_estadisticas.sql
+-- ---------------------------------------------------------------------
+-- =====================================================================
+-- Migración 51: Estadísticas del admin (decisión del negocio, 2026-11-25)
+--
+-- Solo lectura y solo admin. La BD arma todos los números; el frontend los dibuja.
+-- Rango por día de negocio (hora AR), ambas fechas obligatorias. Las ventas anuladas no cuentan
+-- (salvo en `anuladas_*`). Las ventas con fecha pasada cuentan en su fecha (sin patente no suman
+-- vehículos), salvo en los horarios: su hora es opcional (00:00) y deformaría las horas pico.
+-- El rango se filtra por `creado_en` entre el inicio de `desde` y el de `hasta + 1` en hora AR
+-- (`_inicio_dia_local`): así usa el índice `ventas_creado` en vez de recorrer todas las ventas.
+--
+-- * `estadisticas_vehiculos(desde, hasta)`: 1 fila. Ventas, total, ticket promedio, ventas sin
+--   patente, **vehículos** (patentes distintas), **nuevos** (primera venta de la patente) y **que
+--   vuelven** (la patente ya tenía una venta antes del rango), **repetidos** (más de una venta en el
+--   rango sin contar la vuelta de una condicional) y anuladas (cantidad y monto).
+-- * `estadisticas_categorias(desde, hasta)`: tipo de vehículo = categoría de servicio (nombre
+--   actual): ventas, vehículos distintos y total, de más a menos vehículos.
+-- * `estadisticas_condicionales(desde, hasta)`: 1 fila sobre las condicionales vendidas en el rango:
+--   cuántas, al 50%, volvieron en plazo, volvieron fuera de plazo, se cobraron de nuevo
+--   (`condicional_vencida_de`), siguen vigentes sin volver y vencieron sin volver.
+-- * `estadisticas_horarios(desde, hasta)`: `agrupacion` = `dia` (los 7 días, 1 = lunes) y `hora`
+--   (de la primera a la última hora con ventas, sin huecos), con cantidad y total.
+-- * `comparacion_anual(anio)`: 12 filas (una por mes) con ventas, total y vehículos del año y del
+--   anterior.
+-- =====================================================================
+
+create function public._inicio_dia_local(p_dia date)
+returns timestamptz
+language sql
+immutable
+parallel safe
+set search_path = ''
+as $$
+  select p_dia::timestamp at time zone 'America/Argentina/Buenos_Aires'
+$$;
+
+revoke all on function public._inicio_dia_local(date) from public, authenticated, anon;
+
+create function public._validar_rango_estadisticas(p_desde date, p_hasta date)
+returns void
+language plpgsql
+immutable
+set search_path = ''
+as $$
+begin
+  if p_desde is null or p_hasta is null then
+    raise exception 'Indicá las fechas desde y hasta' using errcode = '22023';
+  end if;
+  perform public._validar_rango_reporte(p_desde, p_hasta);
+end;
+$$;
+
+revoke all on function public._validar_rango_estadisticas(date, date) from public, authenticated, anon;
+
+-- Vehículos ----------------------------------------------------------------------------------------
+create function public.estadisticas_vehiculos(p_desde date, p_hasta date)
+returns table (
+  ventas_cantidad       bigint,
+  ventas_total          numeric(14,2),
+  ticket_promedio       numeric(14,2),
+  ventas_sin_patente    bigint,
+  vehiculos             bigint,
+  vehiculos_nuevos      bigint,
+  vehiculos_que_vuelven bigint,
+  vehiculos_repetidos   bigint,
+  anuladas_cantidad     bigint,
+  anuladas_total        numeric(14,2)
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_inicio timestamptz;
+  v_fin    timestamptz;
+begin
+  perform public._exigir_admin();
+  perform public._validar_rango_estadisticas(p_desde, p_hasta);
+  v_inicio := public._inicio_dia_local(p_desde);
+  v_fin := public._inicio_dia_local(p_hasta + 1);
+
+  return query
+  with del_rango as (
+    select v.patente, v.precio, v.anulada, v.vuelta_de
+    from public.ventas v
+    where v.creado_en >= v_inicio and v.creado_en < v_fin
+  ),
+  validas as (
+    select * from del_rango where not anulada
+  ),
+  patentes as (
+    select d.patente,
+           count(*) filter (where d.vuelta_de is null) as visitas,
+           exists (
+             select 1 from public.ventas a
+             where a.patente = d.patente and not a.anulada and a.creado_en < v_inicio
+           ) as ya_vino
+    from validas d
+    where d.patente is not null
+    group by d.patente
+  )
+  select
+    (select count(*) from validas),
+    (select coalesce(sum(precio), 0) from validas)::numeric(14,2),
+    (select coalesce(round(avg(precio), 2), 0) from validas)::numeric(14,2),
+    (select count(*) from validas where patente is null),
+    (select count(*) from patentes),
+    (select count(*) from patentes where not ya_vino),
+    (select count(*) from patentes where ya_vino),
+    (select count(*) from patentes where visitas > 1),
+    (select count(*) from del_rango where anulada),
+    (select coalesce(sum(precio), 0) from del_rango where anulada)::numeric(14,2);
+end;
+$$;
+
+revoke execute on function public.estadisticas_vehiculos(date, date) from public, anon;
+grant execute on function public.estadisticas_vehiculos(date, date) to authenticated;
+
+-- Tipo de vehículo (categoría) ---------------------------------------------------------------------
+create function public.estadisticas_categorias(p_desde date, p_hasta date)
+returns table (
+  categoria_id bigint,
+  nombre       text,
+  ventas       bigint,
+  vehiculos    bigint,
+  total        numeric(14,2)
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  perform public._exigir_admin();
+  perform public._validar_rango_estadisticas(p_desde, p_hasta);
+
+  return query
+  select v.categoria_id,
+         coalesce(max(c.nombre), 'Sin categoría'),
+         count(*),
+         count(distinct v.patente),
+         sum(v.precio)::numeric(14,2)
+  from public.ventas v
+  left join public.categorias_servicio c on c.id = v.categoria_id
+  where not v.anulada
+    and v.creado_en >= public._inicio_dia_local(p_desde)
+    and v.creado_en < public._inicio_dia_local(p_hasta + 1)
+  group by v.categoria_id
+  order by 4 desc, 3 desc, 2;
+end;
+$$;
+
+revoke execute on function public.estadisticas_categorias(date, date) from public, anon;
+grant execute on function public.estadisticas_categorias(date, date) to authenticated;
+
+-- Condicionales ------------------------------------------------------------------------------------
+create function public.estadisticas_condicionales(p_desde date, p_hasta date)
+returns table (
+  condicionales          bigint,
+  al_50                  bigint,
+  volvieron_en_plazo     bigint,
+  volvieron_fuera_plazo  bigint,
+  cobradas_de_nuevo      bigint,
+  vigentes_sin_volver    bigint,
+  vencidas_sin_volver    bigint
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_hoy date := public.fecha_local(now());
+begin
+  perform public._exigir_admin();
+  perform public._validar_rango_estadisticas(p_desde, p_hasta);
+
+  return query
+  with condicionales as (
+    select c.condicional_vence, c.condicional_saldo,
+           vu.vuelta_fuera_de_plazo as fuera_de_plazo,
+           vu.id is not null as volvio,
+           exists (
+             select 1 from public.ventas r
+             where r.condicional_vencida_de = c.id and not r.anulada
+           ) as recobrada
+    from public.ventas c
+    left join public.ventas vu on vu.vuelta_de = c.id and not vu.anulada
+    where not c.anulada
+      and c.condicional_vence is not null
+      and c.creado_en >= public._inicio_dia_local(p_desde)
+      and c.creado_en < public._inicio_dia_local(p_hasta + 1)
+  )
+  select
+    count(*),
+    count(*) filter (where condicional_saldo > 0),
+    count(*) filter (where volvio and not fuera_de_plazo),
+    count(*) filter (where volvio and fuera_de_plazo),
+    count(*) filter (where not volvio and recobrada),
+    count(*) filter (where not volvio and not recobrada and condicional_vence >= v_hoy),
+    count(*) filter (where not volvio and not recobrada and condicional_vence < v_hoy)
+  from condicionales;
+end;
+$$;
+
+revoke execute on function public.estadisticas_condicionales(date, date) from public, anon;
+grant execute on function public.estadisticas_condicionales(date, date) to authenticated;
+
+-- Horarios pico ------------------------------------------------------------------------------------
+create function public.estadisticas_horarios(p_desde date, p_hasta date)
+returns table (
+  agrupacion text,
+  valor      integer,
+  cantidad   bigint,
+  total      numeric(14,2)
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  perform public._exigir_admin();
+  perform public._validar_rango_estadisticas(p_desde, p_hasta);
+
+  return query
+  with del_rango as (
+    select (v.creado_en at time zone 'America/Argentina/Buenos_Aires') as local, v.precio
+    from public.ventas v
+    where not v.anulada
+      and v.cargada_en is null
+      and v.creado_en >= public._inicio_dia_local(p_desde)
+      and v.creado_en < public._inicio_dia_local(p_hasta + 1)
+  ),
+  por_dia as (
+    select extract(isodow from d.local)::integer as dia, count(*) as cant, sum(d.precio) as monto
+    from del_rango d group by 1
+  ),
+  por_hora as (
+    select extract(hour from d.local)::integer as hora, count(*) as cant, sum(d.precio) as monto
+    from del_rango d group by 1
+  )
+  select 'dia'::text, g.dia, coalesce(p.cant, 0), coalesce(p.monto, 0)::numeric(14,2)
+  from generate_series(1, 7) as g(dia)
+  left join por_dia p on p.dia = g.dia
+  union all
+  select 'hora'::text, g.hora, coalesce(p.cant, 0), coalesce(p.monto, 0)::numeric(14,2)
+  from generate_series(
+         coalesce((select min(hora) from por_hora), 0),
+         coalesce((select max(hora) from por_hora), -1)
+       ) as g(hora)
+  left join por_hora p on p.hora = g.hora
+  order by 1, 2;
+end;
+$$;
+
+revoke execute on function public.estadisticas_horarios(date, date) from public, anon;
+grant execute on function public.estadisticas_horarios(date, date) to authenticated;
+
+-- Año contra año -----------------------------------------------------------------------------------
+create function public.comparacion_anual(p_anio integer)
+returns table (
+  mes                integer,
+  ventas             bigint,
+  total              numeric(14,2),
+  vehiculos          bigint,
+  ventas_anterior    bigint,
+  total_anterior     numeric(14,2),
+  vehiculos_anterior bigint
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  perform public._exigir_admin();
+  if p_anio is null or p_anio < 2000 or p_anio > 2100 then
+    raise exception 'Elegí un año entre 2000 y 2100' using errcode = '22023';
+  end if;
+
+  return query
+  with del_rango as (
+    select extract(year from public.fecha_local(v.creado_en))::integer as anio,
+           extract(month from public.fecha_local(v.creado_en))::integer as m,
+           v.patente, v.precio
+    from public.ventas v
+    where not v.anulada
+      and v.creado_en >= public._inicio_dia_local(make_date(p_anio - 1, 1, 1))
+      and v.creado_en < public._inicio_dia_local(make_date(p_anio + 1, 1, 1))
+  ),
+  por_mes as (
+    select d.anio, d.m, count(*) as cant, sum(d.precio) as monto, count(distinct d.patente) as autos
+    from del_rango d group by 1, 2
+  )
+  select g.m,
+         coalesce(a.cant, 0), coalesce(a.monto, 0)::numeric(14,2), coalesce(a.autos, 0),
+         coalesce(b.cant, 0), coalesce(b.monto, 0)::numeric(14,2), coalesce(b.autos, 0)
+  from generate_series(1, 12) as g(m)
+  left join por_mes a on a.anio = p_anio and a.m = g.m
+  left join por_mes b on b.anio = p_anio - 1 and b.m = g.m
+  order by g.m;
+end;
+$$;
+
+revoke execute on function public.comparacion_anual(integer) from public, anon;
+grant execute on function public.comparacion_anual(integer) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- 20261127000052_arreglos_auditoria_contable.sql
+-- ---------------------------------------------------------------------
+-- =====================================================================
+-- Migración 52: arreglos de la auditoría contable (2026-11-27)
+--
+-- 1. Impuesto de monto fijo en una condicional al 50% + su vuelta: cada venta redondeaba su parte por
+--    separado y, con un valor de centavos impares, las dos sumaban 1 centavo de más (150,01 → 75,01 +
+--    75,01). Ahora la vuelta lleva lo que falta para el total del par: round(valor × (base de la
+--    condicional + base de la vuelta) / total del servicio, 2) − lo ya registrado en la condicional,
+--    siempre que la condicional tenga ese impuesto con el mismo valor (si el impuesto cambió en el
+--    medio, cada venta usa su valor, como hasta ahora). Con la venta entera alcanzada, el par suma
+--    exactamente el valor.
+-- 2. `resumen_diario.costo_certificados` sumaba el costo de cada venta con 4 decimales y redondeaba al
+--    final, mientras que el kardex (`movimientos_certificado`) registra cada venta redondeada a 2
+--    decimales: podían diferir en centavos. Ahora el reporte suma el costo de cada venta redondeado a 2
+--    decimales (el mismo criterio que el kardex); también el margen bruto.
+-- 3. La patente se normalizaba distinto en la BD (mayúsculas y sin espacios) que en la UI (solo letras
+--    y números): "AB-123-CD" y "AB123CD" quedaban como dos vehículos (vuelta de condicional, aviso de
+--    patente repetida, estadísticas). `_normalizar_patente` ahora deja solo A-Z y 0-9, y el trigger
+--    `ventas_a_normalizar_patente` la aplica a toda venta (también las de fecha pasada, que tenían su
+--    propia normalización). Se llama "a_" para correr antes que los demás BEFORE INSERT de `ventas`
+--    (Postgres los ejecuta por orden alfabético). Las ventas existentes se normalizan.
+-- =====================================================================
+
+-- 3. Patente ------------------------------------------------------------------------------------------
+create or replace function public._normalizar_patente(p_patente text)
+returns text
+language sql
+immutable
+set search_path = ''
+as $$
+  select nullif(regexp_replace(upper(coalesce(p_patente, '')), '[^A-Z0-9]', '', 'g'), '')
+$$;
+
+create function public._ventas_normalizar_patente()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  new.patente := public._normalizar_patente(new.patente);
+  return new;
+end;
+$$;
+
+revoke all on function public._ventas_normalizar_patente() from public, authenticated, anon;
+
+create trigger ventas_a_normalizar_patente
+  before insert or update of patente on public.ventas
+  for each row execute function public._ventas_normalizar_patente();
+
+update public.ventas
+set patente = public._normalizar_patente(patente)
+where patente is distinct from public._normalizar_patente(patente);
+
+-- 1. Impuesto fijo de la vuelta ------------------------------------------------------------------------
+create or replace function public._calcular_impuestos_venta(p_venta_id bigint)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_venta    public.ventas;
+  v_origen   public.ventas;
+  v_fraccion numeric := 1;
+  -- Total del servicio de la condicional (lo cobrado + el saldo); 0 si no es una vuelta.
+  v_total_condicional numeric := 0;
+begin
+  select * into v_venta from public.ventas where id = p_venta_id;
+  if v_venta.id is null then
+    return;
+  end if;
+
+  if v_venta.condicional_saldo > 0 then
+    v_fraccion := v_venta.precio / (v_venta.precio + v_venta.condicional_saldo);
+  elsif v_venta.vuelta_de is not null then
+    select * into v_origen from public.ventas where id = v_venta.vuelta_de;
+    v_total_condicional := v_origen.precio + v_origen.condicional_saldo;
+    v_fraccion := case when v_total_condicional > 0
+                       then v_venta.precio / v_total_condicional
+                       else 0 end;
+  end if;
+
+  delete from public.venta_impuestos where venta_id = p_venta_id;
+
+  insert into public.venta_impuestos
+    (venta_id, impuesto_id, impuesto_nombre, tipo, valor, medio, base, monto)
+  with alcanzados as (
+    select i.id, i.nombre, i.tipo, i.valor, i.medios
+    from public.impuestos i
+    where i.activo
+      and (i.todos_servicios
+           or exists (select 1 from public.impuesto_servicios s
+                      where s.impuesto_id = i.id and s.servicio_id = v_venta.servicio_id))
+  ),
+  -- Lo que ya registró la condicional de cada impuesto (solo en una vuelta).
+  de_la_condicional as (
+    select vi.impuesto_id, vi.valor, sum(vi.base) as base, sum(vi.monto) as monto
+    from public.venta_impuestos vi
+    where v_origen.id is not null and vi.venta_id = v_origen.id
+    group by vi.impuesto_id, vi.valor
+  ),
+  partes as (
+    select a.id, a.nombre, a.tipo, a.valor, p.medio, p.monto as base,
+           sum(p.monto) over (partition by a.id) as base_alcanzada,
+           row_number() over (partition by a.id order by p.monto desc, p.medio) as orden
+    from alcanzados a
+    join public.venta_pagos p on p.venta_id = p_venta_id and p.medio = any (a.medios)
+  ),
+  con_total as (
+    select pt.*,
+           (case
+              when pt.tipo = 'porcentaje' then round(pt.base_alcanzada * pt.valor / 100, 2)
+              -- Vuelta de una condicional que ya registró este impuesto con el mismo valor: lo que
+              -- falta para el total del par (el redondeo se hace una sola vez).
+              when dc.impuesto_id is not null and v_total_condicional > 0 then
+                greatest(round(pt.valor * (dc.base + pt.base_alcanzada) / v_total_condicional, 2)
+                         - dc.monto, 0)
+              else round(pt.valor * v_fraccion
+                         * case when v_venta.precio = 0 then 1
+                                else pt.base_alcanzada / v_venta.precio end, 2)
+            end) as total
+    from partes pt
+    left join de_la_condicional dc
+      on pt.tipo = 'monto_fijo' and dc.impuesto_id = pt.id and dc.valor = pt.valor
+  ),
+  repartido as (
+    select ct.*,
+           (case when ct.base_alcanzada = 0 then (case when ct.orden = 1 then ct.total else 0 end)
+                 else round(ct.total * ct.base / ct.base_alcanzada, 2) end) as parte
+    from con_total ct
+  ),
+  final as (
+    select r.id, r.nombre, r.tipo, r.valor, r.medio, r.base,
+           (case when r.orden = 1
+                 then r.total - (sum(r.parte) over (partition by r.id) - r.parte)
+                 else r.parte end) as monto
+    from repartido r
+    where r.total > 0
+  )
+  select p_venta_id, f.id, f.nombre, f.tipo, f.valor, f.medio, f.base, f.monto
+  from final f
+  where f.monto > 0;
+end;
+$$;
+
+revoke execute on function public._calcular_impuestos_venta(bigint) from public, anon, authenticated;
+
+-- 2. Costo de certificados del resumen diario ------------------------------------------------------------
+create or replace function public.resumen_diario(p_desde date default null, p_hasta date default null)
+returns table (
+  fecha               date,
+  cantidad_ventas     bigint,
+  total_ventas        numeric(14,2),
+  total_efectivo      numeric(14,2),
+  total_transferencia numeric(14,2),
+  total_tarjeta       numeric(14,2),
+  total_gastos        numeric(14,2),
+  flujo_neto          numeric(14,2),
+  costo_certificados  numeric(14,2),
+  margen_bruto        numeric(14,2),
+  ventas_sin_stock    bigint
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  perform public._exigir_admin();
+  if p_desde is not null and p_hasta is not null and p_desde > p_hasta then
+    raise exception 'La fecha "desde" no puede ser posterior a "hasta"' using errcode = '22023';
+  end if;
+
+  return query
+  with vd as (
+    select public.fecha_local(v.creado_en) as dia,
+           count(*) as cantidad,
+           sum(v.precio) as monto,
+           -- Cada venta redondeada a 2 decimales, como la registra el kardex.
+           sum(round(v.costo_certificado, 2)) as costo,
+           count(*) filter (where v.sin_stock) as sin_stock
+    from public.ventas v
+    where not v.anulada
+    group by 1
+  ),
+  pd as (
+    select public.fecha_local(v.creado_en) as dia,
+           sum(p.monto) filter (where p.medio = 'efectivo') as efectivo,
+           sum(p.monto) filter (where p.medio = 'transferencia') as transferencia,
+           sum(p.monto) filter (where p.medio = 'tarjeta') as tarjeta
+    from public.ventas v
+    join public.venta_pagos p on p.venta_id = v.id
+    where not v.anulada
+    group by 1
+  ),
+  gd as (
+    select public.fecha_local(g.creado_en) as dia, sum(g.monto) as monto
+    from public.gastos g
+    where not g.anulado
+    group by 1
+  ),
+  dias as (
+    select vd.dia from vd union select gd.dia from gd
+  )
+  select
+    d.dia,
+    coalesce(vd.cantidad, 0)::bigint,
+    coalesce(vd.monto, 0)::numeric(14,2),
+    coalesce(pd.efectivo, 0)::numeric(14,2),
+    coalesce(pd.transferencia, 0)::numeric(14,2),
+    coalesce(pd.tarjeta, 0)::numeric(14,2),
+    coalesce(gd.monto, 0)::numeric(14,2),
+    (coalesce(vd.monto, 0) - coalesce(gd.monto, 0))::numeric(14,2),
+    coalesce(vd.costo, 0)::numeric(14,2),
+    (coalesce(vd.monto, 0) - coalesce(vd.costo, 0))::numeric(14,2),
+    coalesce(vd.sin_stock, 0)::bigint
+  from dias d
+  left join vd on vd.dia = d.dia
+  left join pd on pd.dia = d.dia
+  left join gd on gd.dia = d.dia
+  where (p_desde is null or d.dia >= p_desde)
+    and (p_hasta is null or d.dia <= p_hasta)
+  order by d.dia;
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- 20261127000053_certificados_servicios_de_turno.sql
+-- ---------------------------------------------------------------------
+-- =====================================================================
+-- Migración 53: certificados y servicios de un turno (decisión del negocio, 2026-11-27)
+--
+-- `certificados_servicios_de_turno(p_turno_id)`: lo que muestra la ventana "Certificados y servicios"
+-- del turno, en la caja y en las ventas de cada turno del admin.
+--   * agrupacion = 'certificado': una fila por certificado entregado en el turno. `cantidad` = hojas
+--     entregadas en ventas sin anular; `anuladas` = hojas que se fueron en ventas anuladas (la hoja no
+--     vuelve al stock al anular). Una venta sin stock no entregó hoja y no cuenta.
+--   * agrupacion = 'servicio': los servicios activos (de categorías activas) y los que se vendieron en
+--     el turno aunque hoy estén desactivados, con su `precio` actual del catálogo y cuántas ventas sin
+--     anular se cobraron **solo en efectivo** y **solo por transferencia** (decisión: las de tarjeta y
+--     las mixtas no se cuentan en esta ventana). `efectivo_total` / `transferencia_total` = lo cobrado
+--     (precio de cada venta, con descuento): **solo el admin**; para el cajero vienen NULL (el cajero no
+--     ve totales en $, decisión 2026-11-20).
+-- Acceso: igual que `resumen_ventas_de_turno` (migración 50): el cajero, de un turno abierto (mismas
+-- validaciones que vender); el admin, de cualquier turno. Sin costos.
+-- =====================================================================
+
+create function public.certificados_servicios_de_turno(p_turno_id bigint)
+returns table (
+  agrupacion             text,
+  id                     bigint,
+  nombre                 text,
+  categoria_nombre       text,
+  condicional            boolean,
+  precio                 numeric(12,2),
+  cantidad               integer,
+  anuladas               integer,
+  efectivo_cantidad      integer,
+  transferencia_cantidad integer,
+  efectivo_total         numeric(14,2),
+  transferencia_total    numeric(14,2)
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_turno public.turnos;
+  v_admin boolean;
+begin
+  perform public._exigir_usuario();
+  v_admin := public.es_admin();
+  if v_admin then
+    if p_turno_id is null then
+      raise exception 'Elegí el turno' using errcode = '22023';
+    end if;
+    select * into v_turno from public.turnos t where t.id = p_turno_id;
+    if v_turno.id is null then
+      raise exception 'El turno elegido no existe' using errcode = '22023';
+    end if;
+  else
+    v_turno := public._turno_para_trabajar(p_turno_id, false);
+  end if;
+
+  return query
+  with del_turno as (
+    select v.id, v.servicio_id, v.certificado_id, v.sin_stock, v.anulada, v.medio_pago, v.precio
+    from public.ventas v
+    where v.turno_id = v_turno.id
+  ),
+  certificados as (
+    select 'certificado'::text as agrupacion, c.id, c.nombre, null::text as categoria_nombre,
+           c.condicional, null::numeric(12,2) as precio,
+           (count(*) filter (where not d.anulada))::integer as cantidad,
+           (count(*) filter (where d.anulada))::integer as anuladas,
+           0 as efectivo_cantidad, 0 as transferencia_cantidad,
+           null::numeric(14,2) as efectivo_total, null::numeric(14,2) as transferencia_total,
+           1 as grupo, null::text as orden_categoria
+    from del_turno d
+    join public.certificados c on c.id = d.certificado_id
+    where not d.sin_stock
+    group by c.id, c.nombre, c.condicional
+  ),
+  servicios as (
+    select 'servicio'::text, s.id, s.nombre, cs.nombre, false, s.precio,
+           (count(d.id) filter (where not d.anulada))::integer,
+           (count(d.id) filter (where d.anulada))::integer,
+           (count(d.id) filter (where not d.anulada and d.medio_pago = 'efectivo'))::integer,
+           (count(d.id) filter (where not d.anulada and d.medio_pago = 'transferencia'))::integer,
+           case when v_admin then coalesce(sum(d.precio) filter (
+             where not d.anulada and d.medio_pago = 'efectivo'), 0) end::numeric(14,2),
+           case when v_admin then coalesce(sum(d.precio) filter (
+             where not d.anulada and d.medio_pago = 'transferencia'), 0) end::numeric(14,2),
+           2, cs.nombre
+    from public.servicios s
+    join public.categorias_servicio cs on cs.id = s.categoria_id
+    left join del_turno d on d.servicio_id = s.id
+    group by s.id, s.nombre, s.precio, s.activo, cs.nombre, cs.activa
+    having (s.activo and cs.activa) or count(d.id) > 0
+  )
+  select x.agrupacion, x.id, x.nombre, x.categoria_nombre, x.condicional, x.precio, x.cantidad,
+         x.anuladas, x.efectivo_cantidad, x.transferencia_cantidad, x.efectivo_total,
+         x.transferencia_total
+  from (select * from certificados union all select * from servicios) x
+  order by x.grupo, x.orden_categoria nulls first, x.nombre, x.id;
+end;
+$$;
+
+revoke execute on function public.certificados_servicios_de_turno(bigint) from public, anon;
+grant execute on function public.certificados_servicios_de_turno(bigint) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- 20261127000054_quitar_tarjeta.sql
+-- ---------------------------------------------------------------------
+-- =====================================================================
+-- Migración 54: se quita la tarjeta (crédito/débito) como medio de pago (decisión del negocio,
+-- 2026-11-27). Solo se cobra en **efectivo** o por **transferencia**, o mixto (efectivo +
+-- transferencia).
+--
+-- Datos existentes (decisiones 2026-11-27):
+--   * Toda parte cobrada con tarjeta pasa a transferencia: una venta "tarjeta" queda "transferencia";
+--     una mixta efectivo + tarjeta queda efectivo + transferencia (el efectivo no cambia: ya entró al
+--     cajón y a la caja de cambio, ningún cierre ni saldo de efectivo cambia). Si una venta ya tenía
+--     transferencia y tarjeta, las dos partes se suman; si así queda con un solo medio, deja de ser
+--     mixta (`ventas.medio_pago` = ese medio).
+--   * La foto de impuestos (`venta_impuestos`) se mueve igual (sin recalcular: los montos no cambian),
+--     y los impuestos que alcanzaban a tarjeta pasan a alcanzar a transferencia.
+--   * Los cierres de turno suman su `total_tarjeta` a `total_transferencia` y la columna se quita.
+--   * Fondos: la cuenta Crédito/Débito se suma a Transferencia (sus movimientos manuales pasan a
+--     transferencia; las ventas ya pasaron arriba). Queda el libro de dos cuentas: efectivo y
+--     transferencia.
+--
+-- Esquema: Postgres no permite quitar un valor de un enum. Se crean `medio_pago` y `cuenta_fondos`
+-- nuevos sin 'tarjeta' (los viejos se renombran y se borran). Las vistas y funciones que dependen de
+-- esos tipos se borran y se vuelven a crear: las que tenían tarjeta, reescritas acá sin ella; las que
+-- no (`registrar_venta`, `registrar_venta_pasada`, `v_movimientos_caja`) se recrean con su definición
+-- actual leída de la base, idéntica salvo el tipo nuevo. Sin tarjeta salen de las firmas:
+-- `v_turnos.total_tarjeta`/`ventas_tarjeta`, `v_ventas_mixtas.pago_tarjeta`,
+-- `resumen_turnos.ventas_tarjeta`, `resumen_ventas_mixtas.total_tarjeta`,
+-- `resumen_diario.total_tarjeta`, `resumen_impuestos.total_tarjeta` y la fila 'tarjeta' de
+-- `resumen_fondos`.
+-- =====================================================================
+
+-- 1. Datos -----------------------------------------------------------------------------------------
+
+-- Cobro: la tarjeta se suma a la transferencia de la misma venta, si tenía.
+update public.venta_pagos t
+set monto = t.monto + k.monto
+from public.venta_pagos k
+where k.venta_id = t.venta_id and k.medio = 'tarjeta' and t.medio = 'transferencia';
+
+delete from public.venta_pagos k
+where k.medio = 'tarjeta'
+  and exists (select 1 from public.venta_pagos t where t.venta_id = k.venta_id and t.medio = 'transferencia');
+
+update public.venta_pagos set medio = 'transferencia' where medio = 'tarjeta';
+
+update public.ventas set medio_pago = 'transferencia' where medio_pago = 'tarjeta';
+
+-- Mixtas transferencia + tarjeta: ahora tienen un solo medio.
+update public.ventas v
+set medio_pago = (select p.medio from public.venta_pagos p where p.venta_id = v.id)
+where v.medio_pago is null
+  and (select count(*) from public.venta_pagos p where p.venta_id = v.id) = 1;
+
+-- Foto de impuestos: mismo movimiento, sumando base y monto.
+update public.venta_impuestos t
+set base = t.base + k.base, monto = t.monto + k.monto
+from public.venta_impuestos k
+where k.venta_id = t.venta_id and k.impuesto_id = t.impuesto_id
+  and k.medio = 'tarjeta' and t.medio = 'transferencia';
+
+delete from public.venta_impuestos k
+where k.medio = 'tarjeta'
+  and exists (select 1 from public.venta_impuestos t
+              where t.venta_id = k.venta_id and t.impuesto_id = k.impuesto_id and t.medio = 'transferencia');
+
+update public.venta_impuestos set medio = 'transferencia' where medio = 'tarjeta';
+
+-- Catálogo de impuestos: tarjeta → transferencia, sin repetir.
+update public.impuestos i
+set medios = array(select distinct m
+                   from unnest(array_replace(i.medios, 'tarjeta'::public.medio_pago,
+                                             'transferencia'::public.medio_pago)) m
+                   order by m)
+where 'tarjeta' = any (i.medios);
+
+-- Foto de los cierres.
+update public.turnos
+set total_transferencia = coalesce(total_transferencia, 0) + total_tarjeta
+where total_tarjeta is not null and total_tarjeta <> 0;
+
+-- Fondos: Crédito/Débito se suma a Transferencia.
+update public.movimientos_fondos set cuenta = 'transferencia' where cuenta = 'tarjeta';
+delete from public.cuentas_fondos where cuenta = 'tarjeta';
+
+-- Revisa ya la coherencia ventas ↔ pagos (triggers diferidos): ALTER TABLE no corre con eventos
+-- de trigger pendientes.
+set constraints all immediate;
+
+-- 2. Definiciones que se recrean tal cual -------------------------------------------------------------
+create temp table _recrear (orden int, sentencia text);
+
+insert into _recrear
+select 1, pg_get_functiondef(
+  'public.registrar_venta(bigint,bigint,public.medio_pago,text,jsonb,bigint,numeric,boolean,boolean,bigint)'::regprocedure)
+union all
+select 2, pg_get_functiondef(
+  'public.registrar_venta_pasada(date,time without time zone,bigint,bigint,public.medio_pago,numeric,text)'::regprocedure)
+union all
+select 3, 'create view public.v_movimientos_caja with (security_invoker = true) as '
+          || pg_get_viewdef('public.v_movimientos_caja'::regclass);
+
+-- 3. Se borra lo que depende de los tipos viejos ----------------------------------------------------
+drop function public.registrar_venta(bigint, bigint, public.medio_pago, text, jsonb, bigint, numeric,
+                                     boolean, boolean, bigint);
+drop function public.registrar_venta_pasada(date, time without time zone, bigint, bigint,
+                                            public.medio_pago, numeric, text);
+drop function public.movimiento_fondos(public.cuenta_fondos, public.tipo_mov_fondos, numeric, text);
+drop function public.resumen_fondos(date, date);
+drop function public.resumen_turnos(date, date);
+drop function public.resumen_ventas_mixtas(date, date);
+drop function public.resumen_diario(date, date);
+drop function public.resumen_impuestos(date, date, bigint);
+drop view public.v_movimientos_fondos;
+drop view public.v_ventas_mixtas;
+drop view public.v_turnos;
+drop view public.v_movimientos_caja;
+
+drop trigger ventas_pagos_coherentes on public.ventas;
+alter table public.impuestos drop constraint impuestos_medios_validos;
+alter table public.impuestos alter column medios drop default;
+alter table public.movimientos_fondos drop constraint movimientos_fondos_cuenta_no_efectivo;
+
+alter table public.turnos drop column total_tarjeta;
+
+-- 4. Tipos nuevos ---------------------------------------------------------------------------------
+alter type public.medio_pago rename to medio_pago_con_tarjeta;
+create type public.medio_pago as enum ('efectivo', 'transferencia');
+
+alter table public.ventas
+  alter column medio_pago type public.medio_pago using medio_pago::text::public.medio_pago;
+alter table public.venta_pagos
+  alter column medio type public.medio_pago using medio::text::public.medio_pago;
+alter table public.venta_impuestos
+  alter column medio type public.medio_pago using medio::text::public.medio_pago;
+alter table public.impuestos
+  alter column medios type public.medio_pago[] using medios::text[]::public.medio_pago[];
+
+drop type public.medio_pago_con_tarjeta;
+
+alter type public.cuenta_fondos rename to cuenta_fondos_con_tarjeta;
+create type public.cuenta_fondos as enum ('efectivo', 'transferencia');
+
+alter table public.cuentas_fondos
+  alter column cuenta type public.cuenta_fondos using cuenta::text::public.cuenta_fondos;
+alter table public.movimientos_fondos
+  alter column cuenta type public.cuenta_fondos using cuenta::text::public.cuenta_fondos;
+
+drop type public.cuenta_fondos_con_tarjeta;
+
+-- 5. Restricciones y trigger ------------------------------------------------------------------------
+alter table public.impuestos
+  alter column medios set default array['efectivo', 'transferencia']::public.medio_pago[],
+  add constraint impuestos_medios_validos check (
+    cardinality(medios) >= 1
+    and array_position(medios, null) is null
+    and cardinality(array_positions(medios, 'efectivo'::public.medio_pago)) <= 1
+    and cardinality(array_positions(medios, 'transferencia'::public.medio_pago)) <= 1
+  );
+
+alter table public.movimientos_fondos
+  add constraint movimientos_fondos_cuenta_no_efectivo check (cuenta <> 'efectivo');
+
+create constraint trigger ventas_pagos_coherentes
+  after insert or update of precio, medio_pago on public.ventas
+  deferrable initially deferred
+  for each row execute function public.tg_verificar_pagos_venta();
+
+-- 6. Lo recreado tal cual -----------------------------------------------------------------------------
+do $$
+declare
+  r record;
+begin
+  for r in select sentencia from _recrear order by orden loop
+    execute r.sentencia;
+  end loop;
+end;
+$$;
+
+drop table _recrear;
+
+revoke execute on function public.registrar_venta(bigint, bigint, public.medio_pago, text, jsonb, bigint,
+  numeric, boolean, boolean, bigint) from public, anon;
+grant execute on function public.registrar_venta(bigint, bigint, public.medio_pago, text, jsonb, bigint,
+  numeric, boolean, boolean, bigint) to authenticated;
+revoke execute on function public.registrar_venta_pasada(date, time without time zone, bigint, bigint,
+  public.medio_pago, numeric, text) from public, anon;
+grant execute on function public.registrar_venta_pasada(date, time without time zone, bigint, bigint,
+  public.medio_pago, numeric, text) to authenticated;
+grant select on public.v_movimientos_caja to authenticated;
+
+-- 7. Vistas sin tarjeta ---------------------------------------------------------------------------
+create view public.v_turnos
+with (security_invoker = true) as
+select
+  t.id,
+  t.caja_id,
+  t.abierto_en,
+  t.cerrado_en,
+  t.observaciones,
+  t.cantidad_ventas,
+  t.total_efectivo,
+  t.total_transferencia,
+  t.total_gastos,
+  c.nombre                                                   as caja_nombre,
+  (t.cerrado_en is null)                                     as abierto,
+  coalesce(v.cantidad, 0)                                    as ventas_cantidad,
+  coalesce(vp.efectivo, 0)::numeric(14,2)                    as ventas_efectivo,
+  coalesce(vp.transferencia, 0)::numeric(14,2)               as ventas_transferencia,
+  coalesce(v.total, 0)::numeric(14,2)                        as ventas_total,
+  coalesce(g.total, 0)::numeric(14,2)                        as gastos_total,
+  (coalesce(v.total, 0) - coalesce(g.total, 0))::numeric(14,2) as neto,
+  t.efectivo_inicial,
+  coalesce(g.efectivo, 0)::numeric(14,2)                     as gastos_efectivo,
+  (case when t.cerrado_en is null
+        then coalesce(t.efectivo_inicial, 0) + coalesce(vp.efectivo, 0) - coalesce(g.efectivo, 0)
+        else t.efectivo_cierre end)::numeric(14,2)           as efectivo_en_caja,
+  t.efectivo_cierre,
+  t.abierto_por,
+  ap.nombre_completo                                         as abierto_por_nombre,
+  coalesce(a.nombres, '{}'::text[])                          as atendido_por,
+  public.fecha_local(t.abierto_en)                           as fecha_apertura
+from public.turnos t
+join public.cajas c on c.id = t.caja_id
+left join public.perfiles ap on ap.id = t.abierto_por
+left join lateral (
+  select count(*) as cantidad, sum(ventas.precio) as total
+  from public.ventas
+  where ventas.turno_id = t.id and not ventas.anulada
+) v on true
+left join lateral (
+  select sum(pg.monto) filter (where pg.medio = 'efectivo') as efectivo,
+         sum(pg.monto) filter (where pg.medio = 'transferencia') as transferencia
+  from public.ventas
+  join public.venta_pagos pg on pg.venta_id = ventas.id
+  where ventas.turno_id = t.id and not ventas.anulada
+) vp on true
+left join lateral (
+  select sum(gastos.monto) as total,
+         sum(gastos.monto) filter (where gastos.fuente = 'efectivo') as efectivo
+  from public.gastos
+  where gastos.turno_id = t.id and not gastos.anulado
+) g on true
+left join lateral (
+  select array_agg(pp.nombre_completo order by pp.nombre_completo) as nombres
+  from public.perfiles pp
+  where pp.id = t.usuario_id
+     or exists (select 1 from public.ventas vv where vv.turno_id = t.id and vv.usuario_id = pp.id)
+     or exists (select 1 from public.gastos gg where gg.turno_id = t.id and gg.usuario_id = pp.id)
+) a on true;
+
+grant select on public.v_turnos to authenticated;
+
+create view public.v_ventas_mixtas
+with (security_invoker = true) as
+select
+  v.id,
+  v.creado_en,
+  public.fecha_local(v.creado_en)                    as fecha_local,
+  v.turno_id,
+  v.caja_id,
+  cj.nombre                                          as caja_nombre,
+  v.servicio_nombre,
+  v.patente,
+  v.usuario_id,
+  u.nombre_completo                                  as usuario_nombre,
+  v.precio,
+  coalesce(pg.efectivo, 0)::numeric(12,2)            as pago_efectivo,
+  coalesce(pg.transferencia, 0)::numeric(12,2)       as pago_transferencia,
+  pg.pagos,
+  v.anulada,
+  v.anulada_en,
+  v.anulada_motivo
+from public.ventas v
+left join public.cajas cj on cj.id = v.caja_id
+left join public.perfiles u on u.id = v.usuario_id
+left join lateral (
+  select sum(p.monto) filter (where p.medio = 'efectivo') as efectivo,
+         sum(p.monto) filter (where p.medio = 'transferencia') as transferencia,
+         jsonb_agg(jsonb_build_object('medio', p.medio, 'monto', p.monto) order by p.medio) as pagos
+  from public.venta_pagos p
+  where p.venta_id = v.id
+) pg on true
+where v.medio_pago is null and v.turno_id is not null and (select public.es_admin());
+
+grant select on public.v_ventas_mixtas to authenticated;
+
+create view public.v_movimientos_fondos
+with (security_invoker = true) as
+with libro as (
+  -- Ventas por transferencia (también la parte de un pago mixto y las ventas pasadas).
+  select
+    'transferencia'::public.cuenta_fondos              as cuenta,
+    format('venta:%s:%s', lpad(v.id::text, 19, '0'), p.medio) as clave,
+    v.creado_en                                        as fecha,
+    'venta'::text                                      as origen,
+    'venta'::text                                      as tipo,
+    'ingreso'::text                                    as sentido,
+    v.servicio_nombre || coalesce(' — ' || v.patente, '') as descripcion,
+    null::text                                         as nota,
+    p.monto                                            as monto,
+    v.usuario_id                                       as usuario_id,
+    v.id                                               as venta_id,
+    null::bigint                                       as gasto_id,
+    null::bigint                                       as compra_id,
+    null::bigint                                       as movimiento_id,
+    v.turno_id                                         as turno_id,
+    v.caja_id                                          as caja_id,
+    (v.medio_pago is null)                             as pago_mixto,
+    (v.turno_id is null)                               as venta_pasada
+  from public.venta_pagos p
+  join public.ventas v on v.id = p.venta_id
+  where p.medio = 'transferencia' and p.monto > 0
+
+  union all
+  -- Reverso de una venta anulada, en la fecha de la anulación.
+  select
+    'transferencia'::public.cuenta_fondos,
+    format('venta_anulada:%s:%s', lpad(v.id::text, 19, '0'), p.medio),
+    v.anulada_en,
+    'venta_anulada', 'venta_anulada', 'ingreso',
+    'Anulación de venta #' || v.id || ': ' || v.servicio_nombre || coalesce(' — ' || v.patente, ''),
+    v.anulada_motivo,
+    -p.monto,
+    v.anulada_por,
+    v.id, null, null, null,
+    v.turno_id, v.caja_id,
+    (v.medio_pago is null), (v.turno_id is null)
+  from public.venta_pagos p
+  join public.ventas v on v.id = p.venta_id
+  where p.medio = 'transferencia' and p.monto > 0 and v.anulada
+
+  union all
+  -- Gastos por transferencia (las compras de certificados, por su gasto automático).
+  select
+    'transferencia'::public.cuenta_fondos,
+    format('gasto:%s', lpad(g.id::text, 19, '0')),
+    g.creado_en,
+    case when c.id is null then 'gasto' else 'compra' end,
+    case when c.id is null then 'gasto' else 'compra' end,
+    'egreso',
+    case when c.id is null then coalesce(rubro.nombre || ' › ', '') || sub.nombre
+         else 'Compra de certificados: ' || cert.nombre end,
+    g.nota,
+    -g.monto,
+    g.usuario_id,
+    null, g.id, c.id, null,
+    g.turno_id, g.caja_id,
+    false, false
+  from public.gastos g
+  join public.categorias_gasto sub on sub.id = g.categoria_id
+  left join public.categorias_gasto rubro on rubro.id = sub.padre_id
+  left join public.compras_certificado c on c.gasto_id = g.id
+  left join public.certificados cert on cert.id = c.certificado_id
+  where g.fuente = 'transferencia'
+
+  union all
+  -- Reverso de un gasto anulado (o de la compra corregida), en la fecha de la anulación.
+  select
+    'transferencia'::public.cuenta_fondos,
+    format('gasto_anulado:%s', lpad(g.id::text, 19, '0')),
+    g.anulado_en,
+    case when c.id is null then 'gasto_anulado' else 'compra_anulada' end,
+    case when c.id is null then 'gasto_anulado' else 'compra_anulada' end,
+    'egreso',
+    case when c.id is null then 'Anulación de gasto: ' || coalesce(rubro.nombre || ' › ', '') || sub.nombre
+         else 'Corrección de compra de certificados: ' || cert.nombre end,
+    g.anulado_motivo,
+    g.monto,
+    g.anulado_por,
+    null, g.id, c.id, null,
+    g.turno_id, g.caja_id,
+    false, false
+  from public.gastos g
+  join public.categorias_gasto sub on sub.id = g.categoria_id
+  left join public.categorias_gasto rubro on rubro.id = sub.padre_id
+  left join public.compras_certificado c on c.gasto_id = g.id
+  left join public.certificados cert on cert.id = c.certificado_id
+  where g.fuente = 'transferencia' and g.anulado
+
+  union all
+  -- Movimientos manuales de transferencia.
+  select
+    m.cuenta,
+    format('manual:%s', lpad(m.id::text, 19, '0')),
+    m.creado_en,
+    'manual', m.tipo::text,
+    case when m.tipo = 'retiro' then 'egreso' else 'ingreso' end,
+    case m.tipo when 'fondo_inicial' then 'Saldo inicial' when 'ingreso' then 'Ingreso' else 'Retiro' end,
+    m.nota,
+    m.monto,
+    m.usuario_id,
+    null, null, null, m.id,
+    null, null,
+    false, false
+  from public.movimientos_fondos m
+
+  union all
+  -- Efectivo: el libro de la caja de cambio, tal cual.
+  select
+    'efectivo'::public.cuenta_fondos,
+    format('efectivo:%s', lpad(e.id::text, 19, '0')),
+    e.creado_en,
+    case e.tipo
+      when 'fondo_inicial' then 'manual'
+      when 'ingreso' then 'manual'
+      when 'retiro' then 'manual'
+      when 'venta' then 'venta'
+      when 'anulacion_venta' then 'venta_anulada'
+      when 'gasto' then case when c.id is null then 'gasto' else 'compra' end
+      when 'anulacion_gasto' then case when c.id is null then 'gasto_anulado' else 'compra_anulada' end
+      else e.tipo::text
+    end,
+    e.tipo::text,
+    case when e.tipo in ('fondo_inicial', 'ingreso', 'venta', 'anulacion_venta', 'cierre_turno')
+         then 'ingreso' else 'egreso' end,
+    case
+      when e.tipo = 'fondo_inicial' then 'Fondo inicial'
+      when e.tipo = 'ingreso' then 'Ingreso'
+      when e.tipo = 'retiro' then 'Retiro'
+      when e.tipo = 'venta' then v.servicio_nombre || coalesce(' — ' || v.patente, '')
+      when e.tipo = 'anulacion_venta' then
+        'Anulación de venta #' || v.id || ': ' || v.servicio_nombre || coalesce(' — ' || v.patente, '')
+      when e.tipo = 'gasto' then
+        case when c.id is null then coalesce(rubro.nombre || ' › ', '') || sub.nombre
+             else 'Compra de certificados: ' || cert.nombre end
+      when e.tipo = 'anulacion_gasto' then
+        case when c.id is null then 'Anulación de gasto: ' || coalesce(rubro.nombre || ' › ', '') || sub.nombre
+             else 'Corrección de compra de certificados: ' || cert.nombre end
+      when e.tipo = 'apertura_turno' then 'Apertura de turno'
+      when e.tipo = 'cierre_turno' then 'Cierre de turno'
+      else e.tipo::text
+    end,
+    e.nota,
+    e.monto,
+    e.usuario_id,
+    e.venta_id, e.gasto_id, c.id, e.id,
+    coalesce(e.turno_id, v.turno_id, g.turno_id),
+    coalesce(t.caja_id, v.caja_id, g.caja_id),
+    coalesce(v.id is not null and v.medio_pago is null, false), coalesce(v.id is not null and v.turno_id is null, false)
+  from public.movimientos_efectivo e
+  left join public.ventas v on v.id = e.venta_id
+  left join public.gastos g on g.id = e.gasto_id
+  left join public.categorias_gasto sub on sub.id = g.categoria_id
+  left join public.categorias_gasto rubro on rubro.id = sub.padre_id
+  left join public.compras_certificado c on c.gasto_id = g.id
+  left join public.certificados cert on cert.id = c.certificado_id
+  left join public.turnos t on t.id = e.turno_id
+)
+select
+  l.cuenta,
+  l.clave,
+  l.fecha,
+  public.fecha_local(l.fecha) as fecha_local,
+  l.origen,
+  l.tipo,
+  l.sentido,
+  l.descripcion,
+  l.nota,
+  l.monto::numeric(12,2)     as monto,
+  l.usuario_id,
+  u.nombre_completo           as usuario_nombre,
+  l.venta_id,
+  l.gasto_id,
+  l.compra_id,
+  l.movimiento_id,
+  l.turno_id,
+  l.caja_id,
+  cj.nombre                   as caja_nombre,
+  l.pago_mixto,
+  l.venta_pasada
+from libro l
+left join public.perfiles u on u.id = l.usuario_id
+left join public.cajas cj on cj.id = l.caja_id
+where (select public.es_admin());
+
+grant select on public.v_movimientos_fondos to authenticated;
+
+-- 8. Funciones sin tarjeta --------------------------------------------------------------------------
+create or replace function public.cerrar_turno(p_turno_id bigint, p_observaciones text default null)
+returns public.turnos
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_turno    public.turnos;
+  v_efectivo numeric(12,2);
+begin
+  perform public._exigir_admin();
+
+  if p_turno_id is null then
+    raise exception 'Elegí el turno que vas a cerrar' using errcode = '22023';
+  end if;
+  -- for update: espera a las ventas y gastos en curso (toman el turno con for share / for update).
+  select * into v_turno from public.turnos where id = p_turno_id for update;
+  if v_turno.id is null then
+    raise exception 'El turno no existe' using errcode = '22023';
+  end if;
+  if v_turno.cerrado_en is not null then
+    raise exception 'El turno ya estaba cerrado' using errcode = 'P0001';
+  end if;
+
+  v_efectivo := public._efectivo_en_caja(v_turno.id);
+
+  update public.turnos t
+  -- clock_timestamp(): la hora real del cierre, posterior a toda venta o gasto que se esperó con el
+  -- for update (now() es el inicio de la transacción y podría quedar antes de la última venta).
+  set cerrado_en          = clock_timestamp(),
+      observaciones       = nullif(btrim(p_observaciones), ''),
+      cantidad_ventas     = r.cantidad,
+      total_efectivo      = r.efectivo,
+      total_transferencia = r.transferencia,
+      total_gastos        = r.gastos,
+      efectivo_cierre     = v_efectivo
+  from (
+    select
+      (select count(*) from public.ventas v
+        where v.turno_id = v_turno.id and not v.anulada)                         as cantidad,
+      coalesce(sum(p.monto) filter (where p.medio = 'efectivo'), 0)               as efectivo,
+      coalesce(sum(p.monto) filter (where p.medio = 'transferencia'), 0)          as transferencia,
+      (select coalesce(sum(g.monto), 0) from public.gastos g
+        where g.turno_id = v_turno.id and not g.anulado)                         as gastos
+    from public.ventas v
+    join public.venta_pagos p on p.venta_id = v.id
+    where v.turno_id = v_turno.id and not v.anulada
+  ) r
+  where t.id = v_turno.id
+  returning t.* into v_turno;
+
+  if v_efectivo > 0 then
+    perform public._mover_efectivo('cierre_turno', v_efectivo,
+      format('Cierre del turno #%s', v_turno.id), v_turno.id);
+  end if;
+
+  return v_turno;
+end;
+$$;
+
+create function public.resumen_turnos(p_desde date default null, p_hasta date default null)
+returns table (
+  cantidad_turnos      bigint,
+  turnos_abiertos      bigint,
+  ventas_cantidad      bigint,
+  ventas_efectivo      numeric(14,2),
+  ventas_transferencia numeric(14,2),
+  ventas_total         numeric(14,2),
+  gastos_total         numeric(14,2),
+  neto                 numeric(14,2)
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  perform public._exigir_admin();
+  if p_desde is not null and p_hasta is not null and p_desde > p_hasta then
+    raise exception 'La fecha "desde" no puede ser posterior a "hasta"' using errcode = '22023';
+  end if;
+
+  return query
+  select
+    count(*),
+    count(*) filter (where t.abierto),
+    coalesce(sum(t.ventas_cantidad), 0)::bigint,
+    coalesce(sum(t.ventas_efectivo), 0)::numeric(14,2),
+    coalesce(sum(t.ventas_transferencia), 0)::numeric(14,2),
+    coalesce(sum(t.ventas_total), 0)::numeric(14,2),
+    coalesce(sum(t.gastos_total), 0)::numeric(14,2),
+    coalesce(sum(t.neto), 0)::numeric(14,2)
+  from public.v_turnos t
+  where (p_desde is null or t.fecha_apertura >= p_desde)
+    and (p_hasta is null or t.fecha_apertura <= p_hasta);
+end;
+$$;
+
+create function public.resumen_ventas_mixtas(p_desde date default null, p_hasta date default null)
+returns table (
+  cantidad_ventas     bigint,
+  total               numeric(14,2),
+  total_efectivo      numeric(14,2),
+  total_transferencia numeric(14,2),
+  incluido_en_cuentas boolean
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  perform public._exigir_admin();
+  if p_desde is not null and p_hasta is not null and p_desde > p_hasta then
+    raise exception 'La fecha "desde" no puede ser posterior a "hasta"' using errcode = '22023';
+  end if;
+
+  return query
+  select
+    count(distinct v.id),
+    coalesce(sum(p.monto), 0)::numeric(14,2),
+    coalesce(sum(p.monto) filter (where p.medio = 'efectivo'), 0)::numeric(14,2),
+    coalesce(sum(p.monto) filter (where p.medio = 'transferencia'), 0)::numeric(14,2),
+    true
+  from public.ventas v
+  join public.venta_pagos p on p.venta_id = v.id
+  where v.medio_pago is null
+    and v.turno_id is not null
+    and not v.anulada
+    and (p_desde is null or public.fecha_local(v.creado_en) >= p_desde)
+    and (p_hasta is null or public.fecha_local(v.creado_en) <= p_hasta);
+end;
+$$;
+
+create function public.resumen_diario(p_desde date default null, p_hasta date default null)
+returns table (
+  fecha               date,
+  cantidad_ventas     bigint,
+  total_ventas        numeric(14,2),
+  total_efectivo      numeric(14,2),
+  total_transferencia numeric(14,2),
+  total_gastos        numeric(14,2),
+  flujo_neto          numeric(14,2),
+  costo_certificados  numeric(14,2),
+  margen_bruto        numeric(14,2),
+  ventas_sin_stock    bigint
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  perform public._exigir_admin();
+  if p_desde is not null and p_hasta is not null and p_desde > p_hasta then
+    raise exception 'La fecha "desde" no puede ser posterior a "hasta"' using errcode = '22023';
+  end if;
+
+  return query
+  with vd as (
+    select public.fecha_local(v.creado_en) as dia,
+           count(*) as cantidad,
+           sum(v.precio) as monto,
+           -- Cada venta redondeada a 2 decimales, como la registra el kardex (migración 52).
+           sum(round(v.costo_certificado, 2)) as costo,
+           count(*) filter (where v.sin_stock) as sin_stock
+    from public.ventas v
+    where not v.anulada
+    group by 1
+  ),
+  pd as (
+    select public.fecha_local(v.creado_en) as dia,
+           sum(p.monto) filter (where p.medio = 'efectivo') as efectivo,
+           sum(p.monto) filter (where p.medio = 'transferencia') as transferencia
+    from public.ventas v
+    join public.venta_pagos p on p.venta_id = v.id
+    where not v.anulada
+    group by 1
+  ),
+  gd as (
+    select public.fecha_local(g.creado_en) as dia, sum(g.monto) as monto
+    from public.gastos g
+    where not g.anulado
+    group by 1
+  ),
+  dias as (
+    select vd.dia from vd union select gd.dia from gd
+  )
+  select
+    d.dia,
+    coalesce(vd.cantidad, 0)::bigint,
+    coalesce(vd.monto, 0)::numeric(14,2),
+    coalesce(pd.efectivo, 0)::numeric(14,2),
+    coalesce(pd.transferencia, 0)::numeric(14,2),
+    coalesce(gd.monto, 0)::numeric(14,2),
+    (coalesce(vd.monto, 0) - coalesce(gd.monto, 0))::numeric(14,2),
+    coalesce(vd.costo, 0)::numeric(14,2),
+    (coalesce(vd.monto, 0) - coalesce(vd.costo, 0))::numeric(14,2),
+    coalesce(vd.sin_stock, 0)::bigint
+  from dias d
+  left join vd on vd.dia = d.dia
+  left join pd on pd.dia = d.dia
+  left join gd on gd.dia = d.dia
+  where (p_desde is null or d.dia >= p_desde)
+    and (p_hasta is null or d.dia <= p_hasta)
+  order by d.dia;
+end;
+$$;
+
+create function public.resumen_impuestos(p_desde date default null, p_hasta date default null,
+                                         p_turno_id bigint default null)
+returns table (
+  agrupacion          text,
+  id                  bigint,
+  nombre              text,
+  cantidad_ventas     bigint,
+  total               numeric(14,2),
+  total_efectivo      numeric(14,2),
+  total_transferencia numeric(14,2)
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  perform public._exigir_admin();
+  if p_desde is not null and p_hasta is not null and p_desde > p_hasta then
+    raise exception 'La fecha "desde" no puede ser posterior a "hasta"' using errcode = '22023';
+  end if;
+
+  return query
+  with filas as (
+    select vi.venta_id, vi.impuesto_id, vi.medio, vi.monto
+    from public.venta_impuestos vi
+    join public.ventas v on v.id = vi.venta_id
+    where not v.anulada
+      and (p_desde is null or public.fecha_local(v.creado_en) >= p_desde)
+      and (p_hasta is null or public.fecha_local(v.creado_en) <= p_hasta)
+      and (p_turno_id is null or v.turno_id = p_turno_id)
+  ),
+  agrupado as (
+    select 'total'::text as grupo, 0 as orden, null::bigint as clave, 'Total'::text as etiqueta,
+           count(distinct f.venta_id) as cantidad,
+           coalesce(sum(f.monto), 0) as t,
+           coalesce(sum(f.monto) filter (where f.medio = 'efectivo'), 0) as t_ef,
+           coalesce(sum(f.monto) filter (where f.medio = 'transferencia'), 0) as t_tr
+    from filas f
+    union all
+    select 'impuesto', 1, i.id, i.nombre,
+           count(distinct f.venta_id),
+           sum(f.monto),
+           coalesce(sum(f.monto) filter (where f.medio = 'efectivo'), 0),
+           coalesce(sum(f.monto) filter (where f.medio = 'transferencia'), 0)
+    from filas f
+    join public.impuestos i on i.id = f.impuesto_id
+    group by i.id, i.nombre
+  )
+  select a.grupo, a.clave, a.etiqueta, a.cantidad,
+         a.t::numeric(14,2), a.t_ef::numeric(14,2), a.t_tr::numeric(14,2)
+  from agrupado a
+  order by a.orden, a.t desc, a.etiqueta;
+end;
+$$;
+
+create function public.resumen_fondos(p_desde date default null, p_hasta date default null)
+returns table (
+  cuenta               public.cuenta_fondos,
+  saldo                numeric(14,2),
+  ingresos             numeric(14,2),
+  egresos              numeric(14,2),
+  neto                 numeric(14,2),
+  cantidad_movimientos bigint
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  perform public._exigir_admin();
+  if p_desde is not null and p_hasta is not null and p_desde > p_hasta then
+    raise exception 'La fecha "desde" no puede ser posterior a "hasta"' using errcode = '22023';
+  end if;
+
+  return query
+  with en_rango as (
+    select f.cuenta, f.sentido, f.monto
+    from public.v_movimientos_fondos f
+    where (p_desde is null or f.fecha_local >= p_desde)
+      and (p_hasta is null or f.fecha_local <= p_hasta)
+  )
+  select
+    c.c,
+    coalesce((select sum(f.monto) from public.v_movimientos_fondos f where f.cuenta = c.c), 0)::numeric(14,2),
+    coalesce((select sum(r.monto) from en_rango r where r.cuenta = c.c and r.sentido = 'ingreso'), 0)::numeric(14,2),
+    coalesce((select -sum(r.monto) from en_rango r where r.cuenta = c.c and r.sentido = 'egreso'), 0)::numeric(14,2),
+    coalesce((select sum(r.monto) from en_rango r where r.cuenta = c.c), 0)::numeric(14,2),
+    (select count(*) from en_rango r where r.cuenta = c.c)
+  from unnest(enum_range(null::public.cuenta_fondos)) as c(c)
+  order by c.c;
+end;
+$$;
+
+create function public.movimiento_fondos(p_cuenta public.cuenta_fondos, p_tipo public.tipo_mov_fondos,
+                                         p_monto numeric, p_nota text)
+returns public.v_movimientos_fondos
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_nota  text;
+  v_saldo numeric;
+  v_id    bigint;
+  v_clave text;
+  v_fila  public.v_movimientos_fondos;
+begin
+  perform public._exigir_admin();
+
+  if p_cuenta is null then
+    raise exception 'Elegí la cuenta (efectivo o transferencia)' using errcode = '22023';
+  end if;
+  if p_tipo is null then
+    raise exception 'Elegí el tipo de movimiento' using errcode = '22023';
+  end if;
+  perform public._validar_monto(p_monto, 'El monto');
+  v_nota := public._texto_obligatorio(p_nota, 'La nota es obligatoria');
+  if char_length(v_nota) > 500 then
+    raise exception 'La nota no puede superar los 500 caracteres' using errcode = '22023';
+  end if;
+
+  if p_cuenta = 'efectivo' then
+    -- La caja de cambio de siempre: misma regla (sin saldo negativo) y mismo libro.
+    v_id := (public.movimiento_efectivo(p_tipo::text::public.tipo_mov_efectivo, p_monto, v_nota)).id;
+    v_clave := format('efectivo:%s', lpad(v_id::text, 19, '0'));
+  else
+    -- Serializa los movimientos manuales de la cuenta: el segundo retiro ve el primero.
+    perform 1 from public.cuentas_fondos where cuenta = p_cuenta for update;
+
+    if p_tipo = 'retiro' then
+      select coalesce(sum(f.monto), 0) into v_saldo
+      from public.v_movimientos_fondos f
+      where f.cuenta = p_cuenta;
+
+      if v_saldo - p_monto < 0 then
+        raise exception 'No alcanza el saldo de transferencias: hay $ % y el retiro es de $ %',
+          public._pesos(v_saldo), public._pesos(p_monto)
+          using errcode = 'P0001';
+      end if;
+    end if;
+
+    insert into public.movimientos_fondos (cuenta, tipo, monto, nota, usuario_id)
+    values (p_cuenta, p_tipo, case when p_tipo = 'retiro' then -p_monto else p_monto end, v_nota, auth.uid())
+    returning id into v_id;
+    v_clave := format('manual:%s', lpad(v_id::text, 19, '0'));
+  end if;
+
+  select * into v_fila from public.v_movimientos_fondos f where f.clave = v_clave;
+  return v_fila;
+end;
+$$;
+
+revoke execute on function public.resumen_turnos(date, date) from public, anon;
+grant execute on function public.resumen_turnos(date, date) to authenticated;
+revoke execute on function public.resumen_ventas_mixtas(date, date) from public, anon;
+grant execute on function public.resumen_ventas_mixtas(date, date) to authenticated;
+revoke execute on function public.resumen_diario(date, date) from public, anon;
+grant execute on function public.resumen_diario(date, date) to authenticated;
+revoke execute on function public.resumen_impuestos(date, date, bigint) from public, anon;
+grant execute on function public.resumen_impuestos(date, date, bigint) to authenticated;
+revoke execute on function public.resumen_fondos(date, date) from public, anon;
+grant execute on function public.resumen_fondos(date, date) to authenticated;
+revoke execute on function public.movimiento_fondos(public.cuenta_fondos, public.tipo_mov_fondos, numeric, text)
+  from public, anon;
+grant execute on function public.movimiento_fondos(public.cuenta_fondos, public.tipo_mov_fondos, numeric, text)
+  to authenticated;
+
+-- ---------------------------------------------------------------------
+-- 20261127000055_certificados_servicios_volatile.sql
+-- ---------------------------------------------------------------------
+-- =====================================================================
+-- Migración 55: `certificados_servicios_de_turno` deja de ser `stable` (arreglo de la 53, 2026-11-27)
+--
+-- PostgREST ejecuta las funciones `stable` en una transacción de solo lectura. Para el cajero, la
+-- función valida el turno con `_turno_para_trabajar`, que lo bloquea con `for share`, y en solo
+-- lectura eso falla (25006 "cannot execute SELECT FOR SHARE in a read-only transaction"): la ventana
+-- "Certificados y servicios" de la caja mostraba un error. Como `resumen_ventas_de_turno` (50) y
+-- `efectivo_en_caja_de_turno` (47), queda `volatile`. No cambia lo que devuelve.
+-- =====================================================================
+
+alter function public.certificados_servicios_de_turno(bigint) volatile;
 
 commit;

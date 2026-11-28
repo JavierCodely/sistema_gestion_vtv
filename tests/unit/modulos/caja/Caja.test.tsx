@@ -30,8 +30,8 @@ function cajasAbiertas(cajas: (typeof CAJA_1)[]) {
   responder("v_turnos_abiertos", "select", { data: cajas });
 }
 
-/** Recorre la venta con el teclado: patente, categoría, servicio, tarjeta (3) y confirma. */
-async function venderConTarjeta() {
+/** Recorre la venta con el teclado: patente, categoría, servicio, transferencia (2) y confirma. */
+async function venderConTransferencia() {
   await screen.findByLabelText("1. Patente");
   await userEvent.keyboard("AA111AA{Enter}");
   await screen.findByRole("listbox", { name: "2. Categoría" });
@@ -39,7 +39,7 @@ async function venderConTarjeta() {
   await screen.findByRole("listbox", { name: "3. Servicio · Autos" });
   await userEvent.keyboard("{Enter}");
   await screen.findByRole("listbox", { name: "4. Medio de pago" });
-  await userEvent.keyboard("3{Enter}");
+  await userEvent.keyboard("2{Enter}");
   await screen.findByTestId("paso-confirmar");
   await userEvent.keyboard("{Enter}");
 }
@@ -124,7 +124,7 @@ describe("Caja: elegir en qué caja se trabaja", () => {
   it("con varias, el usuario elige; la venta va a esa caja y puede cambiar con el selector", async () => {
     cajasAbiertas([CAJA_1, CAJA_2]);
     responderRpc("registrar_venta", {
-      data: ventaDePrueba({ id: 40, turno_id: 8, medio_pago: "tarjeta" }),
+      data: ventaDePrueba({ id: 40, turno_id: 8, medio_pago: "transferencia" }),
     });
     renderRuta("/caja", cajero());
 
@@ -139,7 +139,7 @@ describe("Caja: elegir en qué caja se trabaja", () => {
     expect(selector).toHaveTextContent("Caja 2");
     expect(localStorage.getItem(CLAVE_CAJA_ELEGIDA)).toBe("2");
 
-    await venderConTarjeta();
+    await venderConTransferencia();
     await waitFor(() => {
       expect(argumentosRpc("registrar_venta")).toMatchObject({ p_turno_id: 8, p_servicio_id: 1 });
     });
@@ -180,7 +180,7 @@ describe("Caja: elegir en qué caja se trabaja", () => {
     renderRuta("/caja", cajero());
     await screen.findByLabelText("Estás trabajando en");
     // La lista todavía la muestra (aún no se volvió a leer): igual no se vende más ahí.
-    await venderConTarjeta();
+    await venderConTransferencia();
     expect(
       await screen.findByRole("heading", { name: "¿En qué caja estás trabajando?" }),
     ).toBeInTheDocument();
@@ -206,7 +206,7 @@ describe("Caja: elegir en qué caja se trabaja", () => {
     await screen.findByLabelText("1. Patente");
     // El admin la cerró mientras tanto: al rechazarse la venta se vuelve a leer la lista.
     cajasAbiertas([]);
-    await venderConTarjeta();
+    await venderConTransferencia();
     expect(
       await screen.findByRole("heading", { name: "No hay cajas abiertas" }),
     ).toBeInTheDocument();
@@ -223,7 +223,7 @@ describe("Caja: elegir en qué caja se trabaja", () => {
     await screen.findByLabelText("Estás trabajando en");
     // Cualquier relectura (acá, tras un rechazo) trae la lista sin la caja elegida.
     cajasAbiertas([CAJA_1]);
-    await venderConTarjeta();
+    await venderConTransferencia();
     expect(
       await screen.findByRole("heading", { name: "¿En qué caja estás trabajando?" }),
     ).toBeInTheDocument();
@@ -250,7 +250,7 @@ describe("Caja: historial y gastos de la caja (de todos; el único total es el e
           descuento_nombre: "Jubilados",
           medio_pago: null,
           venta_pagos: [
-            { medio: "tarjeta", monto: 22000 },
+            { medio: "transferencia", monto: 22000 },
             { medio: "efectivo", monto: 5000 },
           ],
         }),
@@ -262,7 +262,7 @@ describe("Caja: historial y gastos de la caja (de todos; el único total es el e
         ventaDePrueba({
           id: 1,
           creado_en: "2026-11-20T12:10:00Z",
-          medio_pago: "tarjeta",
+          medio_pago: "transferencia",
           anulada: true,
           anulada_motivo: "Error",
           anulada_en: "2026-11-20T12:20:00Z",
@@ -301,10 +301,12 @@ describe("Caja: historial y gastos de la caja (de todos; el único total es el e
     expect(within(ventas).getByRole("button", { name: "Anular venta N° 2" })).toBeInTheDocument();
     expect(within(ventas).queryByRole("button", { name: "Anular venta N° 3" })).toBeNull();
     expect(within(ventas).queryByRole("button", { name: "Anular venta N° 1" })).toBeNull();
-    // Pago mixto: "Mixto" con el detalle por medio (en orden: efectivo, transferencia, tarjeta);
+    // Pago mixto: "Mixto" con el detalle por medio (en orden: efectivo, transferencia);
     // el descuento con su nombre, lo descontado y el precio de lista.
     const mixta = within(ventas).getByTestId("venta-3");
-    expect(normal(mixta.textContent)).toContain("MixtoEfectivo $ 5.000,00 + Tarjeta $ 22.000,00");
+    expect(normal(mixta.textContent)).toContain(
+      "MixtoEfectivo $ 5.000,00 + Transferencia $ 22.000,00",
+    );
     expect(normal(mixta.textContent)).toContain("Jubilados−$ 3.000,00 · lista $ 30.000,00");
     expect(normal(mixta.textContent)).toContain("$ 27.000,00");
     // Decisiones del negocio (2026-11-24 y 2026-11-25): de dinero del turno, el cajero ve solo el
@@ -322,6 +324,7 @@ describe("Caja: historial y gastos de la caja (de todos; el único total es el e
     expect(normal(screen.getByTestId("total-anuladas").textContent)).toBe(
       "Anuladas$ 30.000,001 venta",
     );
+    expect(screen.getByRole("button", { name: "Certificados y servicios" })).toBeInTheDocument();
     expect(argumentosRpc("resumen_ventas_de_turno")).toEqual({ p_turno_id: 5 });
     expect(screen.queryByText(/total/i)).not.toBeInTheDocument();
     // (las <option> del <select> nativo oculto de Radix no se ven ni las lee el lector de pantalla)
@@ -403,7 +406,7 @@ describe("Caja: historial y gastos de la caja (de todos; el único total es el e
           id: 2,
           categoria_id: 2,
           categorias_servicio: { nombre: "Motos" },
-          medio_pago: "tarjeta",
+          medio_pago: "transferencia",
         }),
         ventaDePrueba({
           id: 1,
@@ -413,7 +416,7 @@ describe("Caja: historial y gastos de la caja (de todos; el único total es el e
           precio: 18000,
           venta_pagos: [
             { medio: "efectivo", monto: 5000 },
-            { medio: "tarjeta", monto: 13000 },
+            { medio: "transferencia", monto: 13000 },
           ],
         }),
       ],
@@ -434,8 +437,8 @@ describe("Caja: historial y gastos de la caja (de todos; el único total es el e
     expect(ids()).toEqual(["venta-3", "venta-1"]);
 
     await userEvent.click(within(ventas).getByRole("combobox", { name: "Medio de pago" }));
-    await userEvent.click(await screen.findByRole("option", { name: "Tarjeta" }));
-    // Autos + tarjeta: solo la mixta (efectivo + tarjeta).
+    await userEvent.click(await screen.findByRole("option", { name: "Transferencia" }));
+    // Autos + transferencia: solo la mixta (efectivo + transferencia).
     expect(ids()).toEqual(["venta-1"]);
 
     await userEvent.click(within(ventas).getByRole("button", { name: "Limpiar filtros" }));
@@ -448,7 +451,9 @@ describe("Caja: historial y gastos de la caja (de todos; el único total es el e
 
   it("HISTORIAL: el cajero anula su venta con motivo y la nota de crédito queda para el admin", async () => {
     cajasAbiertas([CAJA_1]);
-    responder("ventas", "select", { data: [ventaDePrueba({ id: 2, medio_pago: "tarjeta" })] });
+    responder("ventas", "select", {
+      data: [ventaDePrueba({ id: 2, medio_pago: "transferencia" })],
+    });
     responder("v_comprobantes", "select", {
       data: [comprobanteDePrueba({ id: 40, venta_id: 2 })],
     });

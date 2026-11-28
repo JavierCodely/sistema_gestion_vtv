@@ -11,7 +11,7 @@
 --   - TODOS los turnos (abiertos y cerrados). Los gastos que estaban en un turno se conservan, sin
 --     turno (siguen con su caja).
 --   - Fondos en $ 0: se vacía el libro de la caja de cambio (saldo $ 0) y los movimientos manuales de
---     transferencia y crédito/débito. Los gastos y compras pagados por transferencia se conservan y
+--     transferencia. Los gastos y compras pagados por transferencia se conservan y
 --     restan de esa cuenta: si quedan, se agrega un "Ajuste a $ 0" (ingreso) que la deja en cero.
 --
 -- NO cambia:
@@ -97,12 +97,11 @@ begin
   delete from public.turnos where id is not null;
   get diagnostics v_turnos = row_count;
 
-  -- Fondos › Transferencia y Crédito/Débito: sin movimientos manuales.
+  -- Fondos › Transferencia: sin movimientos manuales.
   delete from public.movimientos_fondos where id is not null;
 
   -- Lo que queda en transferencia son los gastos y compras pagados así (sin anular; un anulado se
-  -- compensa con su reverso), igual que calcula `v_movimientos_fondos`. Crédito/Débito no tiene
-  -- egresos: queda en $ 0.
+  -- compensa con su reverso), igual que calcula `v_movimientos_fondos`.
   select coalesce(sum(g.monto), 0) into v_transferencia
   from public.gastos g
   where g.fuente = 'transferencia' and not g.anulado;
@@ -133,7 +132,7 @@ $$;
 
 commit;
 
--- Verificación: ventas y turnos en 0; las tres cuentas de Fondos en $ 0; el stock cuadra con el kardex.
+-- Verificación: ventas y turnos en 0; las dos cuentas de Fondos en $ 0; el stock cuadra con el kardex.
 select
   (select count(*) from public.ventas)                                     as ventas,
   (select count(*) from public.venta_pagos)                                as pagos,
@@ -144,8 +143,6 @@ select
   (select coalesce(sum(m.monto), 0) from public.movimientos_fondos m where m.cuenta = 'transferencia')
     - (select coalesce(sum(g.monto), 0) from public.gastos g
        where g.fuente = 'transferencia' and not g.anulado)                 as saldo_transferencia,
-  (select coalesce(sum(m.monto), 0) from public.movimientos_fondos m where m.cuenta = 'tarjeta')
-                                                                           as saldo_credito_debito,
   (select count(*) from public.certificados c
    where c.stock_hojas <> (select coalesce(sum(m.hojas), 0) from public.movimientos_certificado m
                            where m.certificado_id = c.id))                 as certificados_que_no_cuadran,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MEDIOS_RESTO, pagosMixtos, revisarPagoMixto } from "@/modulos/caja/lib/pago-mixto";
+import { pagosMixtos, revisarPagoMixto } from "@/modulos/caja/lib/pago-mixto";
 
 const normal = (texto: string | null) => (texto ?? "").replace(/\s/g, " ");
 
@@ -32,11 +32,10 @@ describe("revisarPagoMixto (vista previa: efectivo + resto)", () => {
 });
 
 describe("pagosMixtos", () => {
-  it("efectivo primero y el resto con el medio elegido", () => {
-    expect(pagosMixtos(5000, 13000, "tarjeta")).toEqual([
+  it("efectivo primero y el resto por transferencia (no hay tarjeta, migración 54)", () => {
+    expect(pagosMixtos(5000, 13000)).toEqual([
       { medio: "efectivo", monto: 5000 },
-      { medio: "tarjeta", monto: 13000 },
+      { medio: "transferencia", monto: 13000 },
     ]);
-    expect(MEDIOS_RESTO.map((m) => m.etiqueta)).toEqual(["Transferencia", "Débito / Crédito"]);
   });
 });

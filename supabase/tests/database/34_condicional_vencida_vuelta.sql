@@ -33,9 +33,9 @@ reset role;
 
 -- Condicionales: una pagada entera y otra al 50%, ambas vencidas -------------------------------------
 select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja, 100) as turno \gset
-select (registrar_venta(:turno, :auto, 'tarjeta', 'VV111AA', p_condicional => true)).id as v_entera \gset
-select (registrar_venta(:turno, :auto, 'tarjeta', 'VV222BB', p_condicional => true, p_condicional_mitad => true)).id as v_mitad \gset
-select (registrar_venta(:turno, :moto, 'tarjeta', 'VV111AA', p_condicional => true)).id as v_moto \gset
+select (registrar_venta(:turno, :auto, 'transferencia', 'VV111AA', p_condicional => true)).id as v_entera \gset
+select (registrar_venta(:turno, :auto, 'transferencia', 'VV222BB', p_condicional => true, p_condicional_mitad => true)).id as v_mitad \gset
+select (registrar_venta(:turno, :moto, 'transferencia', 'VV111AA', p_condicional => true)).id as v_moto \gset
 reset role;
 update ventas set condicional_vence = fecha_local(now()) - 1 where id in (:v_entera, :v_mitad, :v_moto);
 
@@ -88,17 +88,17 @@ select throws_ok(format('select registrar_venta(%s, %s, %L, %L, p_vuelta_vencida
   'P0001', 'La condicional elegida está anulada: revisá la patente', 'una condicional anulada no vale');
 
 -- Con una vigente del servicio, la vuelta es esa ------------------------------------------------------
-select (registrar_venta(:turno, :moto, 'tarjeta', 'VV333CC', p_condicional => true)).id as v_vieja \gset
+select (registrar_venta(:turno, :moto, 'transferencia', 'VV333CC', p_condicional => true)).id as v_vieja \gset
 reset role;
 update ventas set condicional_vence = fecha_local(now()) - 1 where id = :v_vieja;
 select pg_temp.como(:'cajero');
-select (registrar_venta(:turno, :moto, 'tarjeta', 'VV333CC', p_condicional => true)).id as v_nueva \gset
+select (registrar_venta(:turno, :moto, 'transferencia', 'VV333CC', p_condicional => true)).id as v_nueva \gset
 select throws_like(format('select registrar_venta(%s, %s, %L, %L, p_vuelta_vencida => %s)', :turno, :moto, 'efectivo', 'VV333CC', :v_vieja),
   'La patente VV333CC tiene una condicional vigente de "Moto V" (del %): registrá la vuelta',
   'con una condicional vigente del servicio, la vuelta es la vigente');
 
 -- Sin p_vuelta_vencida no cambia nada: vencida se cobra entera ---------------------------------------
-select is((registrar_venta(:turno, :auto, 'tarjeta', 'VV111AA')).precio, 71000.00::numeric(12,2),
+select is((registrar_venta(:turno, :auto, 'transferencia', 'VV111AA')).precio, 71000.00::numeric(12,2),
   'sin elegir la vuelta, una condicional vencida se cobra entera');
 select is((select count(*)::int from ventas where vuelta_de = :v_entera and not anulada), 0,
   'y no queda como vuelta');

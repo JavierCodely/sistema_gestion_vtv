@@ -76,7 +76,7 @@ select is(
 update cajas set activa = false where id = :caja2;
 update servicios set activo = false where id = :servicio;
 select pg_temp.como(:'admin');
-select (registrar_venta_pasada('2026-10-15', '18:00', :caja2, :servicio, 'tarjeta', 0)).id as pasada_tarjeta \gset
+select (registrar_venta_pasada('2026-10-15', '18:00', :caja2, :servicio, 'transferencia', 0)).id as pasada_tarjeta \gset
 reset role;
 select is((select row(precio, caja_id)::text from ventas where id = :pasada_tarjeta),
   row(0.00, :caja2)::text, 'acepta precio $ 0 y caja o servicio hoy desactivados');

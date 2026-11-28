@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from "@/compartido/ui/alert";
 import { Button } from "@/compartido/ui/button";
 import { useVentasDeTurno, type Venta } from "@/modulos/caja/api/consultas";
 import { FiltrosVentas } from "@/modulos/caja/componentes/FiltrosVentas";
+import { DialogoCertificadosServicios } from "@/modulos/caja/componentes/DialogoCertificadosServicios";
 import { ResumenVentasTurno } from "@/modulos/caja/componentes/ResumenVentasTurno";
 import { TablaVentas } from "@/modulos/caja/componentes/TablaVentas";
 import {
@@ -37,7 +38,10 @@ export function VentasDelTurno({ turnoId }: { turnoId: number }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <ResumenVentasTurno turnoId={turnoId} />
+      <div className="flex flex-wrap items-end gap-3">
+        <ResumenVentasTurno turnoId={turnoId} />
+        <DialogoCertificadosServicios turnoId={turnoId} />
+      </div>
       <FiltrosVentas ventas={ventas.data} onCambiar={setFiltro} />
       <TablaVentas
         ventas={filtrarVentas(ventas.data, filtro)}

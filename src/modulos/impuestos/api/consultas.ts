@@ -38,12 +38,11 @@ export const TIPOS_IMPUESTO: Record<TipoImpuesto, string> = {
   monto_fijo: "Monto fijo por venta",
 };
 
-export const MEDIOS: readonly MedioPago[] = ["efectivo", "transferencia", "tarjeta"];
+export const MEDIOS: readonly MedioPago[] = ["efectivo", "transferencia"];
 
 export const NOMBRES_MEDIOS: Record<MedioPago, string> = {
   efectivo: "Efectivo",
   transferencia: "Transferencia",
-  tarjeta: "Tarjeta",
 };
 
 export const MENSAJES_ERROR_IMPUESTO = {

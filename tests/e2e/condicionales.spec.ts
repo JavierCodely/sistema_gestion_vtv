@@ -114,7 +114,7 @@ test("condicional con certificado B: total o 50%; al volver, el servicio cobra l
   await venderEnCaja(page, {
     categoria,
     servicio,
-    medio: "Tarjeta",
+    medio: "Transferencia",
     patente,
     certificado: "condicional",
     pagoCondicional: "Total",
@@ -158,7 +158,7 @@ test("condicional con certificado B: total o 50%; al volver, el servicio cobra l
   await venderEnCaja(page, {
     categoria,
     servicio,
-    medio: "Tarjeta",
+    medio: "Transferencia",
     patente,
     certificado: "aprobado",
   });
@@ -201,7 +201,7 @@ test("condicional con certificado B: total o 50%; al volver, el servicio cobra l
   await venderEnCaja(page, {
     categoria,
     servicio,
-    medio: "Tarjeta",
+    medio: "Transferencia",
     patente: patenteVencida,
     certificado: "condicional",
     pagoCondicional: "Total",

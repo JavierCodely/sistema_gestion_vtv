@@ -19,14 +19,14 @@ select is((select count(*)::int from pg_proc where proname = 'registrar_venta' a
 select ok(not has_function_privilege('authenticated', 'public._validar_pagos_mixtos(jsonb)', 'execute'),
   '_validar_pagos_mixtos es interna');
 
--- Camino feliz: cajero con turno, efectivo + tarjeta -----------------------------------------------
+-- Camino feliz: cajero con turno, efectivo + transferencia-------------------------------------------
 select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja, 100) as turno \gset
 select (registrar_venta(:turno, :servicio, p_patente => 'ab 123 cd',
-          p_pagos => '[{"medio":"efectivo","monto":5000},{"medio":"tarjeta","monto":"15000"}]')).id as mixta \gset
+          p_pagos => '[{"medio":"efectivo","monto":5000},{"medio":"transferencia","monto":"15000"}]')).id as mixta \gset
 select is((select row(precio, medio_pago::text, patente)::text from ventas where id = :mixta),
   row(20000.00, null::text, 'AB123CD')::text, 'la venta mixta guarda el precio y el medio en NULL');
 select is((select array_agg(row(medio::text, monto)::text order by medio) from venta_pagos where venta_id = :mixta),
-  array[row('efectivo', 5000.00)::text, row('tarjeta', 15000.00)::text],
+  array[row('efectivo', 5000.00)::text, row('transferencia', 15000.00)::text],
   'una fila de pago por medio');
 
 -- Un solo medio: igual que siempre, con su fila en venta_pagos
@@ -36,37 +36,38 @@ select is((select row(medio_pago::text)::text from ventas where id = :simple),
 select is((select array_agg(row(medio::text, monto)::text) from venta_pagos where venta_id = :simple),
   array[row('transferencia', 20000.00)::text], 'el pago simple tiene una fila con todo el precio');
 
--- Tres medios
+-- Sin tarjeta (migración 54): el pago mixto es efectivo + transferencia
+select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"efectivo","monto":5000},{"medio":"tarjeta","monto":15000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
+  '22023', 'El medio de pago "tarjeta" no es válido', 'tarjeta ya no es un medio de pago');
 select (registrar_venta(:turno, :servicio, p_pagos =>
-  '[{"medio":"efectivo","monto":1000},{"medio":"transferencia","monto":9000},{"medio":"tarjeta","monto":10000}]', p_patente => $p$AB123CD$p$)).id as triple \gset
-select is((select count(*)::int from venta_pagos where venta_id = :triple), 3, 'se puede pagar con los tres medios');
+  '[{"medio":"efectivo","monto":1000},{"medio":"transferencia","monto":19000}]', p_patente => $p$AB123CD$p$)).id as triple \gset
 
 -- Validaciones --------------------------------------------------------------------------------------
-select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"efectivo","monto":4000},{"medio":"tarjeta","monto":15000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
+select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"efectivo","monto":4000},{"medio":"transferencia","monto":15000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
   '22023', 'Las partes del pago suman $ 19.000,00 y el precio es $ 20.000,00: tienen que coincidir',
   'la suma de las partes tiene que ser el precio');
-select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"efectivo","monto":10000},{"medio":"tarjeta","monto":15000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
+select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"efectivo","monto":10000},{"medio":"transferencia","monto":15000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
   '22023', 'Las partes del pago suman $ 25.000,00 y el precio es $ 20.000,00: tienen que coincidir',
   'tampoco puede pasarse del precio');
 select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"efectivo","monto":10000},{"medio":"efectivo","monto":10000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
   '22023', 'No repitas un medio de pago en el pago mixto (efectivo aparece dos veces)', 'medios repetidos');
-select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"efectivo","monto":20000},{"medio":"tarjeta","monto":0}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
-  '22023', 'El monto en tarjeta debe ser mayor a cero', 'una parte en cero');
-select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"efectivo","monto":25000},{"medio":"tarjeta","monto":-5000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
-  '22023', 'El monto en tarjeta debe ser mayor a cero', 'una parte negativa');
-select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"efectivo","monto":"NaN"},{"medio":"tarjeta","monto":20000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
+select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"efectivo","monto":20000},{"medio":"transferencia","monto":0}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
+  '22023', 'El monto en transferencia debe ser mayor a cero', 'una parte en cero');
+select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"efectivo","monto":25000},{"medio":"transferencia","monto":-5000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
+  '22023', 'El monto en transferencia debe ser mayor a cero', 'una parte negativa');
+select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"efectivo","monto":"NaN"},{"medio":"transferencia","monto":20000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
   '22023', 'El monto en efectivo no es válido', 'NaN no es un monto');
-select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"efectivo","monto":"abc"},{"medio":"tarjeta","monto":20000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
+select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"efectivo","monto":"abc"},{"medio":"transferencia","monto":20000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
   '22023', 'El monto en efectivo no es válido', 'un texto no es un monto');
-select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"efectivo","monto":true},{"medio":"tarjeta","monto":20000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
+select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"efectivo","monto":true},{"medio":"transferencia","monto":20000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
   '22023', 'El monto en efectivo no es válido', 'un booleano no es un monto');
-select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"efectivo"},{"medio":"tarjeta","monto":20000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
+select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"efectivo"},{"medio":"transferencia","monto":20000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
   '22023', 'El monto en efectivo no es válido', 'falta el monto');
-select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"efectivo","monto":0.001},{"medio":"tarjeta","monto":19999.999}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
+select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"efectivo","monto":0.001},{"medio":"transferencia","monto":19999.999}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
   '22023', 'El monto en efectivo no puede tener más de 2 decimales', 'más de 2 decimales');
-select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"cheque","monto":10000},{"medio":"tarjeta","monto":10000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
+select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"cheque","monto":10000},{"medio":"transferencia","monto":10000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
   '22023', 'El medio de pago "cheque" no es válido', 'medio inexistente');
-select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"monto":10000},{"medio":"tarjeta","monto":10000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
+select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"monto":10000},{"medio":"transferencia","monto":10000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
   '22023', 'Elegí el medio de pago de cada parte', 'parte sin medio');
 select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"efectivo","monto":20000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
   '22023', 'Un pago mixto necesita al menos dos medios de pago distintos (si pagó con uno solo, elegí ese medio)',
@@ -75,7 +76,7 @@ select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '{"medio":"e
   '22023', 'El pago mixto no es válido', 'p_pagos tiene que ser una lista');
 select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[1, 2]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
   '22023', 'El pago mixto no es válido', 'cada parte tiene que ser un objeto');
-select throws_ok(format($$select registrar_venta(%s, %s, 'efectivo', p_pagos => '[{"medio":"efectivo","monto":10000},{"medio":"tarjeta","monto":10000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
+select throws_ok(format($$select registrar_venta(%s, %s, 'efectivo', p_pagos => '[{"medio":"efectivo","monto":10000},{"medio":"transferencia","monto":10000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
   '22023', 'Elegí un medio de pago o un pago mixto, no los dos', 'medio y pago mixto a la vez');
 select throws_ok(format($$select registrar_venta(%s, %s, p_patente => $p$AB123CD$p$)$$, :turno, :servicio),
   '22023', 'Elegí un medio de pago', 'sin medio ni pago mixto');
@@ -86,10 +87,10 @@ select lives_ok('set constraints all immediate', 'las ventas de las RPC quedan c
 set constraints all deferred;
 reset role;
 select throws_ok(format($q$do $x$ begin
-    insert into venta_pagos (venta_id, medio, monto) values (%s, 'transferencia', 1);
+    insert into venta_pagos (venta_id, medio, monto) values (%s, 'efectivo', 1);
     set constraints all immediate;
-  end $x$$q$, :mixta),
-  'P0001', format('El cobro de la venta #%s no coincide con su precio y medio de pago', :mixta),
+  end $x$$q$, :simple),
+  'P0001', format('El cobro de la venta #%s no coincide con su precio y medio de pago', :simple),
   'la base rechaza pagos que no suman el precio');
 select throws_ok(format($q$do $x$ begin
     update ventas set medio_pago = 'efectivo' where id = %s;
@@ -100,14 +101,14 @@ select throws_ok(format($q$do $x$ begin
 set constraints all deferred;
 
 -- Efectivo del cajón y totales en vivo --------------------------------------------------------------
-select is((select row(efectivo_en_caja, ventas_efectivo, ventas_transferencia, ventas_tarjeta, ventas_total, ventas_cantidad)::text
+select is((select row(efectivo_en_caja, ventas_efectivo, ventas_transferencia, ventas_total, ventas_cantidad)::text
            from v_turnos where id = :turno),
-  row(6100.00, 6000.00, 29000.00, 25000.00, 60000.00, 3)::text,
+  row(6100.00, 6000.00, 54000.00, 60000.00, 3)::text,
   'v_turnos reparte cada venta por sus partes y solo el efectivo entra al cajón');
 select is(public._efectivo_en_caja(:turno), 6100.00::numeric, '_efectivo_en_caja suma solo la parte en efectivo');
 
 select is((select row(medio, monto, pagos)::text from v_movimientos_caja where tipo = 'venta' and id = :mixta),
-  row('mixto', 20000.00, '[{"medio": "efectivo", "monto": 5000.00}, {"medio": "tarjeta", "monto": 15000.00}]'::jsonb)::text,
+  row('mixto', 20000.00, '[{"medio": "efectivo", "monto": 5000.00}, {"medio": "transferencia", "monto": 15000.00}]'::jsonb)::text,
   'v_movimientos_caja muestra "mixto" con el detalle de los pagos');
 select is((select row(medio, pagos)::text from v_movimientos_caja where tipo = 'venta' and id = :simple),
   row('transferencia', '[{"medio": "transferencia", "monto": 20000.00}]'::jsonb)::text,
@@ -115,9 +116,9 @@ select is((select row(medio, pagos)::text from v_movimientos_caja where tipo = '
 
 -- Resumen diario (admin) ----------------------------------------------------------------------------
 select pg_temp.como(:'admin');
-select is((select row(cantidad_ventas, total_ventas, total_efectivo, total_transferencia, total_tarjeta)::text
+select is((select row(cantidad_ventas, total_ventas, total_efectivo, total_transferencia)::text
            from resumen_diario(fecha_local(now()), fecha_local(now()))),
-  row(3, 60000.00, 6000.00, 29000.00, 25000.00)::text, 'resumen_diario reparte por las partes de cada venta');
+  row(3, 60000.00, 6000.00, 54000.00)::text, 'resumen_diario reparte por las partes de cada venta');
 
 -- Anular con el turno abierto: solo la parte en efectivo sale del cajón -----------------------------
 select anular_venta(:mixta, 'Error de carga');
@@ -131,9 +132,9 @@ select is((select count(*)::int from movimientos_efectivo where venta_id = :mixt
 select pg_temp.como(:'admin');
 select cerrar_turno(:turno);
 reset role;
-select is((select row(cantidad_ventas, total_efectivo, total_transferencia, total_tarjeta, efectivo_cierre)::text
+select is((select row(cantidad_ventas, total_efectivo, total_transferencia, efectivo_cierre)::text
            from turnos where id = :turno),
-  row(2, 1000.00, 29000.00, 10000.00, 1100.00)::text, 'las fotos del cierre reparten por las partes');
+  row(2, 1000.00, 39000.00, 1100.00)::text, 'las fotos del cierre reparten por las partes');
 select is((select monto from movimientos_efectivo where turno_id = :turno and tipo = 'cierre_turno'), 1100.00::numeric,
   'al cerrar vuelve a la caja de cambio solo el efectivo');
 
@@ -151,7 +152,7 @@ select pg_temp.abrir_turno_para(:'admin', :'admin', :caja3, 100) as turno_admin 
 select lives_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"transferencia","monto":12000},{"medio":"efectivo","monto":8000}]', p_patente => $p$AB123CD$p$)$$, :turno_admin, :servicio),
   'el admin atendiendo una caja cobra con pago mixto');
 -- Anular sin efectivo suficiente en el cajón: el mensaje muestra el cajón en formato argentino
-select (registrar_venta(:turno_admin, :servicio, p_pagos => '[{"medio":"efectivo","monto":8000},{"medio":"tarjeta","monto":12000}]', p_patente => $p$AB123CD$p$)).id as mixta_admin \gset
+select (registrar_venta(:turno_admin, :servicio, p_pagos => '[{"medio":"efectivo","monto":8000},{"medio":"transferencia","monto":12000}]', p_patente => $p$AB123CD$p$)).id as mixta_admin \gset
 select registrar_gasto((select id from categorias_gasto where nombre = 'Comida'), 13000, 'efectivo', 'Compra grande', :turno_admin);
 select throws_ok(format($$select anular_venta(%s, 'error')$$, :mixta_admin),
   'P0001', 'La caja del turno no tiene efectivo suficiente para devolver esta venta (en el cajón hay $ 3.100,00)',
@@ -161,14 +162,14 @@ reset role;
 
 -- Venta pasada: un solo medio, con su fila de pago ---------------------------------------------------
 select pg_temp.como(:'admin');
-select (registrar_venta_pasada(fecha_local(now()) - 3, '10:00', :caja, :servicio, 'tarjeta', 7000)).id as pasada \gset
+select (registrar_venta_pasada(fecha_local(now()) - 3, '10:00', :caja, :servicio, 'transferencia', 7000)).id as pasada \gset
 reset role;
 select is((select array_agg(row(medio::text, monto)::text) from venta_pagos where venta_id = :pasada),
-  array[row('tarjeta', 7000.00)::text], 'la venta pasada tiene su fila de pago');
+  array[row('transferencia', 7000.00)::text], 'la venta pasada tiene su fila de pago');
 
 -- RLS de venta_pagos ---------------------------------------------------------------------------------
 select pg_temp.abrir_turno_para(:'admin', :'cajero2', :caja2, 100) as turno2 \gset
-select (registrar_venta(:turno2, :servicio, p_pagos => '[{"medio":"efectivo","monto":2000},{"medio":"tarjeta","monto":18000}]', p_patente => $p$AB123CD$p$)).id as venta2 \gset
+select (registrar_venta(:turno2, :servicio, p_pagos => '[{"medio":"efectivo","monto":2000},{"medio":"transferencia","monto":18000}]', p_patente => $p$AB123CD$p$)).id as venta2 \gset
 select is((select count(*)::int from venta_pagos), 2, 'un cajero ve solo los pagos de las ventas de turnos abiertos');
 select throws_ok(format($$insert into venta_pagos (venta_id, medio, monto) values (%s, 'transferencia', 1)$$, :venta2),
   '42501', null, 'nadie escribe venta_pagos directo');
@@ -190,7 +191,7 @@ reset role;
 -- Usuario desactivado
 update perfiles set activo = false where id = :'cajero2';
 select pg_temp.como(:'cajero2');
-select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"efectivo","monto":2000},{"medio":"tarjeta","monto":18000}]', p_patente => $p$AB123CD$p$)$$, :turno2, :servicio),
+select throws_ok(format($$select registrar_venta(%s, %s, p_pagos => '[{"medio":"efectivo","monto":2000},{"medio":"transferencia","monto":18000}]', p_patente => $p$AB123CD$p$)$$, :turno2, :servicio),
   '42501', 'Usuario no autenticado o desactivado', 'un usuario desactivado no cobra mixto');
 select is((select count(*)::int from venta_pagos), 0, 'un usuario desactivado no ve pagos');
 reset role;

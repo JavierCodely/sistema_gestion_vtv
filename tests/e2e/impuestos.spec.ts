@@ -16,7 +16,7 @@ async function elegir(page: Page, contenedor: Locator, etiqueta: string, opcion:
   await page.getByRole("option", { name: opcion, exact: true }).click();
 }
 
-test("impuestos: el admin crea un impuesto para tarjeta en un servicio, el cajero vende y el reporte lo suma por medio y por turno", async ({
+test("impuestos: el admin crea un impuesto para transferencia en un servicio, el cajero vende y el reporte lo suma por medio y por turno", async ({
   page,
   browser,
 }) => {
@@ -25,7 +25,7 @@ test("impuestos: el admin crea un impuesto para tarjeta en un servicio, el cajer
   const caja = `Caja imp ${sufijo}`;
   const categoria = `Cat imp ${sufijo}`;
   const servicio = `Servicio imp ${sufijo}`;
-  const impuesto = `Imp tarjeta ${sufijo}`;
+  const impuesto = `Imp transf ${sufijo}`;
 
   // --- Admin: caja, servicio de $ 10.000 y efectivo para el cambio
   await ingresar(page, ADMIN);
@@ -50,7 +50,7 @@ test("impuestos: el admin crea un impuesto para tarjeta en un servicio, el cajer
   await nuevoServicio.getByRole("button", { name: "Crear servicio" }).click();
   await expect(page.getByText(`Servicio “${servicio}” creado`)).toBeVisible();
 
-  // --- Admin: impuesto del 10 % solo para tarjeta, solo en ese servicio
+  // --- Admin: impuesto del 10 % solo para transferencia, solo en ese servicio
   await page.goto("/admin");
   await page
     .getByRole("navigation", { name: "Menú de administración" })
@@ -62,11 +62,11 @@ test("impuestos: el admin crea un impuesto para tarjeta en un servicio, el cajer
   await dialogo.getByLabel("Nombre").fill(impuesto);
   await dialogo.getByLabel("Porcentaje (%)").fill("10");
   await dialogo.getByRole("switch", { name: "Todos los medios de pago" }).click();
-  await dialogo.getByRole("switch", { name: "Tarjeta" }).click();
+  await dialogo.getByRole("switch", { name: "Transferencia" }).click();
   await dialogo.getByRole("button", { name: "Crear impuesto" }).click();
   await expect(page.getByText(`Impuesto “${impuesto}” creado`)).toBeVisible();
   const fila = page.getByTestId(`impuesto-${impuesto}`);
-  await expect(fila).toContainText("Tarjeta");
+  await expect(fila).toContainText("Transferencia");
   await expect(fila).toContainText("Ninguno");
 
   await page.getByRole("button", { name: `Servicios del impuesto ${impuesto}` }).click();
@@ -76,7 +76,7 @@ test("impuestos: el admin crea un impuesto para tarjeta en un servicio, el cajer
   await expect(page.getByText(`Servicios de “${impuesto}” guardados`)).toBeVisible();
   await expect(fila).toContainText("1 servicio");
 
-  // --- Turno y ventas del cajero: una con tarjeta (lleva impuesto) y una en efectivo (no)
+  // --- Turno y ventas del cajero: una por transferencia (lleva impuesto) y una en efectivo (no)
   await ingresarEfectivo(page, "2.000", `Cambio ${sufijo}`);
   await abrirTurnoComoAdmin(page, { caja, efectivo: "2.000" });
   const contextoCajero = await browser.newContext();
@@ -84,20 +84,19 @@ test("impuestos: el admin crea un impuesto para tarjeta en un servicio, el cajer
   await ingresar(pc, CAJERO);
   await expect(pc).toHaveURL("/caja");
   await trabajarEnCaja(pc, caja);
-  await venderEnCaja(pc, { categoria, servicio, medio: "Tarjeta" });
+  await venderEnCaja(pc, { categoria, servicio, medio: "Transferencia" });
   await venderEnCaja(pc, { categoria, servicio, medio: "Efectivo" });
   // El cliente paga el precio del servicio: el impuesto no lo cambia
   await expect(pc.getByTestId("ultima-venta")).toContainText(/10\.000,00/);
   await contextoCajero.close();
 
-  // --- Reporte del mes actual: $ 1.000 en tarjeta, 1 venta
+  // --- Reporte del mes actual: $ 1.000 en transferencia, 1 venta
   await page.goto("/admin/impuestos");
   const reporte = page.getByTestId(`reporte-impuesto-${impuesto}`);
   await expect(reporte).toBeVisible();
   await expect(reporte.getByRole("cell")).toHaveText([
     impuesto,
     "1",
-    /\$\s0,00/,
     /\$\s0,00/,
     /\$\s1\.000,00/,
     /\$\s1\.000,00/,

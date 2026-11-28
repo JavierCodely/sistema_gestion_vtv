@@ -87,7 +87,7 @@ async function rest(token, ruta, opciones = {}) {
   return { status: r.status, body: texto ? JSON.parse(texto) : null };
 }
 
-async function nuevaVenta(token = cajero, medio = "tarjeta", turno = turnoId) {
+async function nuevaVenta(token = cajero, medio = "transferencia", turno = turnoId) {
   return (
     await rpc(token, "registrar_venta", {
       p_turno_id: turno,
@@ -398,14 +398,14 @@ test("el cajero emite la factura de una venta ajena de una caja abierta, no de u
   let cerrada = false;
   try {
     // Caja compartida (migración 33): la venta del admin en otra caja abierta la factura el cajero.
-    const ajena = await nuevaVenta(admin, "tarjeta", otraCaja);
+    const ajena = await nuevaVenta(admin, "transferencia", otraCaja);
     const compAjena = await facturarConsumidorFinal(admin, ajena);
     const ok = await funcion(cajero, { accion: "emitir", comprobante_id: compAjena.id });
     assert.equal(ok.status, 200, JSON.stringify(ok.body));
     assert.equal(ok.body.comprobante.estado, "autorizado");
 
     // Turno cerrado: ya no.
-    const venta = await nuevaVenta(admin, "tarjeta", otraCaja);
+    const venta = await nuevaVenta(admin, "transferencia", otraCaja);
     const comp = await facturarConsumidorFinal(admin, venta);
     await rpc(admin, "cerrar_turno", { p_turno_id: otraCaja });
     cerrada = true;

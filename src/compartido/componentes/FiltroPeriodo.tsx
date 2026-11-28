@@ -27,12 +27,13 @@ export interface OpcionTurno {
  * Filtro de los reportes: **Año** + **Mes** ("Todo el año" = el año entero) y, opcional, un
  * **Turno** abierto en ese período. Abajo dice siempre qué se está consultando: "Del 01/11/2026 al
  * 30/11/2026" o el turno elegido. Cambiar el período quita el turno (puede no pertenecer al nuevo).
+ * Sin `onTurno` (ej. las estadísticas) no se ofrece el turno: solo Año + Mes.
  */
 export function FiltroPeriodo({
   idBase,
   periodo,
   onPeriodo,
-  turnoId,
+  turnoId = null,
   onTurno,
   turnos,
 }: {
@@ -40,17 +41,17 @@ export function FiltroPeriodo({
   idBase: string;
   periodo: Periodo;
   onPeriodo: (periodo: Periodo) => void;
-  turnoId: number | null;
-  onTurno: (turnoId: number | null) => void;
+  turnoId?: number | null;
+  onTurno?: (turnoId: number | null) => void;
   /** undefined mientras se cargan (el selector queda deshabilitado). */
-  turnos: OpcionTurno[] | undefined;
+  turnos?: OpcionTurno[] | undefined;
 }) {
   const rango = rangoDePeriodo(periodo);
   const turno = turnos?.find((t) => t.id === turnoId);
 
   function cambiarPeriodo(nuevo: Periodo) {
     onPeriodo(nuevo);
-    onTurno(null);
+    onTurno?.(null);
   }
 
   return (
@@ -97,28 +98,30 @@ export function FiltroPeriodo({
             </SelectContent>
           </Select>
         </div>
-        <div className="flex flex-col gap-1">
-          <Label htmlFor={`${idBase}-turno`}>Turno</Label>
-          <Select
-            value={turnoId === null ? TODOS_LOS_TURNOS : String(turnoId)}
-            disabled={!turnos}
-            onValueChange={(valor) => {
-              onTurno(valor === TODOS_LOS_TURNOS ? null : Number(valor));
-            }}
-          >
-            <SelectTrigger id={`${idBase}-turno`} className="w-72 max-w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={TODOS_LOS_TURNOS}>Todos los turnos</SelectItem>
-              {turnos?.map((t) => (
-                <SelectItem key={t.id} value={String(t.id)}>
-                  {t.etiqueta}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {onTurno && (
+          <div className="flex flex-col gap-1">
+            <Label htmlFor={`${idBase}-turno`}>Turno</Label>
+            <Select
+              value={turnoId === null ? TODOS_LOS_TURNOS : String(turnoId)}
+              disabled={!turnos}
+              onValueChange={(valor) => {
+                onTurno(valor === TODOS_LOS_TURNOS ? null : Number(valor));
+              }}
+            >
+              <SelectTrigger id={`${idBase}-turno`} className="w-72 max-w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={TODOS_LOS_TURNOS}>Todos los turnos</SelectItem>
+                {turnos?.map((t) => (
+                  <SelectItem key={t.id} value={String(t.id)}>
+                    {t.etiqueta}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
       <p className="text-sm text-muted-foreground" data-testid={`${idBase}-rango`}>
         {turno ? (
@@ -138,7 +141,7 @@ export function FiltroPeriodo({
           </>
         )}
       </p>
-      {turnos?.length === 0 && (
+      {onTurno && turnos?.length === 0 && (
         <p className="text-xs text-muted-foreground">No se abrió ningún turno en ese período.</p>
       )}
     </div>

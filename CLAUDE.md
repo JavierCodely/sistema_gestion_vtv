@@ -33,6 +33,7 @@ Primera vez: `npm install` → `npx playwright install chromium` → `npm run db
 | `npm run sql:produccion` | Regenera `supabase/produccion/01_esquema_completo.sql` (todas las migraciones en una transacción, para el SQL Editor). Ver `supabase/produccion/LEEME.md` |
 | `npm run db:types` | Regenera `src/types/database.ts`. **Correrlo tras cada migración** |
 | `npm run test:db` | Tests pgTAP (`supabase/tests/database/*.sql`) |
+| `npm run test:produccion` | Tests de los scripts de `supabase/produccion/` (hoy `60_control_cierres.sql`, ver `docs/CONTROL_CIERRES.md`): lo corren tal cual contra la BD local en una transacción con ROLLBACK |
 | `npm run test:functions` | Tests de integración de Edge Functions (node:test, un archivo a la vez); `arca` corre contra el simulador |
 | `npm run arca:simulador` | Simulador de ARCA (WSAA + WSFEv1) en `:54399` para probar la facturación en local. **Nunca ARCA real en tests** |
 | `npm run verificar` (= `verify`) | typecheck + lint + format + unit + build + db:reset + pgTAP + funciones + E2E. **Debe pasar antes de entregar cualquier cambio** |
@@ -70,7 +71,7 @@ src/
     componentes/           Cargando, Campo, ErrorFormulario, SelectorRango (Desde/Hasta de los reportes), FiltroPeriodo (Año + Mes + Turno)…
     lib/                   supabase, formato (ARS / hora AR / hoyEnArgentina), errores, validaciones, query-client, salud, claves-descuentos, claves-impuestos, periodo (Año/Mes y semana actual), paginacion, rango-fechas (mesActual, revisarRango)
     tipos.ts               Rol, Perfil, Tablas, Enums (derivados de types/database.ts)
-  modulos/<modulo>/        una carpeta por área de negocio: auth, usuarios, panel-admin, caja, cajas, servicios, certificados, ventas, facturacion, gastos, fondos (caja de cambio + transferencia + crédito/débito), descuentos, impuestos, dashboard
+  modulos/<modulo>/        una carpeta por área de negocio: auth, usuarios, panel-admin, caja, cajas, servicios, certificados, ventas, facturacion, gastos, fondos (caja de cambio + transferencia), descuentos, impuestos, dashboard, estadisticas
     api/                   acceso a datos: llamadas RPC/Edge Functions + hooks TanStack Query
     componentes/           un componente por archivo
     lib/                   lógica pura del módulo (validaciones, mapeos)
@@ -98,7 +99,7 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
   "Certificado" de `TablaVentas`: el entregado, con "Condicional" si lo es; "—" sin hoja). En "Estado"
   (decisión 2026-11-24, migración 48): "Vuelta de condicional" / "Vuelta de condicional fuera de plazo"
   y "Condicional vencida: se cobró de nuevo". El medio se muestra con `MedioDeVenta` ("Mixto" +
-  detalle "Efectivo $ 5.000,00 + Tarjeta $ 13.000,00" cuando `medio_pago` es NULL) y el descuento con
+  detalle "Efectivo $ 5.000,00 + Transferencia $ 13.000,00" cuando `medio_pago` es NULL) y el descuento con
   `DescuentoDeVenta` (nombre, −monto, precio de lista; "—" sin descuento). Nunca indexar por
   `medio_pago` sin contemplar NULL. `COLUMNAS_VENTA` trae también `categoria_id` y
   `categorias_servicio(nombre)`: el historial de la caja y las ventas de un turno del admin
@@ -131,11 +132,11 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
   `descuentos_para_servicio` trae opciones; "Sin descuento" marcado; si no se pueden leer, se sigue sin
   descuento y se avisa) → en una **condicional sin descuento**, "¿Cuánto paga?": Total o "50% ahora, el
   resto al volver" (`mitadCondicional`, vista previa; manda `p_condicional_mitad`; con descuento no se
-  ofrece) → 4. medio (Efectivo, Transferencia, Tarjeta, **Mixto**) → en Mixto
-  (decisión 2026-11-23) el cajero escribe **solo el efectivo** (campo grande; > 0 y menor que el precio)
-  y el resto (precio final − efectivo, `revisarPagoMixto`, solo vista previa) se ve en grande; Enter →
-  "¿Con qué paga el resto?": Transferencia / Débito / Crédito (1/2 o flechas + Enter, `PasoRestoMixto`;
-  Esc vuelve al efectivo) → cuánto entregó y el vuelto **sobre la parte en efectivo** → **confirmación
+  ofrece) → 4. medio (1 Efectivo, 2 Transferencia, 3 **Mixto**; sin tarjeta desde la migración 54) → en
+  Mixto (decisión 2026-11-23) el cajero escribe **solo el efectivo** (campo grande; > 0 y menor que el
+  precio) y el resto (precio final − efectivo, `revisarPagoMixto`, solo vista previa) se ve en grande
+  como "Resto por transferencia"; Enter → cuánto entregó y el vuelto **sobre la parte en efectivo** (Esc
+  vuelve al efectivo; el resto va siempre por transferencia, no se pregunta) → **confirmación
   en toda venta** (`PasoConfirmarVenta`, `paso-confirmar`): la patente en grande (`patente-a-confirmar`),
   servicio, lo que cobra, medio y el detalle (vuelto, 50%, vuelta); Enter registra, Esc vuelve al paso
   anterior. Si la BD rechaza por "vuelve de la condicional", vuelve a la patente con el mensaje.
@@ -160,9 +161,23 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
   anulada lleva `max-md:no-underline` (si no, también se tacha la etiqueta). El contenedor de la tabla
   es `md:overflow-x-auto md:rounded-md md:border`. E2E: `tests/e2e/responsive.spec.ts` (390 px: todas
   las pantallas sin desborde, ventas como tarjetas).
+- **PWA instalable en Android** (decisión 2026-11-26): `public/manifest.webmanifest` ("Sistema VTV",
+  `standalone`, verde `#16a34a`, íconos 192/512 y maskable en `public/iconos/`), `public/sw.js` y
+  `public/offline.html`. El service worker **no guarda datos ni pantallas** (la app trabaja siempre
+  contra la BD): las pantallas van siempre a la red y, sin conexión, muestra "Sin conexión" con
+  "Reintentar"; Supabase y los archivos de la app no pasan por él. Se registra solo en producción
+  (`registrarServiceWorker`, `compartido/lib/pwa.ts`, desde `main.tsx`); `vercel.json` sirve `sw.js`
+  y el manifiesto con `no-cache`. Si cambia `offline.html` o sus íconos, subir la versión de `CACHE`
+  en `sw.js`. E2E: `tests/e2e/pwa.spec.ts` (manifiesto, tamaño real de los íconos y aviso sin conexión
+  con el service worker registrado a mano, porque en desarrollo no se registra).
 - **Contraseñas**: todo campo de contraseña usa `InputPassword` (`compartido/componentes`), con el
   botón "Mostrar contraseña" / "Ocultar contraseña" (ojo, `aria-pressed`, no envía el formulario).
   En los E2E, `getByLabel("Contraseña", { exact: true })`: sin `exact` también encuentra el botón.
+- **Doble clic / doble Enter** (2026-11-27): `isPending` y el botón deshabilitado cambian recién en el
+  render siguiente, así que todo formulario que registra dinero o stock se envía con `useEnvioUnico`
+  (`compartido/lib/envio-unico.ts`: gasto, venta pasada, compra, ajuste, movimiento de Fondos); la venta
+  de la caja tiene su candado `enviando` en `FormularioVenta`. Sin él, tres Enter rápidos registraban
+  tres ventas. Los tests lo prueban con varios `fireEvent` dentro de un solo `act`.
 - Diálogos con una escritura en curso no se cierran (Esc, la X o clic afuera): `onOpenChange` ignora
   el cierre mientras la mutación está `isPending` (ej. `DialogoCerrarTurno`, `DialogoDisponibilidad`).
   Los números de paso de patente (1), categoría (2), servicio (3), medio (4), mixto (5) y efectivo (5; 6 en un
@@ -210,8 +225,8 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
   El efectivo de un turno abierto (cajón) no es una tabla: lo calcula `_efectivo_en_caja(turno)` =
   efectivo inicial + la parte en efectivo de las ventas (`venta_pagos`) − gastos en efectivo, sin anulados (migraciones 27 y 30).
   La caja de cambio es la cuenta `efectivo` de **Fondos** (migración 34): su libro y su saldo no cambian.
-- **Fondos** (migración 34, solo admin): cuentas `efectivo` (caja de cambio), `transferencia` y `tarjeta`.
-  El libro de transferencia y tarjeta **se calcula** en la vista `v_movimientos_fondos` desde
+- **Fondos** (migración 34, solo admin): cuentas `efectivo` (caja de cambio) y `transferencia` (la
+  `tarjeta` se quitó en la migración 54 y su historia se sumó a transferencia). El libro de transferencia **se calcula** en la vista `v_movimientos_fondos` desde
   `venta_pagos`/`ventas`, `gastos` (+ `compras_certificado`) y los manuales de `movimientos_fondos`: no
   hay triggers que copien filas, así nunca se desincroniza. Los saldos y totales salen solo de
   `resumen_fondos()`; los manuales, solo de `movimiento_fondos()` (bloquea la fila de `cuentas_fondos`).
@@ -291,7 +306,7 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
 | 31 | `descuentos` | Catálogo `descuentos` (porcentaje / monto fijo, CRUD admin por columna; el cajero lee los activos), `descuento_servicios` (disponibilidad por servicio, se fija con `fijar_servicios_descuento()`), `descuentos_para_servicio()`, `registrar_venta(..., p_descuento_id, p_precio_esperado)` con foto en `ventas` (`descuento_*`, `precio_lista`, `monto_descuento`; CHECK: valor sin NaN, nombre ≤ 100 y monto coherente con tipo/valor/precio de lista), `v_movimientos_caja` con el descuento, `resumen_descuentos()` — decisiones 2026-11-22 |
 | 32 | `service_role_ventas_columnas` | service_role lee de `ventas` solo `id`, `turno_id`, `servicio_nombre`, `patente` (las que usa `v_comprobantes` para la Edge Function `arca`); antes leía la tabla entera, costos incluidos — auditoría 2026-11-22 |
 | 33 | `turnos_caja_compartida` | El turno es de la caja: `abrir_turno(p_caja_id, p_efectivo_inicial)` sin usuario (`turnos.usuario_id` NULL, queda como historia; se quita "1 turno abierto por usuario"); `registrar_venta(p_turno_id, ...)` y `registrar_gasto(..., p_turno_id)` con turno explícito (interna `_turno_para_trabajar`); `cerrar_turno(p_turno_id, p_observaciones)` solo admin; RLS: `turnos`/`v_turnos` solo admin; el cajero lee ventas/pagos/gastos/comprobantes de turnos abiertos (nada de los cerrados) vía `turno_abierto(id)`; `cerrado_en = clock_timestamp()`; `comprobantes.actualizado_por` (lo carga `preparar_factura` al corregir, en `v_comprobantes`); facturar (`preparar_factura`, `puede_emitir_comprobante`): el cajero, cualquier venta de un turno abierto; `nombre_usuario(uuid)`; `v_turnos` sin cajero (+ `abierto_por`, `abierto_por_nombre`, `atendido_por`); vista `v_turnos_abiertos` (sobre `turnos_abiertos()`, sin dinero); `cajas_para_turno()` → `(id, nombre, ocupada, turno_id, abierto_en)`; firmas viejas borradas — decisión 2026-11-22. Se aplica con o sin turnos abiertos (los abiertos pasan a ser de la caja) |
-| 34 | `fondos` | Sección **Fondos** (solo admin): enums `cuenta_fondos` (efectivo, transferencia, tarjeta) y `tipo_mov_fondos` (fondo_inicial, ingreso, retiro); `cuentas_fondos` (una fila por cuenta, para el `for update` de los retiros); `movimientos_fondos` (manuales de transferencia/tarjeta, monto con signo, nota ≤ 500, CHECK anti-NaN y de signo); vista calculada `v_movimientos_fondos` (libro unificado de las tres cuentas, con reversos de anulaciones); `v_ventas_mixtas` (informativa); `movimiento_fondos()`, `resumen_fondos()`, `resumen_ventas_mixtas()` — decisiones 2026-11-22 |
+| 34 | `fondos` | Sección **Fondos** (solo admin): enums `cuenta_fondos` (efectivo, transferencia, tarjeta) y `tipo_mov_fondos` (fondo_inicial, ingreso, retiro); `cuentas_fondos` (una fila por cuenta, para el `for update` de los retiros); `movimientos_fondos` (manuales de transferencia/tarjeta, monto con signo, nota ≤ 500, CHECK anti-NaN y de signo); vista calculada `v_movimientos_fondos` (libro unificado de las tres cuentas, con reversos de anulaciones); `v_ventas_mixtas` (informativa); `movimiento_fondos()`, `resumen_fondos()`, `resumen_ventas_mixtas()` — decisiones 2026-11-22 (la cuenta tarjeta se quitó en la 54) |
 | 35 | `ventas_tiempo_real` | `v_turnos.fecha_apertura` (día de negocio de la apertura, al final de la vista); `resumen_turnos(p_desde, p_hasta)` (totales sumados de los turnos abiertos en el rango, solo admin); Realtime de `ventas`, `venta_pagos`, `gastos`, `turnos` y `comprobantes` (la RLS y los grants por columna de cada suscriptor filtran lo que llega: los costos nunca viajan) — decisión 2026-11-23 |
 | 36 | `impuestos` | Sección **Impuestos** (solo admin, es un reporte): enum `tipo_impuesto` (porcentaje, monto_fijo por venta); `impuestos` (nombre, tipo, valor, `medios medio_pago[]` —al menos uno, sin repetidos—, `todos_servicios`, activo; CRUD admin por columna), `impuesto_servicios`; foto `venta_impuestos` (una fila por venta, impuesto y medio) calculada por el trigger de sentencia `venta_pagos_impuestos` (interna `_calcular_impuestos_venta`); `fijar_servicios_impuesto()`, `resumen_impuestos()` — decisiones 2026-11-23 |
 | 37 | `dashboard` | Dashboard del admin (solo lectura): `ventas_por_dia(desde, hasta)` (un día por fila hasta hoy, máx. 366 días), `resumen_dashboard(desde, hasta, turno)` (total, servicio, categoría, descuento) y `resumen_gastos(desde, hasta, turno)` (total, compra de certificados, otros gastos, rubro, subcategoría); interna `_validar_rango_reporte` — decisiones 2026-11-23 |
@@ -307,6 +322,11 @@ supabase/tests/            pgTAP y tests de Edge Functions (la CLI de Supabase e
 | 46 | `condicional_vencida_vuelta` | `registrar_venta(..., p_vuelta_vencida)`: vuelta fuera de plazo de una condicional vencida (cajero o admin; cobra el saldo, sin descuento, hoja de siempre, `vuelta_de`) — decisión 2026-11-24 |
 | 47 | `caja_efectivo_anular` | `efectivo_en_caja_de_turno()` (todos, turno abierto): el efectivo del cajón, único total que ve el cajero; `anular_venta`: el cajero anula **solo sus ventas** de un turno abierto (42501 si no); `nombre_usuario` también de quien anuló una venta de un turno abierto — decisiones 2026-11-24 |
 | 48 | `condicional_vencida_estado` | `ventas.vuelta_fuera_de_plazo` y `ventas.condicional_vencida_de` (la venta del mismo servicio y patente se cobró de nuevo con una condicional vencida, completa u otra condicional; esa condicional queda resuelta: sale de `condicionales_de_patente` y no admite vuelta; anular la venta la libera), llenadas por el trigger `ventas_condicional_vencida` (BEFORE INSERT, sin cambiar firmas; no marca ventas con fecha pasada); CHECK `ventas_vuelta_o_recobro` — decisión 2026-11-24 |
+| 52 | `arreglos_auditoria_contable` | Auditoría contable 2026-11-27: la vuelta de una condicional al 50% lleva del impuesto de monto fijo **lo que falta** para el total del par (antes 150,01 daba 75,01 + 75,01); `resumen_diario.costo_certificados` suma el costo de cada venta redondeado a 2 decimales (igual que el kardex); `_normalizar_patente` deja solo A-Z y 0-9 (como la UI) y el trigger `ventas_a_normalizar_patente` la aplica a toda venta (también las de fecha pasada); normaliza las ventas existentes |
+| 51 | `estadisticas` | Estadísticas del admin (solo lectura): `estadisticas_vehiculos()` (vehículos distintos, nuevos, que vuelven, repetidos, ticket promedio, anuladas), `estadisticas_categorias()` (tipo de vehículo = categoría), `estadisticas_condicionales()`, `estadisticas_horarios()` (día de la semana y hora), `comparacion_anual()`; internas `_inicio_dia_local`, `_validar_rango_estadisticas` (el rango filtra por `creado_en`, usa `ventas_creado`) — decisión 2026-11-25 |
+| 53 | `certificados_servicios_de_turno` | `certificados_servicios_de_turno()` (todos): la ventana "Certificados y servicios" de un turno (hojas entregadas por certificado, con las de ventas anuladas aparte; servicios activos y vendidos con su precio y cuántas ventas sin anular se cobraron solo en efectivo y solo por transferencia; lo cobrado en $ solo para el admin, NULL para el cajero); mismo acceso que `resumen_ventas_de_turno` — decisión 2026-11-27 |
+| 54 | `quitar_tarjeta` | **Sin tarjeta** (decisión 2026-11-27): `medio_pago` y `cuenta_fondos` = efectivo \| transferencia (se cambia el tipo: renombrar, crear el nuevo, `alter column … using`, borrar el viejo, recreando lo que depende de él). Los datos se pasan: la parte en tarjeta de cada pago (y de su impuesto) se suma a la de transferencia o pasa a transferencia (una mixta transferencia + tarjeta queda de un solo medio), las ventas solo con tarjeta pasan a transferencia, `impuestos.medios` sin tarjeta, la foto del cierre suma `total_tarjeta` a `total_transferencia` (se quita la columna) y los manuales de la cuenta tarjeta pasan a transferencia (se borra su fila de `cuentas_fondos`). Se recrean sin tarjeta `registrar_venta`, `registrar_venta_pasada`, `cerrar_turno`, `v_turnos`, `v_ventas_mixtas`, `v_movimientos_fondos`, `v_movimientos_caja`, `resumen_turnos`, `resumen_ventas_mixtas`, `resumen_diario`, `resumen_impuestos`, `resumen_fondos` y `movimiento_fondos` |
+| 55 | `certificados_servicios_volatile` | `certificados_servicios_de_turno` pasa a `volatile`: PostgREST corre las `stable` en solo lectura y `_turno_para_trabajar` bloquea el turno (`for share`), así que al cajero le daba 25006 |
 | 50 | `resumen_ventas_de_turno` | `resumen_ventas_de_turno()` (todos): cantidad y monto de las ventas realizadas (sin anular) y anuladas del turno entero; el cajero, de un turno abierto; el admin, de cualquiera — decisión 2026-11-25 |
 
 Reglas que no son obvias leyendo una sola tabla:
@@ -350,7 +370,7 @@ Reglas que no son obvias leyendo una sola tabla:
   desactivado. La caja marca "Condicional hasta dd/mm/aaaa", "Al 50%: al
   volver paga $ X" y "Vuelta de condicional" en el historial. **Impuestos** de una condicional al 50%: el
   porcentaje se calcula sobre lo cobrado en cada venta y el monto fijo se reparte en proporción (mitad y
-  mitad), así entre la condicional y su vuelta queda registrado el impuesto completo; una vuelta a $ 0
+  mitad), así entre la condicional y su vuelta queda registrado el impuesto completo (la vuelta lleva lo que falta, sin un centavo de más: migración 52); una vuelta a $ 0
   (condicional pagada entera) no lleva impuesto.
 - **Patentes** (admin, `/admin/patentes`, módulo `ventas`): busca las ventas cuya patente empieza con lo
   escrito (mín. 3 caracteres, en la URL `?patente=`) con `ventas_por_patente`: fecha, servicio y
@@ -434,7 +454,11 @@ Reglas que no son obvias leyendo una sola tabla:
   y anula sus ventas ("Anular", `DialogoAnularVenta` de `caja/componentes`, sin emitir la NC).
   **Excepción (decisión 2026-11-25, migración 50)**: también ve el total de ventas **realizadas** y
   **anuladas** del turno (cantidad y monto, `resumen_ventas_de_turno`, `total-realizadas` /
-  `total-anuladas`, reconsultado cada 15 s); nunca los totales por medio, gastos ni neto. Los totales por medio, gastos y neto los ve el admin en `/admin/ventas` (lee `v_turnos`).
+  `total-anuladas`, reconsultado cada 15 s); nunca los totales por medio, gastos ni neto. **Excepción (decisión 2026-11-27, migración 53)**: el botón
+  **"Certificados y servicios"** (`DialogoCertificadosServicios`, también en las ventas de cada turno del
+  admin) abre una ventana con las hojas entregadas por certificado (y las de ventas anuladas aparte) y,
+  por servicio, el precio y cuántas se cobraron en efectivo y por transferencia (sin anuladas ni mixtas);
+  lo cobrado en $ lo ve solo el admin (al cajero la BD se lo manda en NULL). Los totales por medio, gastos y neto los ve el admin en `/admin/ventas` (lee `v_turnos`).
   No hay arqueo al cerrar. Desde la migración 33 es también **regla de seguridad** para los datos del
   turno: la RLS de `turnos` es solo admin, así que el cajero no lee `efectivo_inicial`, `efectivo_en_caja`,
   `efectivo_cierre`, `observaciones` ni los totales (`v_turnos` le devuelve 0 filas). Lo único que
@@ -473,7 +497,7 @@ Reglas que no son obvias leyendo una sola tabla:
   En efectivo, **el monto entra a la caja de cambio** al cargarla; anularla lo saca de ahí. **No se
   facturan** (trigger en `comprobantes`).
 - **Pago mixto** (decisión del negocio, 2026-11-22): una venta con turno (cajero o admin atendiendo una
-  caja) se cobra con 2 o 3 medios **distintos** (la BD acepta los dos; la caja arma efectivo + transferencia o tarjeta), cada parte > 0 (`_validar_monto`), que suman el precio
+  caja) se cobra con efectivo + transferencia (los dos medios que hay desde la migración 54), cada parte > 0 (`_validar_monto`), que suman el precio
   final. El cobro vive en `venta_pagos` (una fila por medio, también en las ventas simples, las pasadas
   y las anuladas); `ventas.medio_pago` es el medio si fue uno solo y **NULL si fue mixto** (no se agregó
   'mixto' al enum: `sql:produccion` corre todo en una transacción y un valor nuevo de enum no se puede
@@ -530,6 +554,19 @@ Reglas que no son obvias leyendo una sola tabla:
   una serie, con tooltip y la tabla de los mismos números debajo. Las consultas se repiten cada vez que
   se entra (`staleTime: 0`, `refetchOnMount: "always"`): no hace falta invalidarlas desde otras pantallas.
   Ningún total se calcula en el frontend.
+- **Estadísticas** (decisión 2026-11-25; solo admin, `/admin/estadisticas`, módulo `estadisticas`, migración
+  51): `FiltroPeriodo` sin turno (sin `onTurno` solo ofrece Año + Mes; por defecto el **año** actual
+  entero). Vehículos = **patentes distintas** (las ventas sin patente no suman): nuevos (primera venta
+  de la patente) y que vuelven (ya tenía una venta antes del período), repetidos (más de una venta en
+  el período **sin contar la vuelta de una condicional**), ticket promedio y anuladas; tipo de vehículo
+  = categoría de servicio (vehículos distintos y total, `GraficoRanking` con `etiquetaCantidad`);
+  condicionales vendidas en el período (al 50%, volvieron en plazo / fuera de plazo, cobradas de nuevo,
+  vigentes y vencidas sin volver); horarios pico por día (los 7) y por hora (sin huecos), **sin las
+  ventas con fecha pasada** (su hora es opcional); año contra año por mes (ventas, total y vehículos;
+  siempre del año elegido aunque haya un mes). Sin anuladas salvo "Ventas anuladas". Reusa `Dato`,
+  `Bloque` (`dashboard/componentes/Tarjetas.tsx`), `GraficoRanking` y `GraficoColumnas` del dashboard.
+  **Las ventas no se sobrescriben por patente repetida** (decisión 2026-11-25): cada venta es un cobro,
+  una hoja y quizás una factura; las estadísticas por vehículo salen de agrupar por patente.
 - **Impuestos** (decisiones del negocio, 2026-11-23; solo admin, `/admin/impuestos`): **no cambian lo
   que paga el cliente** (precio, cobro, cajón, factura y Fondos siguen igual): de cada venta la BD
   calcula cuánto corresponde a cada impuesto y lo guarda como **foto** en `venta_impuestos` al
@@ -543,25 +580,25 @@ Reglas que no son obvias leyendo una sola tabla:
   Lo calcula un trigger de sentencia sobre `venta_pagos` (las RPC insertan todos los pagos de una venta
   en una sentencia): ninguna venta queda sin calcular. Las anuladas conservan su foto y el reporte las
   excluye. Un impuesto usado no se borra (FK): se desactiva. Pantalla: catálogo (nombre, tipo, valor
-  "3 %" / "$ 150,00 por venta", medios "Todos" / "Efectivo y Tarjeta", servicios "Todos" / "n
+  "3 %" / "$ 150,00 por venta", medios "Todos" / "Transferencia", servicios "Todos" / "n
   servicios", switch activo), diálogo de alta/edición con switches de medios ("Todos los medios de
   pago" + uno por medio), diálogo "Servicios" (switch "Todos los servicios" o `SelectorServicios` de
   `servicios/componentes`, compartido con descuentos) y **reporte** de `resumen_impuestos`: filtro
   **Año** (del siguiente al 2000) + **Mes** ("Todo el año" = el año entero; un mes = ese mes;
   `impuestos/lib/periodo.ts`) + **Turno** opcional (turnos abiertos en el período; con un turno se
-  filtra solo por el turno), tarjeta de totales (total, efectivo, transferencia, tarjeta, ventas
+  filtra solo por el turno), tarjeta de totales (total, efectivo, transferencia, ventas
   alcanzadas) y tabla por impuesto. Las ventas, anulaciones y ventas pasadas invalidan
   `clavesImpuestos.resumenes` (`compartido/lib/claves-impuestos.ts`).
 - **Fondos** (decisión del negocio, 2026-11-22; reemplaza a "Caja de efectivo", solo admin): pestañas
-  **Efectivo · Transferencia · Crédito/Débito · Mixto**. Crédito/Débito es la cuenta `tarjeta` (un solo
-  `medio_pago = 'tarjeta'`, no se separa). Todo sale de la BD, sin cargar nada a mano por operación:
+  **Efectivo · Transferencia · Mixto** (la pestaña Crédito/Débito y la cuenta `tarjeta` se quitaron en la
+  migración 54, decisión 2026-11-27). Todo sale de la BD, sin cargar nada a mano por operación:
   - **Efectivo** = la caja de cambio de siempre (`movimientos_efectivo`, mismas reglas). Las ventas en
     efectivo de un turno abierto están en el cajón: entran a esta cuenta con el `cierre_turno`.
-  - **Transferencia / tarjeta**: ingresos = cada fila de `venta_pagos` del medio con monto > 0 (incluye
+  - **Transferencia**: ingresos = cada fila de `venta_pagos` del medio con monto > 0 (incluye
     la parte de un pago mixto y las ventas pasadas, en su `creado_en`). Egresos de transferencia = gastos
     con `fuente = 'transferencia'`; **una compra de certificados se cuenta por su gasto automático**
     (`compras_certificado.gasto_id`; la fila de la compra solo aporta `compra_id` y el certificado), así
-    nunca se cuenta dos veces. La tarjeta no tiene egresos automáticos (`fuente_fondos` no la incluye).
+    nunca se cuenta dos veces.
   - **Anulaciones**: el movimiento original queda en su fecha y se agrega un **reverso** con fecha de
     anulación (`ventas.anulada_en`, `gastos.anulado_en`). Corregir una compra anula su gasto (reverso
     `compra_anulada`) y la corregida trae el suyo.
@@ -569,10 +606,10 @@ Reglas que no son obvias leyendo una sola tabla:
     transferencia puede quedar negativo y se muestra así. Un **retiro manual** no puede dejar la cuenta en
     negativo (P0001 "No alcanza el saldo de transferencias: hay $ X y el retiro es de $ Y"); los retiros
     se serializan con `for update` sobre `cuentas_fondos`.
-  - **Manuales**: `movimiento_fondos(cuenta, tipo, monto, nota)` para las tres cuentas (en `efectivo`
+  - **Manuales**: `movimiento_fondos(cuenta, tipo, monto, nota)` para las dos cuentas (en `efectivo`
     deriva en `movimiento_efectivo`: misma regla y mismo libro).
   - **Mixto es informativa**: sin saldo ni manuales. Cada parte de una venta mixta ya está en su cuenta
-    (transferencia/tarjeta como `venta`; efectivo vía cajón → cierre de turno). `v_ventas_mixtas` y
+    (transferencia como `venta`; efectivo vía cajón → cierre de turno). `v_ventas_mixtas` y
     `resumen_ventas_mixtas()` (con `incluido_en_cuentas = true`) **nunca se suman** a las cuentas.
   - **Totales** (`resumen_fondos`): saldo de todos los tiempos; en el rango, `ingresos` = suma de las
     filas de sentido ingreso (ventas menos sus anulaciones, ingresos manuales, cierres de turno),
@@ -581,14 +618,14 @@ Reglas que no son obvias leyendo una sola tabla:
   - **Diferencia con `resumen_diario`**: `resumen_diario` (y `resumen_ventas_mixtas`) excluyen las ventas
     anuladas en el día de la venta, aunque se hayan anulado después (el pasado cambia); Fondos deja la
     venta en su día y resta el reverso el día de la anulación (el pasado no cambia). En un rango sin
-    anulaciones, `total_transferencia`/`total_tarjeta` de `resumen_diario` = `ingresos` de esa cuenta.
+    anulaciones, `total_transferencia` de `resumen_diario` = `ingresos` de esa cuenta.
     El efectivo no se compara: `resumen_diario.total_efectivo` es lo cobrado en efectivo (cajón incluido)
     y la cuenta `efectivo` es la caja de cambio.
   - **Pantalla** `/admin/fondos` (módulo `fondos`; `/admin/efectivo` redirige a `?pestana=efectivo`):
     arriba Desde/Hasta (`SelectorRango`, por defecto el mes actual en hora AR) y una tarjeta por cuenta
-    con el saldo actual (efectivo: `useSaldoEfectivo`; transferencia y crédito/débito: `resumen_fondos`)
+    con el saldo actual (efectivo: `useSaldoEfectivo`; transferencia: `resumen_fondos`)
     e ingresos, egresos y neto del rango; saldo o neto negativo en rojo. Pestañas (shadcn Tabs) Efectivo ·
-    Transferencia · Crédito/Débito · Mixto: la elegida va en la URL (`?pestana=`) y se recuerda en
+    Transferencia · Mixto: la elegida va en la URL (`?pestana=`) y se recuerda en
     `localStorage` "vtv-fondos-pestana" (con try/catch; la URL gana). Cada cuenta: saldo, botones
     "Fondo inicial" (efectivo) o "Saldo inicial" (las otras), "Ingreso" y "Retiro" (`parsearMonto`,
     nota obligatoria ≤ 500; efectivo usa `movimiento_efectivo`, que devuelve el saldo para el aviso; las
@@ -608,7 +645,7 @@ Todas requieren usuario autenticado y **activo**. Devuelven la fila afectada.
 |---|---|---|
 | `abrir_turno(p_caja_id bigint, p_efectivo_inicial numeric) → turnos` | admin | Turno de la caja, sin usuario (`usuario_id` NULL, `abierto_por` = admin). Caja activa y libre; el efectivo inicial (> 0) sale de la caja de cambio |
 | `cerrar_turno(p_turno_id bigint, p_observaciones text = null) → turnos` | admin | Cualquier turno abierto. El efectivo del cajón vuelve a la caja de cambio |
-| `registrar_venta(p_turno_id bigint, p_servicio_id bigint, p_medio_pago medio_pago = null, p_patente text = null, p_pagos jsonb = null, p_descuento_id bigint = null, p_precio_esperado numeric = null, p_condicional_mitad boolean = false, p_condicional boolean = false, p_vuelta_vencida bigint = null) → ventas` | todos | `p_turno_id` **obligatorio**: turno abierto de la caja donde se trabaja (NULL → 22023 "Elegí la caja en la que estás trabajando"; inexistente → 22023; cerrado → P0001 "El turno de la caja "X" ya se cerró: elegí una caja abierta"). `usuario_id` = quien vende. Un medio (`p_medio_pago`) **o** pago mixto (`p_pagos` = `[{"medio":"efectivo","monto":5000},{"medio":"tarjeta","monto":13000}]`, 2–3 medios distintos que suman el precio final), nunca los dos. `p_descuento_id` opcional (activo y habilitado para el servicio). `p_precio_esperado` opcional = precio final que vio el cajero: monto válido o `0` exacto (servicio de $ 0); si no coincide con el calculado, P0001 "El precio cambió: ahora es $ X. Revisá la venta." (sin el parámetro no se compara). Patente **obligatoria** (migración 38; 22023 "Ingresá la patente del vehículo") y se normaliza (mayúsculas, sin espacios). **Condicional** (`p_condicional`, migración 42): usa el certificado condicional del servicio (sin él, 22023 "El servicio "X" no tiene un certificado condicional…") y guarda la foto (`condicional_servicio_id` = el mismo servicio, `condicional_vence`, `condicional_saldo`); con una condicional vigente del servicio, P0001 "…: registrá la vuelta". **Condicional al 50%** (`p_condicional_mitad`, migración 41, solo con `p_condicional`): cobra round(precio / 2, 2) y guarda el resto en `condicional_saldo`; sin `p_condicional` → 22023 "Solo una condicional se puede pagar al 50%"; con descuento → P0001 "Con un descuento la condicional se paga completa…". **Vuelta de condicional**: si la patente tiene una condicional vigente y sin usar de este servicio, la venta cobra su saldo ($ 0 si se pagó entera) con `vuelta_de` (con descuento: P0001 "La patente X vuelve de la condicional del dd/mm/aaaa: no lleva descuento"; precio esperado distinto: P0001 "…: corresponde cobrar $ X. Revisá la venta."). **Vuelta fuera de plazo** (`p_vuelta_vencida` = id de la condicional vencida, migración 46): igual que la vuelta (saldo, sin descuento, hoja de siempre, `vuelta_de`); tiene que ser de la patente y el servicio (si no, 22023 "La condicional elegida no es de la patente…"), sin anular (P0001 "…está anulada…") ni usada (P0001 "…ya se usó en otra venta…"); con `p_condicional` → 22023; si la patente tiene una vigente del servicio, P0001 "…: registrá la vuelta". `ventas.id` = número de venta |
+| `registrar_venta(p_turno_id bigint, p_servicio_id bigint, p_medio_pago medio_pago = null, p_patente text = null, p_pagos jsonb = null, p_descuento_id bigint = null, p_precio_esperado numeric = null, p_condicional_mitad boolean = false, p_condicional boolean = false, p_vuelta_vencida bigint = null) → ventas` | todos | `p_turno_id` **obligatorio**: turno abierto de la caja donde se trabaja (NULL → 22023 "Elegí la caja en la que estás trabajando"; inexistente → 22023; cerrado → P0001 "El turno de la caja "X" ya se cerró: elegí una caja abierta"). `usuario_id` = quien vende. Un medio (`p_medio_pago`) **o** pago mixto (`p_pagos` = `[{"medio":"efectivo","monto":5000},{"medio":"transferencia","monto":13000}]`, los dos medios, que suman el precio final; un medio desconocido como "tarjeta" → 22023 "El medio de pago "tarjeta" no es válido"), nunca los dos. `p_descuento_id` opcional (activo y habilitado para el servicio). `p_precio_esperado` opcional = precio final que vio el cajero: monto válido o `0` exacto (servicio de $ 0); si no coincide con el calculado, P0001 "El precio cambió: ahora es $ X. Revisá la venta." (sin el parámetro no se compara). Patente **obligatoria** (migración 38; 22023 "Ingresá la patente del vehículo") y se normaliza (mayúsculas, sin espacios). **Condicional** (`p_condicional`, migración 42): usa el certificado condicional del servicio (sin él, 22023 "El servicio "X" no tiene un certificado condicional…") y guarda la foto (`condicional_servicio_id` = el mismo servicio, `condicional_vence`, `condicional_saldo`); con una condicional vigente del servicio, P0001 "…: registrá la vuelta". **Condicional al 50%** (`p_condicional_mitad`, migración 41, solo con `p_condicional`): cobra round(precio / 2, 2) y guarda el resto en `condicional_saldo`; sin `p_condicional` → 22023 "Solo una condicional se puede pagar al 50%"; con descuento → P0001 "Con un descuento la condicional se paga completa…". **Vuelta de condicional**: si la patente tiene una condicional vigente y sin usar de este servicio, la venta cobra su saldo ($ 0 si se pagó entera) con `vuelta_de` (con descuento: P0001 "La patente X vuelve de la condicional del dd/mm/aaaa: no lleva descuento"; precio esperado distinto: P0001 "…: corresponde cobrar $ X. Revisá la venta."). **Vuelta fuera de plazo** (`p_vuelta_vencida` = id de la condicional vencida, migración 46): igual que la vuelta (saldo, sin descuento, hoja de siempre, `vuelta_de`); tiene que ser de la patente y el servicio (si no, 22023 "La condicional elegida no es de la patente…"), sin anular (P0001 "…está anulada…") ni usada (P0001 "…ya se usó en otra venta…"); con `p_condicional` → 22023; si la patente tiene una vigente del servicio, P0001 "…: registrá la vuelta". `ventas.id` = número de venta |
 | `condicionales_de_patente(p_patente text) → setof (venta_id, fecha, condicional_nombre, servicio_id, servicio_nombre, vence, vigente, pagado, saldo)` | todos | Condicionales sin usar de la patente (normalizada), sin anular: vigentes primero (las más viejas antes) y después las vencidas (las más nuevas antes), hasta 20. `condicional_nombre` = el certificado condicional entregado; `servicio_id` = el servicio al que vuelve; `pagado` = lo cobrado; `saldo` = lo que cobra la vuelta (0 si pagó el total). Sin costos |
 | `ventas_anteriores_de_patente(p_patente text) → setof (venta_id, fecha, servicio_nombre, certificado_nombre, condicional, vuelta)` | todos | Ventas sin anular **de hoy** (día de negocio, migración 49) de la patente exacta (normalizada; vacía → 22023), de la más nueva a la más vieja, hasta 20. `fecha` = día de negocio; `certificado_nombre` NULL si no entregó (ventas con fecha pasada). Sin montos, medio, caja, usuario ni costos: el cajero ve así también ventas de turnos cerrados |
 | `ventas_por_patente(p_patente text) → setof (id, creado_en, patente, caja_nombre, usuario_nombre, servicio_nombre, categoria_nombre, precio, medio, anulada, venta_pasada, certificado_nombre, sin_stock, condicional_vence, condicional_saldo, condicional_servicio, vuelta_de, vuelta_venta_id)` | admin | Patentes que empiezan con el texto (≥ 3 caracteres, si no 22023), de la más nueva a la más vieja, hasta 500. `medio` = `'mixto'` en un pago mixto. Sin costos |
@@ -618,6 +655,7 @@ Todas requieren usuario autenticado y **activo**. Devuelven la fila afectada.
 | `registrar_venta_pasada(p_fecha date, p_hora time, p_caja_id bigint, p_servicio_id bigint, p_medio_pago medio_pago, p_precio numeric, p_patente text = null) → ventas` | admin | Sin turno ni hoja de certificado; efectivo a la caja de cambio; no facturable |
 | `anular_venta(p_venta_id bigint, p_motivo text) → ventas` | todos | Motivo obligatorio; guarda `anulada_por`, `anulada_en`, `anulada_motivo`. Admin: cualquiera. Cajero (migración 47): solo las suyas de un turno abierto (ajena → 42501 "Solo podés anular las ventas que registraste vos…"; turno cerrado o venta pasada → 42501 "Solo el administrador anula ventas de un turno cerrado"); si estaba facturada, la NC queda pendiente y la emite el admin |
 | `resumen_ventas_de_turno(p_turno_id bigint) → setof (realizadas_cantidad, realizadas_total, anuladas_cantidad, anuladas_total)` | todos | 1 fila: ventas sin anular y anuladas del turno entero (`precio` = lo cobrado). Cajero: turno abierto (mismas validaciones que `registrar_venta`); admin: cualquier turno (inexistente → 22023). Lo muestran `ResumenVentasTurno` (`caja/componentes`) en el historial de la caja y en las ventas de cada turno del admin, sin depender de los filtros |
+| `certificados_servicios_de_turno(p_turno_id bigint) → setof (agrupacion, id, nombre, categoria_nombre, condicional, precio, cantidad, anuladas, efectivo_cantidad, transferencia_cantidad, efectivo_total, transferencia_total)` | todos | Migración 53. `agrupacion` = `certificado` (hojas entregadas en el turno: `cantidad` sin anular, `anuladas` aparte; una venta sin stock no cuenta) · `servicio` (activos de categorías activas y los vendidos en el turno; `precio` actual; `efectivo_cantidad`/`transferencia_cantidad` = ventas sin anular de un solo medio, las mixtas no cuentan); certificados primero. `efectivo_total`/`transferencia_total` solo admin (NULL para el cajero). Acceso como `resumen_ventas_de_turno`. La muestra `DialogoCertificadosServicios` (`caja/componentes`) |
 | `efectivo_en_caja_de_turno(p_turno_id bigint) → numeric` | todos | Efectivo del cajón (`_efectivo_en_caja`: inicial + ventas en efectivo − gastos en efectivo, sin anulados) de un turno **abierto** (mismas validaciones que `registrar_venta`). Lo único de dinero del turno que ve el cajero (migración 47) |
 | `registrar_gasto(p_categoria_id bigint, p_monto numeric, p_fuente fuente_fondos, p_nota text, p_turno_id bigint = null) → gastos` | todos | Nota obligatoria. Cajero: `p_turno_id` obligatorio (turno abierto, mismas validaciones que `registrar_venta`) + categoría habilitada; paga con ese cajón. Admin: con `p_turno_id` paga con el cajón de esa caja; sin él, caja de cambio y sin turno |
 | `anular_gasto(p_gasto_id bigint, p_motivo text) → gastos` | admin | No aplica a gastos de compra de certificados |
@@ -629,13 +667,18 @@ Todas requieren usuario autenticado y **activo**. Devuelven la fila afectada.
 | `movimiento_efectivo(p_tipo tipo_mov_efectivo, p_monto numeric, p_nota text) → movimientos_efectivo` | admin | Solo `fondo_inicial`, `ingreso`, `retiro`; monto positivo |
 | `movimiento_fondos(p_cuenta cuenta_fondos, p_tipo tipo_mov_fondos, p_monto numeric, p_nota text) → v_movimientos_fondos` | admin | Manual en cualquier cuenta (`efectivo` deriva en `movimiento_efectivo`). Monto > 0 (`_validar_monto`; el retiro resta), nota obligatoria ≤ 500. Un retiro no deja la cuenta en negativo (P0001). Devuelve la fila del libro |
 | `fijar_servicios_impuesto(p_impuesto_id bigint, p_todos boolean, p_servicio_ids bigint[]) → impuestos` | admin | `p_todos = true`: todos los servicios (también los futuros; la lista queda vacía). Si no, reemplaza la lista de una vez (`'{}'` = ninguno) |
-| `resumen_impuestos(p_desde date = null, p_hasta date = null, p_turno_id bigint = null) → setof (agrupacion, id, nombre, cantidad_ventas, total, total_efectivo, total_transferencia, total_tarjeta)` | admin | Sin anuladas; día de negocio de la venta y/o turno. `agrupacion` = `total` (siempre 1 fila, en 0 si no hay nada) · `impuesto` (nombre actual), de mayor a menor total |
+| `resumen_impuestos(p_desde date = null, p_hasta date = null, p_turno_id bigint = null) → setof (agrupacion, id, nombre, cantidad_ventas, total, total_efectivo, total_transferencia)` | admin | Sin anuladas; día de negocio de la venta y/o turno. `agrupacion` = `total` (siempre 1 fila, en 0 si no hay nada) · `impuesto` (nombre actual), de mayor a menor total |
+| `estadisticas_vehiculos(p_desde date, p_hasta date) → setof (ventas_cantidad, ventas_total, ticket_promedio, ventas_sin_patente, vehiculos, vehiculos_nuevos, vehiculos_que_vuelven, vehiculos_repetidos, anuladas_cantidad, anuladas_total)` | admin | 1 fila. Ambas fechas obligatorias (22023). Vehículos = patentes distintas; repetidos sin contar vueltas de condicional |
+| `estadisticas_categorias(p_desde date, p_hasta date) → setof (categoria_id, nombre, ventas, vehiculos, total)` | admin | Por categoría (nombre actual), de más a menos vehículos. Sin anuladas |
+| `estadisticas_condicionales(p_desde date, p_hasta date) → setof (condicionales, al_50, volvieron_en_plazo, volvieron_fuera_plazo, cobradas_de_nuevo, vigentes_sin_volver, vencidas_sin_volver)` | admin | 1 fila: condicionales sin anular vendidas en el rango y qué pasó con cada una |
+| `estadisticas_horarios(p_desde date, p_hasta date) → setof (agrupacion, valor, cantidad, total)` | admin | `dia` (1 = lunes … 7, siempre los 7) y `hora` (de la primera a la última con ventas, sin huecos). Sin anuladas ni ventas con fecha pasada |
+| `comparacion_anual(p_anio integer) → setof (mes, ventas, total, vehiculos, ventas_anterior, total_anterior, vehiculos_anterior)` | admin | 12 filas. Año entre 2000 y 2100 (22023). Sin anuladas |
 | `ventas_por_dia(p_desde date, p_hasta date) → setof (fecha, cantidad, total)` | admin | Ambas fechas obligatorias, máx. 366 días. Un día por fila (0 sin ventas) hasta `least(p_hasta, hoy)`: los días que no llegaron no vienen. Sin anuladas; día de negocio |
 | `resumen_dashboard(p_desde date = null, p_hasta date = null, p_turno_id bigint = null) → setof (agrupacion, id, nombre, cantidad, total, total_descontado)` | admin | Sin anuladas. `agrupacion` = `total` (siempre 1 fila) · `servicio` · `categoria` (nombres actuales) · `descuento`; cada grupo de más a menos ventas |
 | `resumen_gastos(p_desde date = null, p_hasta date = null, p_turno_id bigint = null) → setof (agrupacion, id, nombre, cantidad, total)` | admin | Sin anulados. `total`, `compra_certificados` y `otros_gastos` (1 fila cada uno, en 0 si no hay) · `rubro` · `subcategoria` ("Rubro › Sub"), de mayor a menor. Las compras, por su gasto automático (nunca tienen turno) |
-| `resumen_turnos(p_desde date = null, p_hasta date = null) → setof (cantidad_turnos, turnos_abiertos, ventas_cantidad, ventas_efectivo, ventas_transferencia, ventas_tarjeta, ventas_total, gastos_total, neto)` | admin | 1 fila: turnos con apertura (día de negocio, `v_turnos.fecha_apertura`) en el rango, totales en vivo sin anulados |
-| `resumen_fondos(p_desde date = null, p_hasta date = null) → setof (cuenta, saldo, ingresos, egresos, neto, cantidad_movimientos)` | admin | Una fila por cuenta (efectivo, transferencia, tarjeta; nunca "mixto"). `saldo` de todos los tiempos; el resto, filas del libro con `fecha_local` en el rango; `neto` = suma del libro en el rango |
-| `resumen_ventas_mixtas(p_desde date = null, p_hasta date = null) → setof (cantidad_ventas, total, total_efectivo, total_transferencia, total_tarjeta, incluido_en_cuentas)` | admin | 1 fila. Ventas mixtas no anuladas por día de venta. **Informativo**: ya incluido en las cuentas (`incluido_en_cuentas = true`), no sumar |
+| `resumen_turnos(p_desde date = null, p_hasta date = null) → setof (cantidad_turnos, turnos_abiertos, ventas_cantidad, ventas_efectivo, ventas_transferencia, ventas_total, gastos_total, neto)` | admin | 1 fila: turnos con apertura (día de negocio, `v_turnos.fecha_apertura`) en el rango, totales en vivo sin anulados |
+| `resumen_fondos(p_desde date = null, p_hasta date = null) → setof (cuenta, saldo, ingresos, egresos, neto, cantidad_movimientos)` | admin | Una fila por cuenta (efectivo, transferencia; nunca "mixto"). `saldo` de todos los tiempos; el resto, filas del libro con `fecha_local` en el rango; `neto` = suma del libro en el rango |
+| `resumen_ventas_mixtas(p_desde date = null, p_hasta date = null) → setof (cantidad_ventas, total, total_efectivo, total_transferencia, incluido_en_cuentas)` | admin | 1 fila. Ventas mixtas no anuladas por día de venta. **Informativo**: ya incluido en las cuentas (`incluido_en_cuentas = true`), no sumar |
 | `marcar_alertas_leidas(p_ids bigint[] = null) → int` | admin | `null` = todas; devuelve cuántas marcó |
 | `certificado_para_servicio(p_servicio_id bigint) → bigint` | todos | Para mostrar en Ventas qué hoja se usará (el certificado de siempre) |
 | `certificado_condicional_para_servicio(p_servicio_id bigint) → bigint` | todos | El certificado condicional del servicio (null si no tiene): la caja ofrece "Condicional" solo si existe |
@@ -650,9 +693,9 @@ Todas requieren usuario autenticado y **activo**. Devuelven la fila afectada.
 | `resumen_diario(p_desde date = null, p_hasta date = null) → setof (fecha, cantidad_ventas, total_*, total_gastos, flujo_neto, costo_certificados, margen_bruto, ventas_sin_stock)` | admin | Reporte por día (hora AR), sin anulados; rango opcional |
 | `rol_actual() → rol_usuario`, `es_admin() → boolean` | todos | `null`/`false` si el usuario está desactivado |
 
-Enums: `medio_pago` = efectivo | transferencia | tarjeta · `fuente_fondos` = efectivo | transferencia ·
+Enums: `medio_pago` = efectivo | transferencia (sin tarjeta desde la migración 54) · `fuente_fondos` = efectivo | transferencia ·
 `unidad_compra` = caja | libreta | unidad ·
-`tipo_descuento` = porcentaje | monto_fijo · `cuenta_fondos` = efectivo | transferencia | tarjeta ·
+`tipo_descuento` = porcentaje | monto_fijo · `cuenta_fondos` = efectivo | transferencia ·
 `tipo_mov_fondos` = fondo_inicial | ingreso | retiro · `tipo_impuesto` = porcentaje | monto_fijo.
 
 Edge Function `admin-usuarios` (POST, `Authorization: Bearer <jwt del admin>`), responde
@@ -684,7 +727,7 @@ se registra antes del `FECAESolicitar`; si no hubo respuesta, el siguiente `emit
 | `v_gastos_por_categoria` | Totales por fecha, rubro, subcategoría y fuente |
 | `v_movimientos_efectivo` | Libro de la caja de cambio con quién hizo cada movimiento (`usuario_nombre`). Solo admin (RLS de `movimientos_efectivo`) |
 | `v_movimientos_fondos` | **Solo admin** (`es_admin()` en la vista). Libro de Fondos de las tres cuentas: `cuenta`, `clave` (única), `fecha`, `fecha_local`, `origen` (venta, venta_anulada, gasto, gasto_anulado, compra, compra_anulada, manual, apertura_turno, cierre_turno), `tipo` (detalle: el tipo manual o el de `movimientos_efectivo`), `sentido` (ingreso/egreso), `descripcion`, `nota`, `monto` con signo, `usuario_id`/`usuario_nombre`, `venta_id`, `gasto_id`, `compra_id`, `movimiento_id`, `turno_id`, `caja_id`/`caja_nombre`, `pago_mixto`, `venta_pasada`. Efectivo = `movimientos_efectivo` fila por fila. Paginar por `(fecha desc, clave desc)` |
-| `v_ventas_mixtas` | **Solo admin**. Ventas con pago mixto (con turno): fecha, caja, servicio, patente, quién vendió, `precio`, `pago_efectivo/transferencia/tarjeta`, `pagos` jsonb, anulación. Informativa (ya está en las cuentas). Paginar por `id desc` |
+| `v_ventas_mixtas` | **Solo admin**. Ventas con pago mixto (con turno): fecha, caja, servicio, patente, quién vendió, `precio`, `pago_efectivo/transferencia`, `pagos` jsonb, anulación. Informativa (ya está en las cuentas). Paginar por `id desc` |
 | `venta_pagos` (tabla) | Cobro de cada venta por medio (misma RLS que `ventas`). Para mostrar el detalle de un pago mixto |
 | `v_comprobantes` | Facturas y NC con venta, turno, cliente, importes, `a_reconciliar`, comprobante asociado y `qr_url`; al final `creado_por`, `actualizado_por` (último que corrigió los datos del cliente con `preparar_factura`, NULL si nadie) y `actualizado_en` (último cambio de cualquier tipo) (RLS: el cajero, los de ventas de turnos abiertos) |
 
@@ -713,6 +756,9 @@ usuario puede leer por REST (revisar grants por columna antes de publicarla).
   (no pasa por PostgREST); lo detectan los tests de Edge Functions.
 - RPC nuevas: `security definer`, `set search_path = ''`, nombres calificados (`public.x`),
   empezar con `perform public._exigir_usuario()` o `_exigir_admin()`.
+  Una RPC que llama `_turno_para_trabajar` (o cualquier `for share`/`for update`) **no puede ser
+  `stable`**: PostgREST corre las `stable` en una transacción de solo lectura (25006). pgTAP no lo ve
+  (no pasa por PostgREST); lo controla `40_certificados_servicios_de_turno.sql`.
 - Revisión de seguridad: agente `ciberseguridad` (auditoría completa o de un diff).
 - Tests pgTAP: incluir `\ir _helpers.psql`; usar `pg_temp.escenario()` para datos base,
   `pg_temp.como(uid)` para actuar como un usuario y `reset role` para volver a postgres.

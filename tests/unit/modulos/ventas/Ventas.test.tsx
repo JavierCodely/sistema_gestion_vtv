@@ -30,8 +30,7 @@ const RESUMEN = {
   turnos_abiertos: 1,
   ventas_cantidad: 7,
   ventas_efectivo: 60000,
-  ventas_transferencia: 25000,
-  ventas_tarjeta: 15000,
+  ventas_transferencia: 40000,
   ventas_total: 100000,
   gastos_total: 8000,
   neto: 92000,
@@ -119,7 +118,6 @@ describe("Ventas (admin)", () => {
     expect(celdas).toEqual(
       expect.arrayContaining([
         "$ 30.000,00",
-        "$ 0,00",
         "$ 20.000,00",
         "$ 50.000,00",
         "$ 5.000,00",

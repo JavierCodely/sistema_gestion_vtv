@@ -4,8 +4,7 @@ import { TotalesVentas } from "@/modulos/ventas/componentes/TotalesVentas";
 
 const VALORES = {
   ventas_efectivo: 30000,
-  ventas_transferencia: 15000,
-  ventas_tarjeta: 5000,
+  ventas_transferencia: 20000,
   ventas_total: 50000,
   gastos_total: 5000,
   neto: 45000,

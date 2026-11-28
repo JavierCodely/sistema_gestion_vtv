@@ -27,10 +27,12 @@ describe("validarVenta", () => {
   });
 
   it("normaliza la patente como la BD; en blanco no se acepta", () => {
-    expect(validarVenta(venta({ cobro: { medio: "tarjeta" }, patente: " ab 123 cd " }))).toEqual({
+    expect(
+      validarVenta(venta({ cobro: { medio: "transferencia" }, patente: " ab 123 cd " })),
+    ).toEqual({
       datos: {
         servicioId: 3,
-        cobro: { medio: "tarjeta" },
+        cobro: { medio: "transferencia" },
         patente: "AB123CD",
         descuentoId: null,
         precioEsperado: 18000,
@@ -48,7 +50,7 @@ describe("validarVenta", () => {
     const cobro = {
       pagos: [
         { medio: "efectivo" as const, monto: 5000 },
-        { medio: "tarjeta" as const, monto: 13000 },
+        { medio: "transferencia" as const, monto: 13000 },
       ],
     };
     expect(validarVenta(venta({ cobro, descuentoId: 4, precioEsperado: 16200 })).datos).toEqual({

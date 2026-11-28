@@ -61,7 +61,7 @@ select (registrar_venta(:turno, :servicio, 'efectivo', p_patente => $p$AB123CD$p
 reset role;
 select pg_temp.como(:'cajero2');
 select (registrar_venta(:turno, :servicio, 'efectivo', p_patente => $p$AB123CD$p$)).id as v_diego \gset
-select (registrar_venta(:turno, :servicio, 'tarjeta', p_patente => $p$AB123CD$p$)).id as v_diego2 \gset
+select (registrar_venta(:turno, :servicio, 'transferencia', p_patente => $p$AB123CD$p$)).id as v_diego2 \gset
 reset role;
 select pg_temp.como(:'admin');
 select (registrar_venta(:turno, :servicio, 'transferencia', p_patente => $p$AB123CD$p$)).id as v_admin \gset
@@ -102,7 +102,7 @@ select (abrir_turno(:caja2, 500)).id as turno2 \gset
 reset role;
 select pg_temp.como(:'cajero');
 select (registrar_gasto(:comida, 200, 'efectivo', 'Gasto en la caja 2', :turno2)).id as g_caja2 \gset
-select (registrar_venta(:turno2, :servicio, 'tarjeta', p_patente => $p$AB123CD$p$)).id as v_caja2 \gset
+select (registrar_venta(:turno2, :servicio, 'transferencia', p_patente => $p$AB123CD$p$)).id as v_caja2 \gset
 reset role;
 select is((select row(turno_id, caja_id)::text from gastos where id = :g_caja2), row(:turno2, :caja2)::text,
   'el mismo cajero carga un gasto en otra caja abierta: queda en esa caja');
@@ -234,7 +234,7 @@ insert into cajas (nombre) values ('Caja vieja') returning id as caja_vieja \gse
 insert into turnos (caja_id, usuario_id, efectivo_inicial, abierto_por)
 values (:caja_vieja, :'cajero', 100, :'admin') returning id as turno_viejo \gset
 select pg_temp.como(:'cajero3');
-select lives_ok(format($$select registrar_venta(%s, %s, 'tarjeta', p_patente => $p$AB123CD$p$)$$, :turno_viejo, :servicio),
+select lives_ok(format($$select registrar_venta(%s, %s, 'transferencia', p_patente => $p$AB123CD$p$)$$, :turno_viejo, :servicio),
   'en un turno abierto antes de la 33 vende cualquiera, no solo el cajero asignado');
 reset role;
 select pg_temp.como(:'admin');

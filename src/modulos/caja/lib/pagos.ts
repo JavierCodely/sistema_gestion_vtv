@@ -1,12 +1,12 @@
 import { formatearMoneda } from "@/compartido/lib/formato";
 import { MEDIOS_PAGO, ORDEN_MEDIOS, type PagoDeVenta, type Venta } from "../api/consultas";
 
-/** Partes de un cobro en el orden de los medios (efectivo, transferencia, tarjeta). */
+/** Partes de un cobro en el orden de los medios (efectivo, transferencia). */
 export function ordenarPagos(pagos: readonly PagoDeVenta[]): PagoDeVenta[] {
   return [...pagos].sort((a, b) => ORDEN_MEDIOS.indexOf(a.medio) - ORDEN_MEDIOS.indexOf(b.medio));
 }
 
-/** "Efectivo $ 5.000,00 + Tarjeta $ 13.000,00": detalle de un pago mixto. */
+/** "Efectivo $ 5.000,00 + Transferencia $ 13.000,00": detalle de un pago mixto. */
 export function detallePagos(pagos: readonly PagoDeVenta[]): string {
   return ordenarPagos(pagos)
     .map((p) => `${MEDIOS_PAGO[p.medio]} ${formatearMoneda(p.monto)}`)

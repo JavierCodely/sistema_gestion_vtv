@@ -100,7 +100,7 @@ test("turno completo: el admin abre la caja con efectivo inicial, el cajero vend
     recibido: "30000",
   });
   await expect(pc.getByTestId("ultima-venta")).toContainText(/Vuelto \$\s?5\.000,00/);
-  await venderEnCaja(pc, { categoria, servicio, medio: "Tarjeta" });
+  await venderEnCaja(pc, { categoria, servicio, medio: "Transferencia" });
   await pc.getByRole("tab", { name: "Historial" }).click();
   const ventasCajero = pc.getByRole("region", { name: "Ventas de la caja" });
   await expect(ventasCajero.getByRole("row").filter({ hasText: servicio })).toHaveCount(2);
@@ -112,6 +112,19 @@ test("turno completo: el admin abre la caja con efectivo inicial, el cajero vend
   await expect(pc.getByTestId("total-realizadas")).toHaveText(/\$\s?50\.000,00\s*2 ventas/);
   await expect(pc.getByTestId("total-anuladas")).toHaveText(/\$\s?0,00\s*0 ventas/);
 
+  // Ventana "Certificados y servicios" (migración 53): precio y cuántas en efectivo y por
+  // transferencia; el cajero no ve lo cobrado en $
+  await pc.getByRole("button", { name: "Certificados y servicios" }).click();
+  const ventanaCajero = pc.getByRole("dialog", { name: "Certificados y servicios" });
+  await expect(
+    ventanaCajero.getByRole("row").filter({ hasText: servicio }).getByRole("cell"),
+  ).toHaveText([new RegExp(servicio), /\$\s?25\.000,00/, "1", "1"]);
+  await expect(
+    ventanaCajero.getByRole("columnheader", { name: "Cobrado en efectivo" }),
+  ).toHaveCount(0);
+  await pc.keyboard.press("Escape");
+  await expect(ventanaCajero).toBeHidden();
+
   // Busca por patente: desde 3 caracteres, las ventas del turno con esa patente
   const buscar = ventasCajero.getByLabel("Buscar patente");
   await buscar.fill("ab 1");
@@ -122,7 +135,7 @@ test("turno completo: el admin abre la caja con efectivo inicial, el cajero vend
   await buscar.fill("");
 
   // Filtra por medio de pago y por categoría (las de las ventas del turno)
-  await elegir(pc, ventasCajero, "Medio de pago", "Tarjeta");
+  await elegir(pc, ventasCajero, "Medio de pago", "Transferencia");
   await expect(ventasCajero.getByRole("row").filter({ hasText: servicio })).toHaveCount(1);
   await expect(ventasCajero).not.toContainText("AB123CD");
   await elegir(pc, ventasCajero, "Categoría", categoria);
@@ -162,25 +175,36 @@ test("turno completo: el admin abre la caja con efectivo inicial, el cajero vend
   await expect(filaTurno).toContainText("50.000,00");
   await filaTurno.getByRole("link", { name: /^Ver turno/ }).click();
   await expect(page.getByTestId("total-Efectivo")).toHaveText(/25\.000,00/);
-  await expect(page.getByTestId("total-Tarjeta")).toHaveText(/25\.000,00/);
+  await expect(page.getByTestId("total-Transferencia")).toHaveText(/25\.000,00/);
+  await expect(page.getByTestId("total-Tarjeta")).toHaveCount(0);
   await expect(page.getByTestId("total-Total ventas")).toHaveText(/50\.000,00/);
   // Efectivo de la caja: 10.000 inicial + 25.000 en efectivo
   await expect(page.getByTestId("efectivo-inicial")).toHaveText(/10\.000,00/);
   await expect(page.getByTestId("efectivo-en-caja")).toHaveText(/35\.000,00/);
 
-  // Anular la venta con tarjeta: deja de sumar
-  const ventaTarjeta = page.getByRole("row").filter({ hasText: "Tarjeta" });
-  await ventaTarjeta.getByRole("button", { name: /^Anular venta/ }).click();
+  // Anular la venta por transferencia: deja de sumar
+  const ventaTransferencia = page.getByRole("row").filter({ hasText: "AA111AA" });
+  await expect(ventaTransferencia).toContainText("Transferencia");
+  await ventaTransferencia.getByRole("button", { name: /^Anular venta/ }).click();
   const anular = page.getByRole("dialog", { name: /^Anular venta/ });
   await anular.getByRole("button", { name: "Anular venta" }).click();
   await expect(anular.getByText("Escribí el motivo.")).toBeVisible();
   await anular.getByLabel("Motivo").fill("Cobro duplicado");
   await anular.getByRole("button", { name: "Anular venta" }).click();
   await expect(page.getByText(/^Venta N° \d+ anulada$/)).toBeVisible();
-  await expect(ventaTarjeta).toContainText("Anulada");
-  await expect(ventaTarjeta).toContainText("Cobro duplicado");
-  await expect(page.getByTestId("total-Tarjeta")).toHaveText(/0,00/);
+  await expect(ventaTransferencia).toContainText("Anulada");
+  await expect(ventaTransferencia).toContainText("Cobro duplicado");
+  await expect(page.getByTestId("total-Transferencia")).toHaveText(/0,00/);
   await expect(page.getByTestId("total-Total ventas")).toHaveText(/25\.000,00/);
+
+  // La ventana del admin trae además lo cobrado en $ (sin las anuladas)
+  await page.getByRole("button", { name: "Certificados y servicios" }).click();
+  const ventanaAdmin = page.getByRole("dialog", { name: "Certificados y servicios" });
+  await expect(
+    ventanaAdmin.getByRole("row").filter({ hasText: servicio }).getByRole("cell"),
+  ).toHaveText([new RegExp(servicio), /\$\s?25\.000,00/, "1", "0", /\$\s?25\.000,00/, /\$\s?0,00/]);
+  await page.keyboard.press("Escape");
+  await expect(ventanaAdmin).toBeHidden();
 
   // --- Cajero: ve la anulación (sin totales)
   await pc.reload();

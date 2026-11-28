@@ -14,7 +14,7 @@ select is((select row(r.*)::text from resumen_ventas_de_turno(:turno) r),
   row(0, 0.00, 0, 0.00)::text, 'un turno sin ventas da todo en 0');
 
 select (registrar_venta(:turno, :servicio, 'efectivo', 'RT111AA')).id as v1 \gset
-select registrar_venta(:turno, :servicio, 'tarjeta', 'RT222BB');
+select registrar_venta(:turno, :servicio, 'transferencia', 'RT222BB');
 select registrar_venta(:turno, :servicio, null, 'RT333CC',
   '[{"medio":"efectivo","monto":5000},{"medio":"transferencia","monto":15000}]'::jsonb);
 select anular_venta(:v1, 'Se cargó mal');

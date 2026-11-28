@@ -715,14 +715,14 @@ isOneToOne: false
                   ]
                 },"turnos": {
                   Row: {
-                    "abierto_en": string,"abierto_por": string | null,"caja_id": number,"cantidad_ventas": number | null,"cerrado_en": string | null,"efectivo_cierre": number | null,"efectivo_inicial": number | null,"id": number,"observaciones": string | null,"total_efectivo": number | null,"total_gastos": number | null,"total_tarjeta": number | null,"total_transferencia": number | null,"usuario_id": string | null
+                    "abierto_en": string,"abierto_por": string | null,"caja_id": number,"cantidad_ventas": number | null,"cerrado_en": string | null,"efectivo_cierre": number | null,"efectivo_inicial": number | null,"id": number,"observaciones": string | null,"total_efectivo": number | null,"total_gastos": number | null,"total_transferencia": number | null,"usuario_id": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "abierto_en"?: string,"abierto_por"?: string | null,"caja_id": number,"cantidad_ventas"?: number | null,"cerrado_en"?: string | null,"efectivo_cierre"?: number | null,"efectivo_inicial"?: number | null,"id"?: never,"observaciones"?: string | null,"total_efectivo"?: number | null,"total_gastos"?: number | null,"total_tarjeta"?: number | null,"total_transferencia"?: number | null,"usuario_id"?: string | null
+                    "abierto_en"?: string,"abierto_por"?: string | null,"caja_id": number,"cantidad_ventas"?: number | null,"cerrado_en"?: string | null,"efectivo_cierre"?: number | null,"efectivo_inicial"?: number | null,"id"?: never,"observaciones"?: string | null,"total_efectivo"?: number | null,"total_gastos"?: number | null,"total_transferencia"?: number | null,"usuario_id"?: string | null
                   }
                   Update: {
-                    "abierto_en"?: string,"abierto_por"?: string | null,"caja_id"?: number,"cantidad_ventas"?: number | null,"cerrado_en"?: string | null,"efectivo_cierre"?: number | null,"efectivo_inicial"?: number | null,"id"?: never,"observaciones"?: string | null,"total_efectivo"?: number | null,"total_gastos"?: number | null,"total_tarjeta"?: number | null,"total_transferencia"?: number | null,"usuario_id"?: string | null
+                    "abierto_en"?: string,"abierto_por"?: string | null,"caja_id"?: number,"cantidad_ventas"?: number | null,"cerrado_en"?: string | null,"efectivo_cierre"?: number | null,"efectivo_inicial"?: number | null,"id"?: never,"observaciones"?: string | null,"total_efectivo"?: number | null,"total_gastos"?: number | null,"total_transferencia"?: number | null,"usuario_id"?: string | null
                   }
                   Relationships: [
                     {
@@ -1082,7 +1082,7 @@ isOneToOne: false
                   ]
                 },"v_turnos": {
                   Row: {
-                    "abierto": boolean | null,"abierto_en": string,"abierto_por": string | null,"abierto_por_nombre": string | null,"atendido_por": (string)[] | null,"caja_id": number,"caja_nombre": string,"cantidad_ventas": number | null,"cerrado_en": string | null,"efectivo_cierre": number | null,"efectivo_en_caja": number | null,"efectivo_inicial": number | null,"fecha_apertura": string | null,"gastos_efectivo": number | null,"gastos_total": number | null,"id": number,"neto": number | null,"observaciones": string | null,"total_efectivo": number | null,"total_gastos": number | null,"total_tarjeta": number | null,"total_transferencia": number | null,"ventas_cantidad": number | null,"ventas_efectivo": number | null,"ventas_tarjeta": number | null,"ventas_total": number | null,"ventas_transferencia": number | null
+                    "abierto": boolean | null,"abierto_en": string,"abierto_por": string | null,"abierto_por_nombre": string | null,"atendido_por": (string)[] | null,"caja_id": number,"caja_nombre": string,"cantidad_ventas": number | null,"cerrado_en": string | null,"efectivo_cierre": number | null,"efectivo_en_caja": number | null,"efectivo_inicial": number | null,"fecha_apertura": string | null,"gastos_efectivo": number | null,"gastos_total": number | null,"id": number,"neto": number | null,"observaciones": string | null,"total_efectivo": number | null,"total_gastos": number | null,"total_transferencia": number | null,"ventas_cantidad": number | null,"ventas_efectivo": number | null,"ventas_total": number | null,"ventas_transferencia": number | null
                   }
                   ComputedFields: never
                   Relationships: [
@@ -1110,7 +1110,7 @@ isOneToOne: false
                   ]
                 },"v_ventas_mixtas": {
                   Row: {
-                    "anulada": boolean,"anulada_en": string | null,"anulada_motivo": string | null,"caja_id": number,"caja_nombre": string | null,"creado_en": string,"fecha_local": string | null,"id": number,"pago_efectivo": number | null,"pago_tarjeta": number | null,"pago_transferencia": number | null,"pagos": Json | null,"patente": string | null,"precio": number,"servicio_nombre": string,"turno_id": number | null,"usuario_id": string,"usuario_nombre": string | null
+                    "anulada": boolean,"anulada_en": string | null,"anulada_motivo": string | null,"caja_id": number,"caja_nombre": string | null,"creado_en": string,"fecha_local": string | null,"id": number,"pago_efectivo": number | null,"pago_transferencia": number | null,"pagos": Json | null,"patente": string | null,"precio": number,"servicio_nombre": string,"turno_id": number | null,"usuario_id": string,"usuario_nombre": string | null
                   }
                   ComputedFields: never
                   Relationships: [
@@ -1560,6 +1560,9 @@ isOneToOne: false
 "_exigir_usuario":
 { Args: Record<PropertyKey, never>; Returns: Database["public"]['Enums']["rol_usuario"]
                            },
+"_inicio_dia_local":
+{ Args: { "p_dia": string }; Returns: string
+                           },
 "_insertar_gasto":
 { Args: { "p_categoria_id": number,"p_fuente": Database["public"]['Enums']["fuente_fondos"],"p_monto": number,"p_nota": string,"p_turno_id"?: number }; Returns: {
               "anulado": boolean,
@@ -1641,7 +1644,6 @@ isOneToOne: false
 "observaciones": string | null,
 "total_efectivo": number | null,
 "total_gastos": number | null,
-"total_tarjeta": number | null,
 "total_transferencia": number | null,
 "usuario_id": string | null
             }
@@ -1659,6 +1661,9 @@ isOneToOne: false
                            },
 "_validar_pagos_mixtos":
 { Args: { "p_pagos": Json }; Returns: Json
+                           },
+"_validar_rango_estadisticas":
+{ Args: { "p_desde": string,"p_hasta": string }; Returns: undefined
                            },
 "_validar_rango_reporte":
 { Args: { "p_desde": string,"p_hasta": string }; Returns: undefined
@@ -1679,7 +1684,6 @@ isOneToOne: false
 "observaciones": string | null,
 "total_efectivo": number | null,
 "total_gastos": number | null,
-"total_tarjeta": number | null,
 "total_transferencia": number | null,
 "usuario_id": string | null
             }
@@ -1793,7 +1797,6 @@ isOneToOne: false
 "observaciones": string | null,
 "total_efectivo": number | null,
 "total_gastos": number | null,
-"total_tarjeta": number | null,
 "total_transferencia": number | null,
 "usuario_id": string | null
             }
@@ -1808,6 +1811,16 @@ isOneToOne: false
                            },
 "certificado_para_servicio":
 { Args: { "p_servicio_id": number }; Returns: number
+                           },
+"certificados_servicios_de_turno":
+{ Args: { "p_turno_id": number }; Returns: {
+              "agrupacion": string,"anuladas": number,"cantidad": number,"categoria_nombre": string,"condicional": boolean,"efectivo_cantidad": number,"efectivo_total": number,"id": number,"nombre": string,"precio": number,"transferencia_cantidad": number,"transferencia_total": number
+            }[]
+                           },
+"comparacion_anual":
+{ Args: { "p_anio": number }; Returns: {
+              "mes": number,"total": number,"total_anterior": number,"vehiculos": number,"vehiculos_anterior": number,"ventas": number,"ventas_anterior": number
+            }[]
                            },
 "condicionales_de_patente":
 { Args: { "p_patente": string }; Returns: {
@@ -1893,6 +1906,26 @@ isOneToOne: false
       } },
 "es_admin":
 { Args: Record<PropertyKey, never>; Returns: boolean
+                           },
+"estadisticas_categorias":
+{ Args: { "p_desde": string,"p_hasta": string }; Returns: {
+              "categoria_id": number,"nombre": string,"total": number,"vehiculos": number,"ventas": number
+            }[]
+                           },
+"estadisticas_condicionales":
+{ Args: { "p_desde": string,"p_hasta": string }; Returns: {
+              "al_50": number,"cobradas_de_nuevo": number,"condicionales": number,"vencidas_sin_volver": number,"vigentes_sin_volver": number,"volvieron_en_plazo": number,"volvieron_fuera_plazo": number
+            }[]
+                           },
+"estadisticas_horarios":
+{ Args: { "p_desde": string,"p_hasta": string }; Returns: {
+              "agrupacion": string,"cantidad": number,"total": number,"valor": number
+            }[]
+                           },
+"estadisticas_vehiculos":
+{ Args: { "p_desde": string,"p_hasta": string }; Returns: {
+              "anuladas_cantidad": number,"anuladas_total": number,"ticket_promedio": number,"vehiculos": number,"vehiculos_nuevos": number,"vehiculos_que_vuelven": number,"vehiculos_repetidos": number,"ventas_cantidad": number,"ventas_sin_patente": number,"ventas_total": number
+            }[]
                            },
 "fecha_local":
 { Args: { "ts": string }; Returns: string
@@ -2223,7 +2256,7 @@ isOneToOne: false
                            },
 "resumen_diario":
 { Args: { "p_desde"?: string,"p_hasta"?: string }; Returns: {
-              "cantidad_ventas": number,"costo_certificados": number,"fecha": string,"flujo_neto": number,"margen_bruto": number,"total_efectivo": number,"total_gastos": number,"total_tarjeta": number,"total_transferencia": number,"total_ventas": number,"ventas_sin_stock": number
+              "cantidad_ventas": number,"costo_certificados": number,"fecha": string,"flujo_neto": number,"margen_bruto": number,"total_efectivo": number,"total_gastos": number,"total_transferencia": number,"total_ventas": number,"ventas_sin_stock": number
             }[]
                            },
 "resumen_fondos":
@@ -2238,12 +2271,12 @@ isOneToOne: false
                            },
 "resumen_impuestos":
 { Args: { "p_desde"?: string,"p_hasta"?: string,"p_turno_id"?: number }; Returns: {
-              "agrupacion": string,"cantidad_ventas": number,"id": number,"nombre": string,"total": number,"total_efectivo": number,"total_tarjeta": number,"total_transferencia": number
+              "agrupacion": string,"cantidad_ventas": number,"id": number,"nombre": string,"total": number,"total_efectivo": number,"total_transferencia": number
             }[]
                            },
 "resumen_turnos":
 { Args: { "p_desde"?: string,"p_hasta"?: string }; Returns: {
-              "cantidad_turnos": number,"gastos_total": number,"neto": number,"turnos_abiertos": number,"ventas_cantidad": number,"ventas_efectivo": number,"ventas_tarjeta": number,"ventas_total": number,"ventas_transferencia": number
+              "cantidad_turnos": number,"gastos_total": number,"neto": number,"turnos_abiertos": number,"ventas_cantidad": number,"ventas_efectivo": number,"ventas_total": number,"ventas_transferencia": number
             }[]
                            },
 "resumen_ventas_de_turno":
@@ -2253,7 +2286,7 @@ isOneToOne: false
                            },
 "resumen_ventas_mixtas":
 { Args: { "p_desde"?: string,"p_hasta"?: string }; Returns: {
-              "cantidad_ventas": number,"incluido_en_cuentas": boolean,"total": number,"total_efectivo": number,"total_tarjeta": number,"total_transferencia": number
+              "cantidad_ventas": number,"incluido_en_cuentas": boolean,"total": number,"total_efectivo": number,"total_transferencia": number
             }[]
                            },
 "rol_actual":
@@ -2289,7 +2322,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "ambiente_arca": "homologacion"|"produccion","cuenta_fondos": "efectivo"|"transferencia"|"tarjeta","estado_comprobante": "pendiente"|"procesando"|"autorizado"|"rechazado"|"cancelado","fuente_fondos": "efectivo"|"transferencia","medio_pago": "efectivo"|"transferencia"|"tarjeta","rol_usuario": "admin"|"cajero","tipo_alerta": "venta_sin_stock"|"stock_bajo","tipo_comprobante": "factura"|"nota_credito","tipo_descuento": "porcentaje"|"monto_fijo","tipo_impuesto": "porcentaje"|"monto_fijo","tipo_mov_certificado": "compra"|"venta"|"ajuste"|"anulacion_compra"|"revaluacion","tipo_mov_efectivo": "fondo_inicial"|"ingreso"|"retiro"|"venta"|"anulacion_venta"|"gasto"|"anulacion_gasto"|"apertura_turno"|"cierre_turno","tipo_mov_fondos": "fondo_inicial"|"ingreso"|"retiro","unidad_compra": "caja"|"libreta"|"unidad"
+            "ambiente_arca": "homologacion"|"produccion","cuenta_fondos": "efectivo"|"transferencia","estado_comprobante": "pendiente"|"procesando"|"autorizado"|"rechazado"|"cancelado","fuente_fondos": "efectivo"|"transferencia","medio_pago": "efectivo"|"transferencia","rol_usuario": "admin"|"cajero","tipo_alerta": "venta_sin_stock"|"stock_bajo","tipo_comprobante": "factura"|"nota_credito","tipo_descuento": "porcentaje"|"monto_fijo","tipo_impuesto": "porcentaje"|"monto_fijo","tipo_mov_certificado": "compra"|"venta"|"ajuste"|"anulacion_compra"|"revaluacion","tipo_mov_efectivo": "fondo_inicial"|"ingreso"|"retiro"|"venta"|"anulacion_venta"|"gasto"|"anulacion_gasto"|"apertura_turno"|"cierre_turno","tipo_mov_fondos": "fondo_inicial"|"ingreso"|"retiro","unidad_compra": "caja"|"libreta"|"unidad"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -2409,7 +2442,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "ambiente_arca": ["homologacion", "produccion"],"cuenta_fondos": ["efectivo", "transferencia", "tarjeta"],"estado_comprobante": ["pendiente", "procesando", "autorizado", "rechazado", "cancelado"],"fuente_fondos": ["efectivo", "transferencia"],"medio_pago": ["efectivo", "transferencia", "tarjeta"],"rol_usuario": ["admin", "cajero"],"tipo_alerta": ["venta_sin_stock", "stock_bajo"],"tipo_comprobante": ["factura", "nota_credito"],"tipo_descuento": ["porcentaje", "monto_fijo"],"tipo_impuesto": ["porcentaje", "monto_fijo"],"tipo_mov_certificado": ["compra", "venta", "ajuste", "anulacion_compra", "revaluacion"],"tipo_mov_efectivo": ["fondo_inicial", "ingreso", "retiro", "venta", "anulacion_venta", "gasto", "anulacion_gasto", "apertura_turno", "cierre_turno"],"tipo_mov_fondos": ["fondo_inicial", "ingreso", "retiro"],"unidad_compra": ["caja", "libreta", "unidad"]
+            "ambiente_arca": ["homologacion", "produccion"],"cuenta_fondos": ["efectivo", "transferencia"],"estado_comprobante": ["pendiente", "procesando", "autorizado", "rechazado", "cancelado"],"fuente_fondos": ["efectivo", "transferencia"],"medio_pago": ["efectivo", "transferencia"],"rol_usuario": ["admin", "cajero"],"tipo_alerta": ["venta_sin_stock", "stock_bajo"],"tipo_comprobante": ["factura", "nota_credito"],"tipo_descuento": ["porcentaje", "monto_fijo"],"tipo_impuesto": ["porcentaje", "monto_fijo"],"tipo_mov_certificado": ["compra", "venta", "ajuste", "anulacion_compra", "revaluacion"],"tipo_mov_efectivo": ["fondo_inicial", "ingreso", "retiro", "venta", "anulacion_venta", "gasto", "anulacion_gasto", "apertura_turno", "cierre_turno"],"tipo_mov_fondos": ["fondo_inicial", "ingreso", "retiro"],"unidad_compra": ["caja", "libreta", "unidad"]
           }
         }
 } as const

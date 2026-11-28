@@ -58,7 +58,6 @@ export function ListaVentasMixtas({ rango }: { rango: RangoFechas }) {
                   <TableHead>Vendió</TableHead>
                   <TableHead className="text-right">Efectivo</TableHead>
                   <TableHead className="text-right">Transferencia</TableHead>
-                  <TableHead className="text-right">Crédito/Débito</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                 </TableRow>
               </TableHeader>
@@ -107,12 +106,6 @@ export function ListaVentasMixtas({ rango }: { rango: RangoFechas }) {
                         className={cn("text-right whitespace-nowrap tabular-nums", tachado)}
                       >
                         {parte(v.pago_transferencia)}
-                      </TableCell>
-                      <TableCell
-                        data-label="Crédito/Débito"
-                        className={cn("text-right whitespace-nowrap tabular-nums", tachado)}
-                      >
-                        {parte(v.pago_tarjeta)}
                       </TableCell>
                       <TableCell
                         data-label="Total"

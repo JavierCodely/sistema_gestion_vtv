@@ -43,7 +43,7 @@ async function esperarMonto(page: Page, testId: string, valor: number) {
     .toBe(moneda(valor));
 }
 
-test("fondos: ventas por transferencia, tarjeta y mixta, un gasto y un saldo inicial se ven en cada pestaña; un retiro mayor al saldo se rechaza", async ({
+test("fondos: dos ventas por transferencia y una mixta, un gasto y un saldo inicial se ven en cada pestaña; un retiro mayor al saldo se rechaza", async ({
   page,
   browser,
 }) => {
@@ -56,7 +56,7 @@ test("fondos: ventas por transferencia, tarjeta y mixta, un gasto y un saldo ini
   const notaGasto = `Gasto transferencia ${sufijo}`;
   const notaSaldo = `Saldo banco ${sufijo}`;
   const patente = (letra: string) => `F${letra}${sufijo.slice(-5)}`;
-  const [patenteTransferencia, patenteTarjeta, patenteMixta] = ["T", "J", "M"].map(patente);
+  const [patenteTransferencia, patenteSegunda, patenteMixta] = ["T", "J", "M"].map(patente);
 
   // --- Admin: caja, servicio de $ 20.000, subcategoría de gasto y la caja abierta
   await ingresar(page, ADMIN);
@@ -100,14 +100,15 @@ test("fondos: ventas por transferencia, tarjeta y mixta, un gasto y un saldo ini
     transferenciaSaldo: await leer(page, "resumen-transferencia-saldo"),
     transferenciaIngresos: await leer(page, "resumen-transferencia-ingresos"),
     transferenciaEgresos: await leer(page, "resumen-transferencia-egresos"),
-    tarjetaSaldo: await leer(page, "resumen-tarjeta-saldo"),
-    tarjetaIngresos: await leer(page, "resumen-tarjeta-ingresos"),
   };
+  // Sin Crédito/Débito (migración 54): solo efectivo, transferencia y la pestaña informativa Mixto
+  await expect(page.getByTestId("resumen-tarjeta-saldo")).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "Crédito/Débito" })).toHaveCount(0);
   await page.getByRole("tab", { name: "Mixto" }).click();
   await expect(page).toHaveURL("/admin/fondos?pestana=mixto");
   const mixtasAntes = await leer(page, "mixtas-cantidad");
 
-  // --- Cajero: una venta por transferencia, una con tarjeta y una mixta (efectivo + tarjeta: en la caja el mixto es efectivo + otro medio)
+  // --- Cajero: dos ventas por transferencia y una mixta (efectivo + transferencia)
   const contextoCajero = await browser.newContext();
   const pc = await contextoCajero.newPage();
   await ingresar(pc, CAJERO);
@@ -119,7 +120,7 @@ test("fondos: ventas por transferencia, tarjeta y mixta, un gasto y un saldo ini
     medio: "Transferencia",
     patente: patenteTransferencia,
   });
-  await venderEnCaja(pc, { categoria, servicio, medio: "Tarjeta", patente: patenteTarjeta });
+  await venderEnCaja(pc, { categoria, servicio, medio: "Transferencia", patente: patenteSegunda });
 
   await escribirPatente(pc, patenteMixta);
   await pc
@@ -131,14 +132,12 @@ test("fondos: ventas por transferencia, tarjeta y mixta, un gasto y un saldo ini
     .getByRole("option", { name: new RegExp(`^${servicio}`) })
     .click();
   await expect(pc.getByRole("listbox", { name: "4. Medio de pago" })).toBeFocused();
-  await pc.keyboard.press("4");
+  await pc.keyboard.press("3");
   await pc.keyboard.press("Enter");
   await expect(pc.getByLabel("5. Pago mixto: ¿cuánto paga en efectivo? ($)")).toBeFocused();
   await pc.keyboard.type("8.000");
   await expect(pc.getByTestId("resto-mixto")).toHaveText(/\$\s?12\.000,00/);
-  await pc.keyboard.press("Enter");
-  await expect(pc.getByRole("listbox", { name: "5. ¿Con qué paga el resto?" })).toBeFocused();
-  await pc.keyboard.press("2");
+  // El resto va por transferencia, sin preguntar
   await pc.keyboard.press("Enter");
   // Pagó justo el efectivo
   await expect(pc.getByLabel("6. ¿Cuánto te entregó en efectivo? ($)")).toBeFocused();
@@ -147,7 +146,7 @@ test("fondos: ventas por transferencia, tarjeta y mixta, un gasto y un saldo ini
   // (Los avisos de las ventas anteriores pueden seguir en pantalla: se mira la "Última venta".)
   const ultima = pc.getByTestId("ultima-venta");
   await expect(ultima).toContainText(servicio);
-  await expect(ultima).toContainText(/Efectivo \$\s?8\.000,00 \+ Tarjeta \$\s?12\.000,00/);
+  await expect(ultima).toContainText(/Efectivo \$\s?8\.000,00 \+ Transferencia \$\s?12\.000,00/);
   await contextoCajero.close();
 
   // --- Admin: un gasto por transferencia ($ 3.000) desde Gastos
@@ -176,21 +175,19 @@ test("fondos: ventas por transferencia, tarjeta y mixta, un gasto y un saldo ini
   await saldoInicial.getByRole("button", { name: "Guardar" }).click();
   await expect(page.getByText("Saldo inicial registrado en transferencias.")).toBeVisible();
 
-  // --- Totales: transferencia +20.000 (venta) +50.000 (saldo inicial) −3.000 (gasto); la parte en
-  // efectivo de la mixta queda en el cajón (entra a la cuenta efectivo al cerrar el turno)
+  // --- Totales: transferencia +20.000 +20.000 (ventas) +12.000 (parte de la mixta) +50.000 (saldo
+  // inicial) −3.000 (gasto); la parte en efectivo de la mixta queda en el cajón (entra a la cuenta
+  // efectivo al cerrar el turno)
   await esperarMonto(
     page,
     "resumen-transferencia-ingresos",
-    antes.transferenciaIngresos + 20_000 + 50_000,
+    antes.transferenciaIngresos + 20_000 + 20_000 + 12_000 + 50_000,
   );
   await esperarMonto(page, "resumen-transferencia-egresos", antes.transferenciaEgresos + 3_000);
-  await esperarMonto(page, "resumen-transferencia-saldo", antes.transferenciaSaldo + 67_000);
-  await esperarMonto(page, "saldo-transferencia", antes.transferenciaSaldo + 67_000);
-  // Tarjeta: +20.000 (venta) +12.000 (mixta)
-  await esperarMonto(page, "resumen-tarjeta-ingresos", antes.tarjetaIngresos + 32_000);
-  await esperarMonto(page, "resumen-tarjeta-saldo", antes.tarjetaSaldo + 32_000);
+  await esperarMonto(page, "resumen-transferencia-saldo", antes.transferenciaSaldo + 99_000);
+  await esperarMonto(page, "saldo-transferencia", antes.transferenciaSaldo + 99_000);
 
-  // --- Libro de transferencias: cada movimiento con su signo (la mixta no pasó por transferencia)
+  // --- Libro de transferencias: cada movimiento con su signo (de la mixta, solo su parte)
   await expect(page.getByTestId("periodo-libro-transferencia")).toHaveText(
     /^Del \d{2}\/\d{2}\/\d{4} al \d{2}\/\d{2}\/\d{4}$/,
   );
@@ -199,7 +196,9 @@ test("fondos: ventas por transferencia, tarjeta y mixta, un gasto y un saldo ini
   await expect(ventaTransferencia).toContainText("Venta");
   await expect(ventaTransferencia).toContainText(caja);
   await expect(ventaTransferencia).toContainText(/\+\$\s?20\.000,00/);
-  await expect(libro.getByRole("row").filter({ hasText: patenteMixta })).toHaveCount(0);
+  const mixtaTransferencia = libro.getByRole("row").filter({ hasText: patenteMixta });
+  await expect(mixtaTransferencia).toContainText("Mixto");
+  await expect(mixtaTransferencia).toContainText(/\+\$\s?12\.000,00/);
   const filaGasto = libro.getByRole("row").filter({ hasText: notaGasto });
   await expect(filaGasto).toContainText("Gasto");
   await expect(filaGasto).toContainText(subcategoria);
@@ -207,7 +206,9 @@ test("fondos: ventas por transferencia, tarjeta y mixta, un gasto y un saldo ini
   const filaSaldo = libro.getByRole("row").filter({ hasText: notaSaldo });
   await expect(filaSaldo).toContainText("Manual");
   await expect(filaSaldo).toContainText(/\+\$\s?50\.000,00/);
-  await expect(libro.getByRole("row").filter({ hasText: patenteTarjeta })).toHaveCount(0);
+  await expect(libro.getByRole("row").filter({ hasText: patenteSegunda })).toContainText(
+    /\+\$\s?20\.000,00/,
+  );
 
   // --- Un retiro mayor al saldo se rechaza con el mensaje de la BD
   await page.getByRole("button", { name: "Retiro" }).click();
@@ -221,20 +222,6 @@ test("fondos: ventas por transferencia, tarjeta y mixta, un gasto y un saldo ini
   await expect(
     libro.getByRole("row").filter({ hasText: `Retiro imposible ${sufijo}` }),
   ).toHaveCount(0);
-
-  // --- Crédito/Débito: la venta con tarjeta y la parte de la mixta
-  await page.getByRole("tab", { name: "Crédito/Débito" }).click();
-  await expect(page).toHaveURL("/admin/fondos?pestana=tarjeta");
-  const libroTarjeta = page.getByRole("region", { name: "Movimientos de Crédito/Débito" });
-  await expect(libroTarjeta.getByRole("row").filter({ hasText: patenteTarjeta })).toContainText(
-    /\+\$\s?20\.000,00/,
-  );
-  const mixtaTarjeta = libroTarjeta.getByRole("row").filter({ hasText: patenteMixta });
-  await expect(mixtaTarjeta).toContainText("Mixto");
-  await expect(mixtaTarjeta).toContainText(/\+\$\s?12\.000,00/);
-  await expect(libroTarjeta.getByRole("row").filter({ hasText: patenteTransferencia })).toHaveCount(
-    0,
-  );
 
   // --- Efectivo: la caja de cambio, con el efectivo inicial del turno
   await page.getByRole("tab", { name: "Efectivo" }).click();

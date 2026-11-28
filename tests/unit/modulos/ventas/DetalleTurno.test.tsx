@@ -50,7 +50,7 @@ beforeEach(() => {
   });
   responder("ventas", "select", {
     data: [
-      ventaDePrueba({ id: 82, medio_pago: "tarjeta", precio: 20000, usuario_id: "a1" }),
+      ventaDePrueba({ id: 82, medio_pago: "transferencia", precio: 20000, usuario_id: "a1" }),
       ventaDePrueba({ id: 81, anulada: true, anulada_motivo: "Duplicada" }),
     ],
   });
@@ -72,7 +72,8 @@ describe("DetalleTurno (admin)", () => {
     renderRuta("/admin/ventas/turnos/5", admin());
 
     expect(normal((await screen.findByTestId("total-Neto")).textContent)).toBe("$ 45.000,00");
-    expect(normal(screen.getByTestId("total-Tarjeta").textContent)).toBe("$ 20.000,00");
+    expect(normal(screen.getByTestId("total-Transferencia").textContent)).toBe("$ 20.000,00");
+    expect(screen.queryByTestId("total-Tarjeta")).not.toBeInTheDocument();
     expect(normal(screen.getByTestId("total-Gastos").textContent)).toBe("$ 5.000,00");
     expect(screen.getByText("Observaciones: Sin novedad")).toBeInTheDocument();
     // Turno cerrado: la foto del cierre por un lado y lo de hoy (en vivo) por otro, sin mezclarlos
@@ -191,7 +192,7 @@ describe("DetalleTurno (admin)", () => {
       data: [
         ventaDePrueba({ id: 84, categoria_id: 2, categorias_servicio: { nombre: "Motos" } }),
         ventaDePrueba({ id: 83, medio_pago: "transferencia" }),
-        ventaDePrueba({ id: 82, medio_pago: "tarjeta" }),
+        ventaDePrueba({ id: 82, medio_pago: "efectivo" }),
       ],
     });
     renderRuta("/admin/ventas/turnos/5", admin());
@@ -219,6 +220,7 @@ describe("DetalleTurno (admin)", () => {
     expect(normal(screen.getByTestId("total-anuladas").textContent)).toBe(
       "Anuladas$ 30.000,001 venta",
     );
+    expect(screen.getByRole("button", { name: "Certificados y servicios" })).toBeInTheDocument();
     expect(argumentosRpc("resumen_ventas_de_turno")).toEqual({ p_turno_id: 5 });
   });
 
@@ -235,27 +237,29 @@ describe("DetalleTurno (admin)", () => {
           medio_pago: null,
           venta_pagos: [
             { medio: "efectivo", monto: 5000 },
-            { medio: "tarjeta", monto: 22000 },
+            { medio: "transferencia", monto: 22000 },
           ],
         }),
-        ventaDePrueba({ id: 82, medio_pago: "tarjeta", precio: 20000 }),
+        ventaDePrueba({ id: 82, medio_pago: "transferencia", precio: 20000 }),
       ],
     });
     renderRuta("/admin/ventas/turnos/5", admin());
 
     const mixta = await screen.findByTestId("venta-83");
-    expect(normal(mixta.textContent)).toContain("MixtoEfectivo $ 5.000,00 + Tarjeta $ 22.000,00");
+    expect(normal(mixta.textContent)).toContain(
+      "MixtoEfectivo $ 5.000,00 + Transferencia $ 22.000,00",
+    );
     expect(normal(mixta.textContent)).toContain("Jubilados−$ 3.000,00 · lista $ 30.000,00");
     expect(normal(mixta.textContent)).toContain("$ 27.000,00");
     const simple = screen.getByTestId("venta-82");
-    expect(normal(simple.textContent)).toContain("Tarjeta");
+    expect(normal(simple.textContent)).toContain("Transferencia");
     expect(normal(simple.textContent)).not.toContain("Mixto");
     expect(normal(simple.textContent)).not.toContain("lista");
 
     await userEvent.click(within(mixta).getByRole("button", { name: "Anular venta N° 83" }));
     const dialogo = screen.getByRole("dialog", { name: "Anular venta N° 83" });
     expect(normal(dialogo.textContent)).toContain(
-      "Fue un pago mixto (Efectivo $ 5.000,00 + Tarjeta $ 22.000,00): la parte en efectivo ($ 5.000,00) sale de la caja del turno si sigue abierto, o de la caja de cambio.",
+      "Fue un pago mixto (Efectivo $ 5.000,00 + Transferencia $ 22.000,00): la parte en efectivo ($ 5.000,00) sale de la caja del turno si sigue abierto, o de la caja de cambio.",
     );
   });
 });

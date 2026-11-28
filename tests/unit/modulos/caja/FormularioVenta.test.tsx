@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -200,7 +200,7 @@ describe("FormularioVenta (caja por teclado)", () => {
     expect(argumentosRpc("certificado_condicional_para_servicio")).toBeUndefined();
   });
 
-  it("patente grande en mayúsculas (solo letras y números) y venta con tarjeta solo con el teclado", async () => {
+  it("patente grande en mayúsculas (solo letras y números) y venta por transferencia solo con el teclado", async () => {
     responderRpc("registrar_venta", {
       data: {
         id: 81,
@@ -223,21 +223,21 @@ describe("FormularioVenta (caja por teclado)", () => {
     await userEvent.keyboard("{Enter}");
 
     const medios = await screen.findByRole("listbox", { name: "4. Medio de pago" });
-    expect(opciones(medios)).toEqual(["1Efectivo", "2Transferencia", "3Tarjeta", "4Mixto"]);
-    await userEvent.keyboard("{ArrowRight}{ArrowRight}{Enter}");
+    expect(opciones(medios)).toEqual(["1Efectivo", "2Transferencia", "3Mixto"]);
+    await userEvent.keyboard("{ArrowRight}{Enter}");
 
     // Antes de registrar: la patente en grande para verificarla
     const paso = await screen.findByTestId("paso-confirmar");
     expect(screen.getByTestId("patente-a-confirmar")).toHaveTextContent("AB123CD");
     expect(normal(paso.textContent)).toContain("Servicio:VTV auto");
     expect(normal(paso.textContent)).toContain("Cobra:$ 30.000,00");
-    expect(normal(paso.textContent)).toContain("Medio:Tarjeta");
+    expect(normal(paso.textContent)).toContain("Medio:Transferencia");
     expect(screen.getByRole("button", { name: "Confirmar venta" })).toHaveFocus();
     expect(argumentosRpc("registrar_venta")).toBeUndefined();
     // Esc vuelve al medio; Enter de nuevo vuelve a la confirmación
     await userEvent.keyboard("{Escape}");
     await screen.findByRole("listbox", { name: "4. Medio de pago" });
-    expect(screen.getByRole("option", { name: "Tarjeta" })).toHaveAttribute(
+    expect(screen.getByRole("option", { name: "Transferencia" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
@@ -247,7 +247,7 @@ describe("FormularioVenta (caja por teclado)", () => {
       expect(argumentosRpc("registrar_venta")).toEqual({
         p_turno_id: TURNO_ID,
         p_servicio_id: 1,
-        p_medio_pago: "tarjeta",
+        p_medio_pago: "transferencia",
         p_patente: "AB123CD",
         p_precio_esperado: 30000,
       });
@@ -489,14 +489,14 @@ describe("FormularioVenta: descuentos", () => {
     );
     await userEvent.keyboard("{Enter}");
     await screen.findByRole("listbox", { name: "4. Medio de pago" });
-    await userEvent.keyboard("3{Enter}");
+    await userEvent.keyboard("2{Enter}");
     await confirmar();
     await waitFor(() => {
       expect(argumentosRpc("registrar_venta")).toEqual({
         p_turno_id: TURNO_ID,
         p_servicio_id: 1,
         p_patente: "AA111AA",
-        p_medio_pago: "tarjeta",
+        p_medio_pago: "transferencia",
         p_descuento_id: 4,
         p_precio_esperado: 27000,
       });
@@ -575,10 +575,10 @@ describe("FormularioVenta: descuentos", () => {
 });
 
 describe("FormularioVenta: pago mixto", () => {
-  it("se escribe el efectivo, el resto se calcula solo y se elige con 1/2 o flechas", async () => {
+  it("se escribe el efectivo y el resto, por transferencia, se calcula solo", async () => {
     responderRpc("registrar_venta", { data: ventaRegistrada() });
     renderFormulario();
-    await hastaElMedio("4");
+    await hastaElMedio("3");
     const efectivo = await screen.findByLabelText("5. Pago mixto: ¿cuánto paga en efectivo? ($)");
     expect(efectivo).toHaveFocus();
     expect(screen.getByTestId("resto-mixto")).toHaveTextContent("—");
@@ -597,26 +597,17 @@ describe("FormularioVenta: pago mixto", () => {
     await userEvent.clear(efectivo);
     await userEvent.keyboard("10.000,50");
     expect(normal(screen.getByTestId("resto-mixto").textContent)).toBe("$ 19.999,50");
+    expect(screen.getByText("Resto por transferencia")).toBeInTheDocument();
+    // Sin paso "¿Con qué paga el resto?" (migración 54): Enter sigue a cuánto entregó en efectivo
     await userEvent.keyboard("{Enter}");
-
-    const resto = await screen.findByRole("listbox", { name: "5. ¿Con qué paga el resto?" });
-    expect(resto).toHaveFocus();
-    expect(opciones(resto)).toEqual(["1Transferencia$ 19.999,50", "2Débito / Crédito$ 19.999,50"]);
-    // Flechas y números marcan; Esc vuelve a corregir el efectivo con lo escrito
-    await userEvent.keyboard("{ArrowRight}");
-    expect(screen.getByRole("option", { name: /Débito/ })).toHaveAttribute("aria-selected", "true");
-    await userEvent.keyboard("1");
-    expect(screen.getByRole("option", { name: /Transferencia/ })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    expect(await screen.findByLabelText("6. ¿Cuánto te entregó en efectivo? ($)")).toHaveFocus();
+    expect(screen.queryByRole("listbox", { name: /resto/ })).not.toBeInTheDocument();
+    // Esc vuelve a corregir el efectivo con lo escrito
     await userEvent.keyboard("{Escape}");
     expect(
       await screen.findByLabelText("5. Pago mixto: ¿cuánto paga en efectivo? ($)"),
     ).toHaveValue("10.000,50");
     await userEvent.keyboard("{Enter}");
-    await screen.findByRole("listbox", { name: "5. ¿Con qué paga el resto?" });
-    await userEvent.keyboard("2{Enter}");
 
     // Después pide cuánto entregó en efectivo; pagó justo
     expect(await screen.findByLabelText("6. ¿Cuánto te entregó en efectivo? ($)")).toHaveFocus();
@@ -626,7 +617,7 @@ describe("FormularioVenta: pago mixto", () => {
     await userEvent.keyboard("{Enter}");
     const paso = await screen.findByTestId("paso-confirmar");
     expect(normal(paso.textContent)).toContain(
-      "Medio:Mixto: Efectivo $ 10.000,50 + Tarjeta $ 19.999,50",
+      "Medio:Mixto: Efectivo $ 10.000,50 + Transferencia $ 19.999,50",
     );
     await confirmar();
     await waitFor(() => {
@@ -636,21 +627,21 @@ describe("FormularioVenta: pago mixto", () => {
         p_patente: "AA111AA",
         p_pagos: [
           { medio: "efectivo", monto: 10000.5 },
-          { medio: "tarjeta", monto: 19999.5 },
+          { medio: "transferencia", monto: 19999.5 },
         ],
         p_precio_esperado: 30000,
       });
     });
     const ultima = normal((await screen.findByTestId("ultima-venta")).textContent);
     expect(ultima).toContain("Mixto");
-    expect(ultima).toContain("Efectivo $ 10.000,50 + Tarjeta $ 19.999,50");
+    expect(ultima).toContain("Efectivo $ 10.000,50 + Transferencia $ 19.999,50");
   });
 
   it("con descuento: el resto sale del precio final y da el vuelto sobre el efectivo", async () => {
     responderRpc("descuentos_para_servicio", { data: [JUBILADOS] });
     responderRpc("registrar_venta", { data: ventaRegistrada(CON_JUBILADOS) });
     renderFormulario();
-    await hastaElMedio("4", "2");
+    await hastaElMedio("3", "2");
 
     // Precio final con descuento: $ 27.000
     await userEvent.type(
@@ -659,7 +650,6 @@ describe("FormularioVenta: pago mixto", () => {
     );
     expect(normal(screen.getByTestId("resto-mixto").textContent)).toBe("$ 22.000,00");
     await userEvent.click(screen.getByRole("button", { name: "Continuar" }));
-    await userEvent.click(await screen.findByRole("option", { name: /Transferencia/ }));
 
     const recibido = await screen.findByLabelText("6. ¿Cuánto te entregó en efectivo? ($)");
     await userEvent.keyboard("2000{Enter}");
@@ -669,12 +659,11 @@ describe("FormularioVenta: pago mixto", () => {
     await userEvent.clear(recibido);
     await userEvent.keyboard("10000");
     expect(normal(screen.getByTestId("vuelto").textContent)).toBe("$ 5.000,00");
-    // Esc vuelve a elegir el medio del resto, con el elegido marcado
+    // Esc vuelve a corregir el efectivo, con lo escrito
     await userEvent.keyboard("{Escape}");
-    expect(await screen.findByRole("option", { name: /Transferencia/ })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    expect(
+      await screen.findByLabelText("5. Pago mixto: ¿cuánto paga en efectivo? ($)"),
+    ).toHaveValue("5000");
     await userEvent.keyboard("{Enter}");
     await screen.findByLabelText("6. ¿Cuánto te entregó en efectivo? ($)");
     await userEvent.keyboard("10000{Enter}");
@@ -701,11 +690,9 @@ describe("FormularioVenta: pago mixto", () => {
       error: { code: "22023", message: "Los pagos no suman el precio de la venta" },
     });
     renderFormulario();
-    await hastaElMedio("4");
+    await hastaElMedio("3");
     await screen.findByLabelText("5. Pago mixto: ¿cuánto paga en efectivo? ($)");
     await userEvent.keyboard("10000{Enter}");
-    await screen.findByRole("listbox", { name: "5. ¿Con qué paga el resto?" });
-    await userEvent.keyboard("{Enter}");
     await screen.findByLabelText("6. ¿Cuánto te entregó en efectivo? ($)");
     await userEvent.keyboard("{Enter}");
     await confirmar();
@@ -799,14 +786,12 @@ describe("FormularioVenta: precio esperado", () => {
   it("con descuento: vuelve al descuento con los precios releídos y el reparto mixto en blanco", async () => {
     responderRpc("descuentos_para_servicio", { data: [JUBILADOS] });
     renderCaja();
-    await hastaElMedio("4", "2");
+    await hastaElMedio("3", "2");
     await userEvent.type(
       await screen.findByLabelText("5. Pago mixto: ¿cuánto paga en efectivo? ($)"),
       "7000",
     );
     await userEvent.keyboard("{Enter}");
-    await screen.findByRole("listbox", { name: "5. ¿Con qué paga el resto?" });
-    await userEvent.keyboard("2{Enter}");
     await screen.findByLabelText("6. ¿Cuánto te entregó en efectivo? ($)");
 
     // El admin cambió el precio: el mismo descuento ahora deja $ 27.900
@@ -836,7 +821,7 @@ describe("FormularioVenta: precio esperado", () => {
     // El reparto anterior no sirve para el precio nuevo
     await userEvent.keyboard("{Enter}");
     await screen.findByRole("listbox", { name: "4. Medio de pago" });
-    await userEvent.keyboard("4{Enter}");
+    await userEvent.keyboard("3{Enter}");
     expect(
       await screen.findByLabelText("5. Pago mixto: ¿cuánto paga en efectivo? ($)"),
     ).toHaveValue("");
@@ -914,7 +899,7 @@ describe("FormularioVenta: descuento que deja de estar disponible", () => {
     await queryClient.invalidateQueries({ queryKey: ["descuentos"] });
     expect(await screen.findByTestId("descuento-perdido")).toBeInTheDocument();
 
-    await userEvent.keyboard("3{Enter}");
+    await userEvent.keyboard("2{Enter}");
     const lista = await screen.findByRole("listbox", { name: "Descuento (opcional) · VTV auto" });
     expect(screen.getByRole("alert")).toHaveTextContent(
       "El descuento elegido ya no está disponible: elegí otro.",
@@ -929,14 +914,14 @@ describe("FormularioVenta: descuento que deja de estar disponible", () => {
 
     await userEvent.keyboard("2{Enter}");
     await screen.findByRole("listbox", { name: "4. Medio de pago" });
-    await userEvent.keyboard("3{Enter}");
+    await userEvent.keyboard("2{Enter}");
     await confirmar();
     await waitFor(() => {
       expect(argumentosRpc("registrar_venta")).toEqual({
         p_turno_id: TURNO_ID,
         p_servicio_id: 1,
         p_patente: "AA111AA",
-        p_medio_pago: "tarjeta",
+        p_medio_pago: "transferencia",
         p_descuento_id: 5,
         p_precio_esperado: 25000,
       });
@@ -986,7 +971,7 @@ describe("FormularioVenta: caja cerrada", () => {
     });
     renderFormulario();
     await elegirServicioDeAutos("1");
-    await userEvent.keyboard("3{Enter}");
+    await userEvent.keyboard("2{Enter}");
     await confirmar();
     await waitFor(() => {
       expect(turnoNoDisponible).toHaveBeenCalledWith(
@@ -1131,7 +1116,7 @@ describe("FormularioVenta: certificado condicional", () => {
     await screen.findByRole("listbox", { name: "¿Cuánto paga? · Auto particular" });
     await userEvent.keyboard("2{Enter}");
     await screen.findByRole("listbox", { name: "4. Medio de pago" });
-    await userEvent.keyboard("3{Enter}");
+    await userEvent.keyboard("2{Enter}");
 
     const paso = await screen.findByTestId("paso-confirmar");
     expect(normal(paso.textContent)).toContain("Cobra:$ 35.500,00");
@@ -1147,7 +1132,7 @@ describe("FormularioVenta: certificado condicional", () => {
         p_turno_id: TURNO_ID,
         p_servicio_id: 6,
         p_patente: "AA111AA",
-        p_medio_pago: "tarjeta",
+        p_medio_pago: "transferencia",
         p_precio_esperado: 35500,
         p_condicional: true,
         p_condicional_mitad: true,
@@ -1241,7 +1226,7 @@ describe("FormularioVenta: certificado condicional", () => {
     await screen.findByRole("listbox", { name: "¿Cuánto paga? · Auto particular" });
     await userEvent.keyboard("{Enter}");
     await screen.findByRole("listbox", { name: "4. Medio de pago" });
-    await userEvent.keyboard("3{Enter}");
+    await userEvent.keyboard("2{Enter}");
     await confirmar();
     expect(await screen.findByLabelText("1. Patente")).toHaveValue("AA111AA");
     expect(screen.getByRole("alert")).toHaveTextContent(mensaje);
@@ -1329,7 +1314,7 @@ describe("FormularioVenta: vuelve de condicional", () => {
     expect(screen.getByTestId("vuelta-en-curso")).toHaveTextContent(
       "Vuelta de condicional: el 50% que faltaba",
     );
-    await userEvent.keyboard("3{Enter}");
+    await userEvent.keyboard("2{Enter}");
     const confirmacion = await screen.findByTestId("paso-confirmar");
     expect(normal(confirmacion.textContent)).toContain(
       "Vuelta de la condicional del 02/11/2026: cobra el 50% que faltaba.",
@@ -1339,7 +1324,7 @@ describe("FormularioVenta: vuelve de condicional", () => {
       expect(argumentosRpc("registrar_venta")).toEqual({
         p_turno_id: TURNO_ID,
         p_servicio_id: 1,
-        p_medio_pago: "tarjeta",
+        p_medio_pago: "transferencia",
         p_patente: "AB123CD",
         p_precio_esperado: 35500,
       });
@@ -1511,13 +1496,13 @@ describe("FormularioVenta: vuelve de condicional", () => {
     await screen.findByRole("listbox", { name: "¿Qué hacés con la condicional vencida?" });
     await userEvent.keyboard("{Enter}");
     await screen.findByRole("listbox", { name: "4. Medio de pago" });
-    await userEvent.keyboard("3{Enter}");
+    await userEvent.keyboard("2{Enter}");
     await confirmar();
     await waitFor(() => {
       expect(argumentosRpc("registrar_venta")).toEqual({
         p_turno_id: TURNO_ID,
         p_servicio_id: 1,
-        p_medio_pago: "tarjeta",
+        p_medio_pago: "transferencia",
         p_patente: "AB123CD",
         p_precio_esperado: 35500,
         p_vuelta_vencida: 70,
@@ -1586,7 +1571,7 @@ describe("FormularioVenta: vuelve de condicional", () => {
     await hastaLosServicios("AB123CD");
     await userEvent.keyboard("1{Enter}");
     await screen.findByRole("listbox", { name: "4. Medio de pago" });
-    await userEvent.keyboard("3{Enter}");
+    await userEvent.keyboard("2{Enter}");
     await confirmar();
     expect(await screen.findByLabelText("1. Patente")).toHaveValue("AB123CD");
     expect(screen.getByRole("alert")).toHaveTextContent(mensaje);
@@ -1713,5 +1698,23 @@ describe("FormularioVenta: patente repetida", () => {
     );
     expect(screen.queryByRole("listbox", { name: "2. Categoría" })).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
+describe("FormularioVenta: doble confirmación", () => {
+  it("dos Enter o clics seguidos registran una sola venta", async () => {
+    responderRpc("registrar_venta", { data: ventaRegistrada() });
+    renderFormulario();
+    await hastaElMedio("2");
+    const paso = await screen.findByTestId("paso-confirmar");
+    // Los tres llegan en el mismo tramo, antes de que React vuelva a dibujar: el botón sigue
+    // habilitado y `isPending` todavía es false (como un doble Enter o doble clic rápido).
+    act(() => {
+      fireEvent.submit(paso);
+      fireEvent.submit(paso);
+      fireEvent.click(within(paso).getByRole("button", { name: "Confirmar venta" }));
+    });
+    await screen.findByTestId("ultima-venta");
+    expect(ventasPedidas()).toBe(1);
   });
 });

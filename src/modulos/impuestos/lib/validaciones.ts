@@ -4,7 +4,7 @@ import type { Enums, Tablas } from "@/compartido/tipos";
 type MedioPago = Enums["medio_pago"];
 
 /** Orden en que se muestran y se guardan los medios. */
-const ORDEN: readonly MedioPago[] = ["efectivo", "transferencia", "tarjeta"];
+const ORDEN: readonly MedioPago[] = ["efectivo", "transferencia"];
 
 /** Lo que se escribe en el formulario (el valor como texto, igual que en el input). */
 export interface FormularioImpuesto {

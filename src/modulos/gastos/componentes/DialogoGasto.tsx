@@ -36,6 +36,7 @@ import {
 } from "../api/consultas";
 import { categoriasParaCargar } from "../lib/categorias";
 import { validarGasto, type ErroresGasto, type FormularioGasto } from "../lib/validaciones";
+import { useEnvioUnico } from "@/compartido/lib/envio-unico";
 
 const VACIO: FormularioGasto = { categoriaId: "", monto: "", fuente: "", nota: "" };
 
@@ -91,6 +92,8 @@ export function DialogoGasto({
   function cambiar<K extends keyof FormularioGasto>(clave: K, valor: FormularioGasto[K]) {
     setFormulario((actual) => ({ ...actual, [clave]: valor }));
   }
+
+  const unaVez = useEnvioUnico();
 
   async function enviar(evento: SubmitEvent<HTMLFormElement>) {
     evento.preventDefault();
@@ -151,7 +154,14 @@ export function DialogoGasto({
             {soloCaja ? " para la caja. Consultá con el administrador." : "."}
           </p>
         ) : (
-          <form className="flex flex-col gap-4" onSubmit={(e) => void enviar(e)} noValidate>
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void unaVez(() => enviar(e));
+            }}
+            noValidate
+          >
             <Campo id="gasto-categoria" etiqueta="Categoría" error={errores.categoriaId}>
               <Select
                 value={formulario.categoriaId}

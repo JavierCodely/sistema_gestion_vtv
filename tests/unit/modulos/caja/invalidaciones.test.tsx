@@ -29,7 +29,7 @@ function conCliente<T>(hook: () => T) {
 const VENTA = {
   turnoId: 5,
   servicioId: 1,
-  cobro: { medio: "tarjeta" as const },
+  cobro: { medio: "transferencia" as const },
   patente: null,
   descuentoId: null,
   precioEsperado: 30000,
@@ -57,7 +57,7 @@ describe("useRegistrarVenta: lo que vuelve a leer", () => {
     expect(argumentosRpc("registrar_venta")).toEqual({
       p_turno_id: 5,
       p_servicio_id: 1,
-      p_medio_pago: "tarjeta",
+      p_medio_pago: "transferencia",
       p_precio_esperado: 30000,
     });
     expect(invalidadas()).toEqual(

@@ -30,11 +30,12 @@ import {
   type ErroresMovimiento,
   type FormularioMovimiento,
 } from "../lib/validaciones";
+import { useEnvioUnico } from "@/compartido/lib/envio-unico";
 
 /**
  * Movimiento manual de una cuenta de Fondos (fondo/saldo inicial, ingreso o retiro). En efectivo usa
  * `movimiento_efectivo` (devuelve el saldo, que se muestra al confirmar); en transferencia y
- * crédito/débito, `movimiento_fondos`. Los errores de la BD (ej. "No alcanza el saldo…") se muestran
+ * `movimiento_fondos`. Los errores de la BD (ej. "No alcanza el saldo…") se muestran
  * en el diálogo.
  */
 export function DialogoMovimientoFondos({
@@ -53,6 +54,8 @@ export function DialogoMovimientoFondos({
   const [errores, setErrores] = useState<ErroresMovimiento>({});
   const [errorServidor, setErrorServidor] = useState<string | null>(null);
   const titulo = nombreMovimiento(cuenta, tipo);
+
+  const unaVez = useEnvioUnico();
 
   async function enviar(evento: SubmitEvent<HTMLFormElement>) {
     evento.preventDefault();
@@ -89,7 +92,14 @@ export function DialogoMovimientoFondos({
           <DialogTitle>{titulo}</DialogTitle>
           <DialogDescription>{descripcionMovimiento(cuenta, tipo)}</DialogDescription>
         </DialogHeader>
-        <form className="flex flex-col gap-4" onSubmit={(e) => void enviar(e)} noValidate>
+        <form
+          className="flex flex-col gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void unaVez(() => enviar(e));
+          }}
+          noValidate
+        >
           <Campo id="movimiento-monto" etiqueta="Monto ($)" error={errores.monto}>
             <Input
               id="movimiento-monto"

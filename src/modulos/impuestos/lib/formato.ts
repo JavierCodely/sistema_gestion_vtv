@@ -10,7 +10,7 @@ export function formatearValorImpuesto({ tipo, valor }: Pick<Impuesto, "tipo" | 
     : `${formatearMoneda(valor)} por venta`;
 }
 
-/** "Todos" si alcanza a los tres medios; si no, "Efectivo y Tarjeta". */
+/** "Todos" si alcanza a los dos medios; si no, "Efectivo" o "Transferencia". */
 export function formatearMedios(medios: Impuesto["medios"]) {
   if (MEDIOS.every((m) => medios.includes(m))) return "Todos";
   return formatearLista(MEDIOS.filter((m) => medios.includes(m)).map((m) => NOMBRES_MEDIOS[m]));

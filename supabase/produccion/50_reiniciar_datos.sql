@@ -39,7 +39,7 @@
       || 'public.gastos, '
         -- Certificados: compras y kardex (stock)
       || 'public.compras_certificado, public.movimientos_certificado, '
-        -- Fondos: caja de cambio y manuales de transferencia/tarjeta
+        -- Fondos: caja de cambio y manuales de transferencia
       || 'public.movimientos_efectivo, public.movimientos_fondos, '
         -- Turnos y alertas
       || 'public.turnos, public.alertas';
