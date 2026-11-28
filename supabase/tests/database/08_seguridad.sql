@@ -83,7 +83,7 @@ reset role;
 -- Aislamiento: de un turno cerrado el cajero no ve nada (migración 33)
 reset role;
 select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja) as turno1 \gset
-select registrar_venta(:turno1, :servicio, 'tarjeta', p_patente => $p$AB123CD$p$);
+select registrar_venta(:turno1, :servicio, 'transferencia', p_patente => $p$AB123CD$p$);
 reset role;
 select pg_temp.como(:'admin');
 select cerrar_turno(:turno1);
@@ -93,14 +93,14 @@ select is((select count(*)::int from ventas), 0, 'un cajero no ve ventas de turn
 select is((select count(*)::int from v_movimientos_caja), 0, 'ni en la vista de movimientos');
 select is((select count(*)::int from movimientos_certificado), 0, 'un cajero no ve el kardex');
 select throws_ok($$insert into ventas (turno_id, caja_id, usuario_id, servicio_id, servicio_nombre, categoria_id, precio, medio_pago)
-                   values (1, 1, auth.uid(), 1, 'x', 1, 1, 'tarjeta')$$,
+                   values (1, 1, auth.uid(), 1, 'x', 1, 1, 'transferencia')$$,
   '42501', null, 'no se insertan ventas directo en la tabla');
 reset role;
 
 -- Usuario desactivado no opera
 update perfiles set activo = false where id = :'cajero2';
 select pg_temp.como(:'cajero2');
-select throws_ok(format($$select registrar_venta(%s, %s, 'tarjeta', p_patente => $p$AB123CD$p$)$$, :turno2, :servicio),
+select throws_ok(format($$select registrar_venta(%s, %s, 'transferencia', p_patente => $p$AB123CD$p$)$$, :turno2, :servicio),
   '42501', 'Usuario no autenticado o desactivado', 'un usuario desactivado no puede vender');
 reset role;
 

@@ -35,6 +35,12 @@ export const rutas: RouteObject[] = [
             }),
           },
           {
+            path: "estadisticas",
+            lazy: async () => ({
+              Component: (await import("@/modulos/estadisticas/paginas/Estadisticas")).Estadisticas,
+            }),
+          },
+          {
             path: "ventas",
             lazy: async () => ({
               Component: (await import("@/modulos/ventas/paginas/Ventas")).Ventas,

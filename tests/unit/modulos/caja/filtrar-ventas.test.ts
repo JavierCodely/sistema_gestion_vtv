@@ -21,10 +21,10 @@ const VENTAS = [
     precio: 18000,
     venta_pagos: [
       { medio: "efectivo", monto: 5000 },
-      { medio: "tarjeta", monto: 13000 },
+      { medio: "transferencia", monto: 13000 },
     ],
   }),
-  ventaDePrueba({ id: 1, patente: null, ...motos, medio_pago: "tarjeta" }),
+  ventaDePrueba({ id: 1, patente: null, ...motos, medio_pago: "transferencia" }),
 ];
 
 const ids = (ventas: { id: number }[]) => ventas.map((v) => v.id);
@@ -41,13 +41,14 @@ describe("filtrarVentas", () => {
 
   it("por medio: una mixta aparece en cada medio que usó; 'mixto', solo las mixtas", () => {
     expect(ids(filtrarVentas(VENTAS, { ...SIN_FILTROS, medio: "efectivo" }))).toEqual([4, 2]);
-    expect(ids(filtrarVentas(VENTAS, { ...SIN_FILTROS, medio: "tarjeta" }))).toEqual([2, 1]);
-    expect(ids(filtrarVentas(VENTAS, { ...SIN_FILTROS, medio: "transferencia" }))).toEqual([3]);
+    expect(ids(filtrarVentas(VENTAS, { ...SIN_FILTROS, medio: "transferencia" }))).toEqual([
+      3, 2, 1,
+    ]);
     expect(ids(filtrarVentas(VENTAS, { ...SIN_FILTROS, medio: "mixto" }))).toEqual([2]);
   });
 
   it("combina patente, categoría y medio", () => {
-    const filtro = { patente: "AB", categoriaId: 1, medio: "tarjeta" as const };
+    const filtro = { patente: "AB", categoriaId: 1, medio: "transferencia" as const };
     expect(ids(filtrarVentas(VENTAS, filtro))).toEqual([2]);
     expect(hayFiltros(filtro)).toBe(true);
   });

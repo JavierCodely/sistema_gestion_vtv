@@ -14,9 +14,9 @@ select throws_ok(format('select registrar_venta(%s, %s, %L)', :turno, :servicio,
 select throws_ok(format('select registrar_venta(%s, %s, %L, %L)', :turno, :servicio, 'efectivo', '   '),
   '22023', 'Ingresá la patente del vehículo', 'una patente en blanco se rechaza');
 select throws_ok(format('select registrar_venta(%s, %s, p_pagos => %L)', :turno, :servicio,
-  '[{"medio":"efectivo","monto":5000},{"medio":"tarjeta","monto":15000}]'),
+  '[{"medio":"efectivo","monto":5000},{"medio":"transferencia","monto":15000}]'),
   '22023', 'Ingresá la patente del vehículo', 'también en un pago mixto');
-select is((registrar_venta(:turno, :servicio, 'tarjeta', ' ab 123 cd ')).patente, 'AB123CD',
+select is((registrar_venta(:turno, :servicio, 'transferencia', ' ab 123 cd ')).patente, 'AB123CD',
   'con patente se registra (normalizada)');
 select is((select count(*)::int from ventas where turno_id = :turno), 1,
   'las rechazadas no dejaron ventas');

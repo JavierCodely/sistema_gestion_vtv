@@ -79,7 +79,6 @@ function TablaTurnos({ rango }: { rango: RangoFechas }) {
                   <TableHead className="text-right">Ventas</TableHead>
                   <TableHead className="text-right">Efectivo</TableHead>
                   <TableHead className="text-right">Transferencia</TableHead>
-                  <TableHead className="text-right">Tarjeta</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead className="text-right">Gastos</TableHead>
                   <TableHead className="text-right">Neto</TableHead>
@@ -120,9 +119,6 @@ function TablaTurnos({ rango }: { rango: RangoFechas }) {
                     </TableCell>
                     <TableCell data-label="Transferencia" className="text-right tabular-nums">
                       {formatearMoneda(t.ventas_transferencia)}
-                    </TableCell>
-                    <TableCell data-label="Tarjeta" className="text-right tabular-nums">
-                      {formatearMoneda(t.ventas_tarjeta)}
                     </TableCell>
                     <TableCell
                       data-label="Total"

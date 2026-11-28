@@ -37,7 +37,7 @@ describe("DialogoAnularVenta", () => {
     ).toBeInTheDocument();
     unmount();
     renderConQuery(
-      <DialogoAnularVenta venta={venta({ medio_pago: "tarjeta" })} onCerrar={vi.fn()} />,
+      <DialogoAnularVenta venta={venta({ medio_pago: "transferencia" })} onCerrar={vi.fn()} />,
     );
     expect(screen.queryByText(/el monto sale de la caja/)).not.toBeInTheDocument();
   });

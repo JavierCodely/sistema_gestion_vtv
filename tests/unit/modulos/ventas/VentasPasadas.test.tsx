@@ -66,7 +66,7 @@ describe("VentasPasadas (admin)", () => {
   it("lista solo ventas sin turno, con su fecha, caja y cuándo se cargaron", async () => {
     responder("ventas", "select", {
       data: [
-        ventaPasada({ id: 90, medio_pago: "tarjeta", patente: "AB123CD" }),
+        ventaPasada({ id: 90, medio_pago: "transferencia", patente: "AB123CD" }),
         ventaPasada({ id: 89, anulada: true, anulada_motivo: "Duplicada" }),
       ],
     });
@@ -77,7 +77,7 @@ describe("VentasPasadas (admin)", () => {
     expect(within(fila).getByText("21/11/2026, 12:00")).toBeInTheDocument();
     expect(within(fila).getByText("Caja 1")).toBeInTheDocument();
     expect(within(fila).getByText("AB123CD")).toBeInTheDocument();
-    expect(within(fila).getByText("Tarjeta")).toBeInTheDocument();
+    expect(within(fila).getByText("Transferencia")).toBeInTheDocument();
     expect(normal(within(fila).getByText(/30\.000/).textContent)).toBe("$ 30.000,00");
     expect(within(fila).getByRole("button", { name: "Anular venta N° 90" })).toBeInTheDocument();
 
@@ -178,7 +178,7 @@ describe("VentasPasadas (admin)", () => {
     await userEvent.click(within(dialogo).getByLabelText("Servicio"));
     await userEvent.click(await screen.findByRole("option", { name: "VTV auto" }));
     await userEvent.click(within(dialogo).getByLabelText("Medio de pago"));
-    await userEvent.click(await screen.findByRole("option", { name: "Tarjeta" }));
+    await userEvent.click(await screen.findByRole("option", { name: "Transferencia" }));
     await userEvent.click(within(dialogo).getByRole("button", { name: "Cargar venta" }));
 
     await waitFor(() => {
@@ -211,7 +211,7 @@ describe("VentasPasadas (admin)", () => {
     await userEvent.click(within(dialogo).getByLabelText("Servicio"));
     await userEvent.click(await screen.findByRole("option", { name: "VTV auto" }));
     await userEvent.click(within(dialogo).getByLabelText("Medio de pago"));
-    await userEvent.click(await screen.findByRole("option", { name: "Tarjeta" }));
+    await userEvent.click(await screen.findByRole("option", { name: "Transferencia" }));
     await userEvent.click(within(dialogo).getByRole("button", { name: "Cargar venta" }));
 
     expect(

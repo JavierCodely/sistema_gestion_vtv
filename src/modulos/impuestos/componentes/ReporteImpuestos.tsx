@@ -27,11 +27,10 @@ function Totales({ fila }: { fila: FilaResumenImpuestos }) {
     ["Total", formatearMoneda(fila.total)],
     ["Efectivo", formatearMoneda(fila.total_efectivo)],
     ["Transferencia", formatearMoneda(fila.total_transferencia)],
-    ["Tarjeta", formatearMoneda(fila.total_tarjeta)],
     ["Ventas alcanzadas", formatearNumero(fila.cantidad_ventas)],
   ];
   return (
-    <dl className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3 lg:grid-cols-5">
+    <dl className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3 lg:grid-cols-4">
       {datos.map(([etiqueta, valor]) => (
         <div key={etiqueta}>
           <dt className="text-xs text-muted-foreground">{etiqueta}</dt>
@@ -112,7 +111,6 @@ export function ReporteImpuestos() {
                     <TableHead className="text-right">Ventas</TableHead>
                     <TableHead className="text-right">Efectivo</TableHead>
                     <TableHead className="text-right">Transferencia</TableHead>
-                    <TableHead className="text-right">Tarjeta</TableHead>
                     <TableHead className="text-right">Total</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -130,9 +128,6 @@ export function ReporteImpuestos() {
                       </TableCell>
                       <TableCell data-label="Transferencia" className="text-right tabular-nums">
                         {formatearMoneda(fila.total_transferencia)}
-                      </TableCell>
-                      <TableCell data-label="Tarjeta" className="text-right tabular-nums">
-                        {formatearMoneda(fila.total_tarjeta)}
                       </TableCell>
                       <TableCell data-label="Total" className="text-right font-medium tabular-nums">
                         {formatearMoneda(fila.total)}

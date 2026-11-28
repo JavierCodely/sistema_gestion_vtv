@@ -26,11 +26,11 @@ reset role;
 
 select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja, 100) as turno \gset
 select (registrar_venta(:turno, :servicio, 'efectivo', 'tp 901 xq')).id as v1 \gset
-select (registrar_venta(:turno, :servicio, 'tarjeta', 'TP901XQ')).id as v2 \gset
-select (registrar_venta(:turno, :servicio, 'tarjeta', 'TP901XQ')).id as v_anulada \gset
-select (registrar_venta(:turno, :servicio, 'tarjeta', 'TP901XQ')).id as v_ayer \gset
-select (registrar_venta(:turno, :servicio, 'tarjeta', 'TP901XQ')).id as v_hace_un_anio \gset
-select (registrar_venta(:turno, :servicio, 'tarjeta', 'ZZ999ZZ')).id as v_otra \gset
+select (registrar_venta(:turno, :servicio, 'transferencia', 'TP901XQ')).id as v2 \gset
+select (registrar_venta(:turno, :servicio, 'transferencia', 'TP901XQ')).id as v_anulada \gset
+select (registrar_venta(:turno, :servicio, 'transferencia', 'TP901XQ')).id as v_ayer \gset
+select (registrar_venta(:turno, :servicio, 'transferencia', 'TP901XQ')).id as v_hace_un_anio \gset
+select (registrar_venta(:turno, :servicio, 'transferencia', 'ZZ999ZZ')).id as v_otra \gset
 reset role;
 -- Otros días (migración 49: no avisan): ayer a las 23:59 (hora AR) y el mismo día del año pasado.
 update ventas set creado_en = ((fecha_local(now()) - 1) + time '23:59')

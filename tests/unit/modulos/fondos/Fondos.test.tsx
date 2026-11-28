@@ -105,14 +105,6 @@ beforeEach(() => {
         neto: -2500,
         cantidad_movimientos: 4,
       },
-      {
-        cuenta: "tarjeta",
-        saldo: 13000,
-        ingresos: 13000,
-        egresos: 0,
-        neto: 13000,
-        cantidad_movimientos: 1,
-      },
     ],
   });
   responder("v_movimientos_fondos", "select", {
@@ -151,12 +143,6 @@ beforeEach(() => {
     { data: LIBRO_TRANSFERENCIA },
     { cuando: conFiltro("eq", "cuenta", "transferencia") },
   );
-  responder(
-    "v_movimientos_fondos",
-    "select",
-    { data: [] },
-    { cuando: conFiltro("eq", "cuenta", "tarjeta") },
-  );
   responder("v_movimientos_efectivo", "select", {
     data: [
       { id: 2, saldo_resultante: 12500.5 },
@@ -169,8 +155,7 @@ beforeEach(() => {
         cantidad_ventas: 1,
         total: 18000,
         total_efectivo: 5000,
-        total_transferencia: 0,
-        total_tarjeta: 13000,
+        total_transferencia: 13000,
         incluido_en_cuentas: true,
       },
     ],
@@ -186,8 +171,7 @@ beforeEach(() => {
         usuario_nombre: "Carlos Demo",
         precio: 18000,
         pago_efectivo: 5000,
-        pago_transferencia: null,
-        pago_tarjeta: 13000,
+        pago_transferencia: 13000,
         anulada: false,
         anulada_motivo: null,
       },
@@ -201,7 +185,6 @@ beforeEach(() => {
         precio: 9000,
         pago_efectivo: 4000,
         pago_transferencia: 5000,
-        pago_tarjeta: null,
         anulada: true,
         anulada_motivo: "Error de carga",
       },
@@ -227,8 +210,14 @@ describe("Fondos (admin)", () => {
       "$ 25.500,00",
     );
     expect(screen.getByTestId("resumen-transferencia-neto")).toHaveClass("text-destructive");
-    expect(normal(screen.getByTestId("resumen-tarjeta-saldo").textContent)).toBe("$ 13.000,00");
-    expect(screen.getByTestId("resumen-tarjeta-saldo")).not.toHaveClass("text-destructive");
+    // Sin Crédito/Débito (migración 54): solo efectivo y transferencia.
+    expect(screen.queryByTestId("resumen-tarjeta-saldo")).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Crédito/Débito" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
+      "Efectivo",
+      "Transferencia",
+      "Mixto",
+    ]);
     // El saldo de efectivo sale de la caja de cambio (useSaldoEfectivo).
     expect(normal((await screen.findByTestId("resumen-efectivo-saldo")).textContent)).toBe(
       "$ 12.500,50",
@@ -318,12 +307,15 @@ describe("Fondos (admin)", () => {
 
   it("recuerda la pestaña elegida en la URL y para la próxima vez", async () => {
     const { router } = renderRuta("/admin/fondos", admin);
-    await userEvent.click(await screen.findByRole("tab", { name: "Crédito/Débito" }));
+    await userEvent.click(await screen.findByRole("tab", { name: "Transferencia" }));
     await waitFor(() => {
-      expect(router.state.location.search).toBe("?pestana=tarjeta");
+      expect(router.state.location.search).toBe("?pestana=transferencia");
     });
-    expect(localStorage.getItem(CLAVE_PESTANA)).toBe("tarjeta");
-    expect(await screen.findByText("No hay movimientos en este período.")).toBeInTheDocument();
+    expect(localStorage.getItem(CLAVE_PESTANA)).toBe("transferencia");
+    expect(screen.getByRole("tab", { name: "Transferencia" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 
   it("vuelve a la última pestaña elegida si se entra sin parámetro", async () => {
@@ -387,7 +379,7 @@ describe("Fondos (admin)", () => {
   });
 
   it("valida el movimiento manual antes de llamar a la BD", async () => {
-    renderRuta("/admin/fondos?pestana=tarjeta", admin);
+    renderRuta("/admin/fondos?pestana=transferencia", admin);
     await userEvent.click(await screen.findByRole("button", { name: "Ingreso" }));
     const dialogo = await screen.findByRole("dialog", { name: "Ingreso" });
     await userEvent.type(within(dialogo).getByLabelText("Monto ($)"), "12,345");
@@ -450,7 +442,8 @@ describe("Fondos (admin)", () => {
     expect(await screen.findByTestId("mixtas-cantidad")).toHaveTextContent("1");
     expect(normal(screen.getByTestId("mixtas-total").textContent)).toBe("$ 18.000,00");
     expect(normal(screen.getByTestId("mixtas-efectivo").textContent)).toBe("$ 5.000,00");
-    expect(normal(screen.getByTestId("mixtas-tarjeta").textContent)).toBe("$ 13.000,00");
+    expect(normal(screen.getByTestId("mixtas-transferencia").textContent)).toBe("$ 13.000,00");
+    expect(screen.queryByTestId("mixtas-tarjeta")).not.toBeInTheDocument();
 
     const venta = await screen.findByTestId("venta-mixta-9");
     expect(normal(venta.textContent)).toContain("VTV auto — AB123CD");

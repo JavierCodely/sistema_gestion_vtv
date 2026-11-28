@@ -32,7 +32,7 @@ reset role;
 select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja, 100) as turno \gset
 select (registrar_venta(:turno, :servicio, 'efectivo', p_patente => $p$AB123CD$p$)).id as v1 \gset
 select (registrar_venta(:turno, :servicio, p_pagos =>
-  '[{"medio":"transferencia","monto":5000},{"medio":"tarjeta","monto":15000}]', p_patente => $p$AB123CD$p$)).id as v2 \gset
+  '[{"medio":"efectivo","monto":5000},{"medio":"transferencia","monto":15000}]', p_patente => $p$AB123CD$p$)).id as v2 \gset
 select (registrar_venta(:turno, :servicio, 'transferencia', p_patente => $p$AB123CD$p$)).id as v3 \gset
 select (registrar_gasto(:comida, 30, 'efectivo', 'Café', :turno)).id as g1 \gset
 
@@ -52,10 +52,13 @@ select * from resumen_turnos(fecha_local(now()), fecha_local(now())) \gset h1_
 select is((:h1_cantidad_turnos - :h0_cantidad_turnos)::numeric, 1::numeric, 'suma el turno abierto hoy');
 select is((:h1_turnos_abiertos - :h0_turnos_abiertos)::numeric, 1::numeric, 'cuenta los turnos abiertos');
 select is((:h1_ventas_cantidad - :h0_ventas_cantidad)::numeric, 2::numeric, 'cuenta las ventas sin anuladas');
-select is((:h1_ventas_efectivo - :h0_ventas_efectivo)::numeric, 20000.00, 'efectivo de las ventas');
-select is((:h1_ventas_transferencia - :h0_ventas_transferencia)::numeric, 5000.00,
+select is((:h1_ventas_efectivo - :h0_ventas_efectivo)::numeric, 25000.00,
+  'efectivo de las ventas, con la parte del pago mixto');
+select is((:h1_ventas_transferencia - :h0_ventas_transferencia)::numeric, 15000.00,
   'transferencia: la parte del pago mixto, sin la venta anulada');
-select is((:h1_ventas_tarjeta - :h0_ventas_tarjeta)::numeric, 15000.00, 'tarjeta: la parte del pago mixto');
+select is((select count(*)::int from information_schema.columns
+           where table_schema = 'public' and table_name = 'v_turnos' and column_name like '%tarjeta%'), 0,
+  'sin tarjeta (migración 54): solo efectivo y transferencia');
 select is((:h1_ventas_total - :h0_ventas_total)::numeric, 40000.00, 'total de ventas sin anuladas');
 select is((:h1_gastos_total - :h0_gastos_total)::numeric, 30.00, 'gastos del turno');
 select is((:h1_neto - :h0_neto)::numeric, 39970.00, 'neto = ventas − gastos');

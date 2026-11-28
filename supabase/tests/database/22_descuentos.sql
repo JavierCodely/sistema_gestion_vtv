@@ -133,11 +133,11 @@ select is((select row(monto_descuento, precio)::text from ventas where id = :v_r
 
 -- Con pago mixto: las partes suman el precio final
 select throws_ok(format($$select registrar_venta(%s, %s, p_descuento_id => %s,
-    p_pagos => '[{"medio":"efectivo","monto":5000},{"medio":"tarjeta","monto":15000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio, :promo),
+    p_pagos => '[{"medio":"efectivo","monto":5000},{"medio":"transferencia","monto":15000}]', p_patente => $p$AB123CD$p$)$$, :turno, :servicio, :promo),
   '22023', 'Las partes del pago suman $ 20.000,00 y el precio es $ 15.000,00: tienen que coincidir',
   'el pago mixto se compara con el precio con descuento');
 select (registrar_venta(:turno, :servicio, p_descuento_id => :promo,
-          p_pagos => '[{"medio":"efectivo","monto":5000},{"medio":"tarjeta","monto":10000}]', p_patente => $p$AB123CD$p$)).id as v_promo \gset
+          p_pagos => '[{"medio":"efectivo","monto":5000},{"medio":"transferencia","monto":10000}]', p_patente => $p$AB123CD$p$)).id as v_promo \gset
 select is((select row(precio, monto_descuento, medio_pago)::text from ventas where id = :v_promo),
   row(15000.00, 5000.00, null::text)::text, 'descuento fijo con pago mixto');
 
@@ -214,9 +214,9 @@ select is((select row(descuento_nombre, monto_descuento, precio_lista, monto)::t
 reset role;
 
 -- Totales con el precio final
-select is((select row(ventas_total, ventas_efectivo, ventas_transferencia, ventas_tarjeta, efectivo_en_caja)::text
+select is((select row(ventas_total, ventas_efectivo, ventas_transferencia, efectivo_en_caja)::text
            from v_turnos where id = :turno),
-  row(33300.00, 23000.00, 300.00, 10000.00, 23100.00)::text, 'los totales del turno usan el precio final');
+  row(33300.00, 23000.00, 10300.00, 23100.00)::text, 'los totales del turno usan el precio final');
 select pg_temp.como(:'admin');
 select is((select total_ventas from resumen_diario(fecha_local(now()), fecha_local(now()))), 33300.00::numeric,
   'resumen_diario usa el precio final');
@@ -249,7 +249,7 @@ select lives_ok(format('delete from descuentos where id = %s', :gigante),
   'uno sin ventas sí (con su disponibilidad)');
 
 -- Venta pasada: sin descuento -------------------------------------------------------------------------
-select (registrar_venta_pasada(fecha_local(now()) - 3, '10:00', :caja, :servicio, 'tarjeta', 7000)).id as pasada \gset
+select (registrar_venta_pasada(fecha_local(now()) - 3, '10:00', :caja, :servicio, 'transferencia', 7000)).id as pasada \gset
 reset role;
 select is((select row(precio_lista, monto_descuento, precio, descuento_id)::text from ventas where id = :pasada),
   row(7000.00, 0.00, 7000.00, null::bigint)::text, 'la venta pasada queda sin descuento');

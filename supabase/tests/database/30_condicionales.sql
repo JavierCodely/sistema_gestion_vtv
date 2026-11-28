@@ -126,21 +126,21 @@ reset role;
 
 -- Vencida: lo pagado queda en la patente; se cobra entera o se hace otra condicional -----------------
 select pg_temp.como(:'cajero');
-select (registrar_venta(:turno, :auto, 'tarjeta', 'CD456EF', p_condicional => true)).id as v_vieja \gset
+select (registrar_venta(:turno, :auto, 'transferencia', 'CD456EF', p_condicional => true)).id as v_vieja \gset
 reset role;
 update ventas set condicional_vence = fecha_local(now()) - 1 where id = :v_vieja;
 select pg_temp.como(:'cajero');
 select is((select row(vigente, pagado)::text from condicionales_de_patente('CD456EF')), row(false, 71000.00::numeric)::text,
   'vencido el plazo, sigue en la patente (lo pagado) pero no está vigente');
-select is((registrar_venta(:turno, :auto, 'tarjeta', 'CD456EF')).precio, 71000.00::numeric(12,2),
+select is((registrar_venta(:turno, :auto, 'transferencia', 'CD456EF')).precio, 71000.00::numeric(12,2),
   'vencida, el servicio se cobra entero');
-select isnt((registrar_venta(:turno, :auto, 'tarjeta', 'CD456EF', p_condicional => true)).condicional_vence, null,
+select isnt((registrar_venta(:turno, :auto, 'transferencia', 'CD456EF', p_condicional => true)).condicional_vence, null,
   'vencida, se puede hacer otra condicional');
 reset role;
 
 -- Foto: cambiar los días del certificado no cambia las condicionales ya vendidas ------------------
 select pg_temp.como(:'cajero');
-select (registrar_venta(:turno, :auto, 'tarjeta', 'GH789IJ', p_condicional => true)).id as v_foto \gset
+select (registrar_venta(:turno, :auto, 'transferencia', 'GH789IJ', p_condicional => true)).id as v_foto \gset
 reset role;
 select pg_temp.como(:'admin');
 update certificados set dias_vuelta = 5 where id = :c_cond;
@@ -171,7 +171,7 @@ reset role;
 -- Con descuento: la condicional se paga completa ---------------------------------------------------
 select pg_temp.como(:'cajero');
 select is((select row(precio, condicional_saldo, certificado_id)::text
-           from registrar_venta(:turno, :auto, 'tarjeta', 'DE5CU0', p_descuento_id => :promo, p_condicional => true)),
+           from registrar_venta(:turno, :auto, 'transferencia', 'DE5CU0', p_descuento_id => :promo, p_condicional => true)),
   row(63900.00::numeric(12,2), 0.00::numeric(12,2), :c_cond::bigint)::text,
   'una condicional con descuento se cobra completa con el descuento');
 reset role;
@@ -179,15 +179,15 @@ reset role;
 -- Al 50%: paga la mitad ahora y la otra mitad al volver; el impuesto se reparte -----------------------
 -- Como postgres: "todos los servicios" el admin lo fija con la RPC de la pantalla.
 insert into impuestos (nombre, tipo, valor, medios, todos_servicios)
-  values ('Fijo C', 'monto_fijo', 150, array['efectivo', 'transferencia', 'tarjeta']::medio_pago[], true);
+  values ('Fijo C', 'monto_fijo', 150, array['efectivo', 'transferencia']::medio_pago[], true);
 insert into impuestos (nombre, tipo, valor, medios, todos_servicios)
-  values ('Tasa C', 'porcentaje', 3, array['tarjeta']::medio_pago[], true);
+  values ('Tasa C', 'porcentaje', 3, array['transferencia']::medio_pago[], true);
 select pg_temp.como(:'cajero');
-select throws_ok(format('select registrar_venta(%s, %s, %L, %L, p_condicional_mitad => true)', :turno, :auto, 'tarjeta', 'MI50PP'),
+select throws_ok(format('select registrar_venta(%s, %s, %L, %L, p_condicional_mitad => true)', :turno, :auto, 'transferencia', 'MI50PP'),
   '22023', 'Solo una condicional se puede pagar al 50%', 'solo una condicional se paga al 50%');
-select throws_ok(format('select registrar_venta(%s, %s, %L, %L, p_descuento_id => %s, p_condicional => true, p_condicional_mitad => true)', :turno, :auto, 'tarjeta', 'MI50PP', :promo),
+select throws_ok(format('select registrar_venta(%s, %s, %L, %L, p_descuento_id => %s, p_condicional => true, p_condicional_mitad => true)', :turno, :auto, 'transferencia', 'MI50PP', :promo),
   'P0001', 'Con un descuento la condicional se paga completa: no se puede pagar al 50%', 'con descuento, solo el total');
-select (registrar_venta(:turno, :auto, 'tarjeta', 'MI50PP', p_precio_esperado => 35500, p_condicional => true, p_condicional_mitad => true)).id as v_mitad \gset
+select (registrar_venta(:turno, :auto, 'transferencia', 'MI50PP', p_precio_esperado => 35500, p_condicional => true, p_condicional_mitad => true)).id as v_mitad \gset
 select is((select row(precio, precio_lista, condicional_saldo, certificado_id)::text from ventas where id = :v_mitad),
   row(35500.00::numeric(12,2), 71000.00::numeric(12,2), 35500.00::numeric(12,2), :c_cond::bigint)::text,
   'al 50% cobra la mitad, guarda lo que falta y consume la hoja B');
@@ -198,10 +198,10 @@ select is((select array_agg(row(impuesto_nombre, monto)::text order by impuesto_
   array[row('Fijo C', 75.00::numeric(12,2))::text, row('Tasa C', 1065.00::numeric(12,2))::text],
   'la condicional al 50% registra la mitad de cada impuesto');
 select pg_temp.como(:'cajero');
-select throws_like(format('select registrar_venta(%s, %s, %L, %L, p_precio_esperado => 0)', :turno, :auto, 'tarjeta', 'MI50PP'),
+select throws_like(format('select registrar_venta(%s, %s, %L, %L, p_precio_esperado => 0)', :turno, :auto, 'transferencia', 'MI50PP'),
   'La patente MI50PP vuelve de la condicional del %: corresponde cobrar $ 35.500,00. Revisá la venta.',
   'la vuelta cobra lo que faltaba');
-select (registrar_venta(:turno, :auto, 'tarjeta', 'MI50PP', p_precio_esperado => 35500)).id as v_resto \gset
+select (registrar_venta(:turno, :auto, 'transferencia', 'MI50PP', p_precio_esperado => 35500)).id as v_resto \gset
 select is((select row(precio, precio_lista, vuelta_de, certificado_id, condicional_saldo)::text from ventas where id = :v_resto),
   row(35500.00::numeric(12,2), 35500.00::numeric(12,2), :v_mitad::bigint, :c_aprobado::bigint, null::numeric)::text,
   'la vuelta cobra el 50% restante y entrega la hoja E');
@@ -214,7 +214,7 @@ select is((select array_agg(row(impuesto_nombre, total)::text order by impuesto_
 
 -- La vuelta a $ 0 de una condicional pagada completa no lleva impuesto
 select pg_temp.como(:'cajero');
-select (registrar_venta(:turno, :auto, 'tarjeta', 'TOT100', p_condicional => true)).id as v_total \gset
+select (registrar_venta(:turno, :auto, 'transferencia', 'TOT100', p_condicional => true)).id as v_total \gset
 select (registrar_venta(:turno, :auto, 'efectivo', 'TOT100', p_precio_esperado => 0)).id as v_cero \gset
 reset role;
 select is((select sum(monto) from venta_impuestos where venta_id = :v_total), 2280.00::numeric,

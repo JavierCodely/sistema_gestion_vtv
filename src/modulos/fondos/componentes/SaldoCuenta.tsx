@@ -7,7 +7,7 @@ import { Saldo } from "./Saldo";
 
 /**
  * Saldo actual de una cuenta. El de efectivo (la caja de cambio) se lee solo con `useSaldoEfectivo`;
- * el de transferencia y crédito/débito, de `resumen_fondos` (es de todos los tiempos: no depende
+ * el de transferencia, de `resumen_fondos` (es de todos los tiempos: no depende
  * del rango, que solo es parte de la clave de la consulta compartida con las tarjetas).
  */
 export function SaldoCuenta({

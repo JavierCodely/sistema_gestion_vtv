@@ -1,14 +1,13 @@
 import type { Cuenta } from "./fondos";
 
-/** Pestañas de Fondos: las tres cuentas y "Mixto" (informativa). */
+/** Pestañas de Fondos: las dos cuentas y "Mixto" (informativa). */
 export type Pestana = Cuenta | "mixto";
 
-export const PESTANAS: readonly Pestana[] = ["efectivo", "transferencia", "tarjeta", "mixto"];
+export const PESTANAS: readonly Pestana[] = ["efectivo", "transferencia", "mixto"];
 
 export const NOMBRE_PESTANA: Record<Pestana, string> = {
   efectivo: "Efectivo",
   transferencia: "Transferencia",
-  tarjeta: "Crédito/Débito",
   mixto: "Mixto",
 };
 

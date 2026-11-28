@@ -3,20 +3,18 @@ import type { Enums } from "@/compartido/tipos";
 export type Cuenta = Enums["cuenta_fondos"];
 export type TipoMovimientoManual = Enums["tipo_mov_fondos"];
 
-/** Orden de las cuentas en pantalla. `tarjeta` es "Crédito/Débito" (no se separa). */
-export const CUENTAS: readonly Cuenta[] = ["efectivo", "transferencia", "tarjeta"];
+/** Orden de las cuentas en pantalla (la tarjeta se quitó en la migración 54). */
+export const CUENTAS: readonly Cuenta[] = ["efectivo", "transferencia"];
 
 export const NOMBRE_CUENTA: Record<Cuenta, string> = {
   efectivo: "Efectivo",
   transferencia: "Transferencia",
-  tarjeta: "Crédito/Débito",
 };
 
 /** Para frases: "No alcanza el saldo de transferencias", "Ingreso registrado en …". */
 export const NOMBRE_CUENTA_FRASE: Record<Cuenta, string> = {
   efectivo: "la caja de cambio",
   transferencia: "transferencias",
-  tarjeta: "crédito/débito",
 };
 
 /** Botones de movimiento manual: en efectivo, "Fondo inicial" (como siempre); en las otras, "Saldo inicial". */

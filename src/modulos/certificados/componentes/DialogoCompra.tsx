@@ -45,6 +45,7 @@ import {
   type ErroresCorreccion,
   type FormularioCorreccion,
 } from "../lib/validaciones";
+import { useEnvioUnico } from "@/compartido/lib/envio-unico";
 
 const esFuente = (valor: string): valor is FuenteFondos =>
   valor === "efectivo" || valor === "transferencia";
@@ -113,6 +114,8 @@ export function DialogoCompra({ certificado, original, onCerrar }: Props) {
     setFormulario((actual) => ({ ...actual, [clave]: valor }));
   }
 
+  const unaVez = useEnvioUnico();
+
   async function enviar(evento: SubmitEvent<HTMLFormElement>) {
     evento.preventDefault();
     let guardar: () => Promise<{ hojas: number; costo_total: number }>;
@@ -161,7 +164,14 @@ export function DialogoCompra({ certificado, original, onCerrar }: Props) {
               : "La compra se registra también como gasto."}
           </DialogDescription>
         </DialogHeader>
-        <form className="flex flex-col gap-4" onSubmit={(e) => void enviar(e)} noValidate>
+        <form
+          className="flex flex-col gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void unaVez(() => enviar(e));
+          }}
+          noValidate
+        >
           <div className="grid gap-4 sm:grid-cols-2">
             <Campo
               id="compra-unidades"

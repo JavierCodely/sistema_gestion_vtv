@@ -31,6 +31,7 @@ async function caja(page: Page, testId: string) {
 
 const PANTALLAS = [
   ["Dashboard", "Dashboard"],
+  ["Estadísticas", "Estadísticas"],
   ["Ventas", "Ventas"],
   ["Patentes", "Patentes"],
   ["Facturación", "Facturación"],
@@ -92,7 +93,7 @@ test("en el celular las ventas del turno se ven como tarjetas con todos sus dato
   await abrirTurnoComoAdmin(page, { caja: cajaNombre, efectivo: "5.000" });
   await trabajarEnCaja(page, cajaNombre);
   await expect.poll(() => desborde(page), { message: "la caja se pasa del ancho" }).toBe(0);
-  await venderEnCaja(page, { categoria, servicio, medio: "Tarjeta", patente });
+  await venderEnCaja(page, { categoria, servicio, medio: "Transferencia", patente });
 
   // Ventas del admin: el turno abierto con sus totales y la venta como tarjeta.
   await page.goto("/admin/ventas");

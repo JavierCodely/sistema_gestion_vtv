@@ -38,6 +38,7 @@ export function GraficoRanking({
   medida,
   etiquetaMedida,
   etiquetaExtra,
+  etiquetaCantidad = "Cantidad",
 }: {
   idBase: string;
   filas: FilaRanking[];
@@ -45,6 +46,8 @@ export function GraficoRanking({
   medida: "cantidad" | "total";
   etiquetaMedida: string;
   etiquetaExtra?: string;
+  /** Encabezado de la columna de la cantidad (por defecto "Cantidad"). */
+  etiquetaCantidad?: string;
 }) {
   const config = {
     [medida]: { label: etiquetaMedida, color: "var(--chart-3)" },
@@ -98,7 +101,7 @@ export function GraficoRanking({
           <TableHeader>
             <TableRow>
               <TableHead>Nombre</TableHead>
-              <TableHead className="text-right">Cantidad</TableHead>
+              <TableHead className="text-right">{etiquetaCantidad}</TableHead>
               <TableHead className="text-right">Total</TableHead>
               {etiquetaExtra && <TableHead className="text-right">{etiquetaExtra}</TableHead>}
             </TableRow>
@@ -109,7 +112,7 @@ export function GraficoRanking({
                 <TableCell data-label="Nombre" className="font-medium">
                   {fila.nombre}
                 </TableCell>
-                <TableCell data-label="Cantidad" className="text-right tabular-nums">
+                <TableCell data-label={etiquetaCantidad} className="text-right tabular-nums">
                   {formatearNumero(fila.cantidad)}
                 </TableCell>
                 <TableCell data-label="Total" className="text-right tabular-nums">

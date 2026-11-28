@@ -25,7 +25,7 @@ reset role;
 
 -- Ventas de otros: solo el admin ---------------------------------------------------------------------------
 select pg_temp.como(:'cajero2');
-select (registrar_venta(:turno, :servicio, 'tarjeta', 'TE333CC')).id as v_otro \gset
+select (registrar_venta(:turno, :servicio, 'transferencia', 'TE333CC')).id as v_otro \gset
 reset role;
 select pg_temp.como(:'cajero');
 select throws_ok(format('select anular_venta(%s, %L)', :v_otro, 'error'), '42501',
@@ -55,7 +55,7 @@ reset role;
 
 -- La venta del admin en la caja: el cajero no la anula --------------------------------------------------
 select pg_temp.como(:'admin');
-select (registrar_venta(:turno, :servicio, 'tarjeta', 'TE444DD')).id as v_admin \gset
+select (registrar_venta(:turno, :servicio, 'transferencia', 'TE444DD')).id as v_admin \gset
 reset role;
 select pg_temp.como(:'cajero');
 select throws_ok(format('select anular_venta(%s, %L)', :v_admin, 'error'), '42501',
@@ -103,7 +103,7 @@ reset role;
 select pg_temp.como(:'admin');
 select lives_ok(format('select anular_venta(%s, %L)', :v_transf, 'Cobro duplicado'),
   'el admin sí');
-select (registrar_venta_pasada('2026-11-01', '10:00', :caja, :servicio, 'tarjeta', 20000)).id as v_pasada \gset
+select (registrar_venta_pasada('2026-11-01', '10:00', :caja, :servicio, 'transferencia', 20000)).id as v_pasada \gset
 reset role;
 select pg_temp.como(:'cajero');
 select throws_ok(format('select anular_venta(%s, %L)', :v_pasada, 'error'), '42501',

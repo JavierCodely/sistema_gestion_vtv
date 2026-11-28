@@ -168,7 +168,7 @@ export function useResumenVentasMixtas(rango: RangoFechas | null) {
 }
 
 const COLUMNAS_MIXTA =
-  "id, creado_en, caja_nombre, servicio_nombre, patente, usuario_nombre, precio, pago_efectivo, pago_transferencia, pago_tarjeta, anulada, anulada_motivo";
+  "id, creado_en, caja_nombre, servicio_nombre, patente, usuario_nombre, precio, pago_efectivo, pago_transferencia, anulada, anulada_motivo";
 
 export type VentaMixta = Pick<
   Vistas["v_ventas_mixtas"]["Row"],
@@ -181,7 +181,6 @@ export type VentaMixta = Pick<
   | "precio"
   | "pago_efectivo"
   | "pago_transferencia"
-  | "pago_tarjeta"
   | "anulada"
   | "anulada_motivo"
 >;
@@ -210,7 +209,7 @@ export function useVentasMixtas(rango: RangoFechas | null) {
 }
 
 /**
- * Movimiento manual de transferencia o crédito/débito (`movimiento_fondos`). Un retiro que deja la
+ * Movimiento manual de transferencia (`movimiento_fondos`). Un retiro que deja la
  * cuenta en negativo lo rechaza la BD (P0001, con el saldo disponible).
  */
 export function useMovimientoFondos() {

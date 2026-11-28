@@ -10,7 +10,7 @@ const formulario = (cambios: Partial<FormularioImpuesto> = {}): FormularioImpues
   nombre: "IIBB",
   tipo: "porcentaje",
   valor: "3",
-  medios: ["efectivo", "transferencia", "tarjeta"],
+  medios: ["efectivo", "transferencia"],
   activo: true,
   ...cambios,
 });
@@ -18,12 +18,12 @@ const formulario = (cambios: Partial<FormularioImpuesto> = {}): FormularioImpues
 describe("validarImpuesto", () => {
   it("arma los datos a guardar con los medios sin repetir y en orden", () => {
     expect(
-      validarImpuesto(formulario({ medios: ["tarjeta", "efectivo", "tarjeta"] })).datos,
+      validarImpuesto(formulario({ medios: ["transferencia", "efectivo", "transferencia"] })).datos,
     ).toEqual({
       nombre: "IIBB",
       tipo: "porcentaje",
       valor: 3,
-      medios: ["efectivo", "tarjeta"],
+      medios: ["efectivo", "transferencia"],
       activo: true,
     });
   });
@@ -53,8 +53,8 @@ describe("formato", () => {
     expect(formatearValorImpuesto({ tipo: "monto_fijo", valor: 150 }).replace(/\s/g, " ")).toBe(
       "$ 150,00 por venta",
     );
-    expect(formatearMedios(["tarjeta", "efectivo", "transferencia"])).toBe("Todos");
-    expect(formatearMedios(["tarjeta", "efectivo"])).toBe("Efectivo y Tarjeta");
+    expect(formatearMedios(["transferencia", "efectivo"])).toBe("Todos");
+    expect(formatearMedios(["transferencia"])).toBe("Transferencia");
     expect(formatearServicios({ todos_servicios: true, servicioIds: [] })).toBe("Todos");
     expect(formatearServicios({ todos_servicios: false, servicioIds: [] })).toBe("Ninguno");
     expect(formatearServicios({ todos_servicios: false, servicioIds: [1] })).toBe("1 servicio");

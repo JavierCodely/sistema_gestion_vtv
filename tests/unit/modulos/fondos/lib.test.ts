@@ -39,7 +39,7 @@ describe("nombres del libro de Fondos", () => {
   it("movimientos manuales: fondo inicial en efectivo, saldo inicial en las otras cuentas", () => {
     expect(nombreMovimiento("efectivo", "fondo_inicial")).toBe("Fondo inicial");
     expect(nombreMovimiento("transferencia", "fondo_inicial")).toBe("Saldo inicial");
-    expect(nombreMovimiento("tarjeta", "retiro")).toBe("Retiro");
+    expect(nombreMovimiento("transferencia", "retiro")).toBe("Retiro");
     expect(descripcionMovimiento("transferencia", "retiro")).toContain(
       "no puede quedar en negativo",
     );
@@ -53,7 +53,9 @@ describe("pestaña de Fondos", () => {
     guardarPestana("mixto");
     expect(localStorage.getItem(CLAVE_PESTANA)).toBe("mixto");
     expect(pestanaInicial(null)).toBe("mixto");
-    expect(pestanaInicial("tarjeta")).toBe("tarjeta");
+    expect(pestanaInicial("transferencia")).toBe("transferencia");
+    // Crédito/Débito ya no existe (migración 54): una URL o pestaña guardada vieja no rompe.
+    expect(pestanaInicial("tarjeta")).toBe("mixto");
     expect(pestanaInicial("cualquiera")).toBe("mixto");
   });
 

@@ -28,9 +28,9 @@ select ok(not has_table_privilege('authenticated', 'public.venta_impuestos', 'in
 select pg_temp.como(:'admin');
 insert into impuestos (nombre, tipo, valor) values ('  Ingresos   brutos ', 'porcentaje', 3) returning id as imp_a \gset
 select is((select nombre from impuestos where id = :imp_a), 'Ingresos brutos', 'el nombre se normaliza');
-select is((select medios::text from impuestos where id = :imp_a), '{efectivo,transferencia,tarjeta}',
-  'por defecto alcanza a todos los medios');
-insert into impuestos (nombre, tipo, valor, medios) values ('Tasa tarjeta', 'monto_fijo', 150, '{tarjeta}') returning id as imp_b \gset
+select is((select medios::text from impuestos where id = :imp_a), '{efectivo,transferencia}',
+  'por defecto alcanza a todos los medios (efectivo y transferencia, migración 54)');
+insert into impuestos (nombre, tipo, valor, medios) values ('Tasa transferencia', 'monto_fijo', 150, '{transferencia}') returning id as imp_b \gset
 insert into impuestos (nombre, tipo, valor) values ('Fijo servicio dos', 'monto_fijo', 100) returning id as imp_f \gset
 insert into impuestos (nombre, tipo, valor, activo) values ('Inactivo', 'porcentaje', 5, false) returning id as imp_d \gset
 insert into impuestos (nombre, tipo, valor) values ('Sin uso', 'porcentaje', 1) returning id as imp_e \gset
@@ -45,7 +45,7 @@ select throws_ok($$insert into impuestos (nombre, tipo, valor) values ('NaN', 'm
   '23514', null, 'el valor no puede ser NaN');
 select throws_ok($$insert into impuestos (nombre, tipo, valor, medios) values ('Sin medios', 'porcentaje', 1, '{}')$$,
   '23514', null, 'al menos un medio de pago');
-select throws_ok($$insert into impuestos (nombre, tipo, valor, medios) values ('Repetidos', 'porcentaje', 1, '{tarjeta,tarjeta}')$$,
+select throws_ok($$insert into impuestos (nombre, tipo, valor, medios) values ('Repetidos', 'porcentaje', 1, '{transferencia,transferencia}')$$,
   '23514', null, 'sin medios repetidos');
 
 -- Servicios alcanzados
@@ -82,11 +82,11 @@ reset role;
 -- Ventas del cajero ---------------------------------------------------------------------------------
 select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja, 100) as turno \gset
 select (registrar_venta(:turno, :servicio, 'efectivo', p_patente => $p$AB123CD$p$)).id as v1 \gset
-select (registrar_venta(:turno, :servicio, 'tarjeta', p_patente => $p$AB123CD$p$)).id as v2 \gset
+select (registrar_venta(:turno, :servicio, 'transferencia', p_patente => $p$AB123CD$p$)).id as v2 \gset
 select (registrar_venta(:turno, :servicio, p_pagos =>
-  '[{"medio":"efectivo","monto":5000},{"medio":"tarjeta","monto":15000}]', p_patente => $p$AB123CD$p$)).id as v3 \gset
+  '[{"medio":"efectivo","monto":5000},{"medio":"transferencia","monto":15000}]', p_patente => $p$AB123CD$p$)).id as v3 \gset
 select (registrar_venta(:turno, :serv2, p_pagos =>
-  '[{"medio":"efectivo","monto":10000},{"medio":"transferencia","monto":10000},{"medio":"tarjeta","monto":10000}]', p_patente => $p$AB123CD$p$)).id as v5 \gset
+  '[{"medio":"efectivo","monto":1501.50},{"medio":"transferencia","monto":28498.50}]', p_patente => $p$AB123CD$p$)).id as v5 \gset
 select (registrar_venta(:turno, :servicio, 'efectivo', p_patente => $p$AB123CD$p$)).id as v7 \gset
 select is((select count(*)::int from venta_impuestos), 0, 'el cajero no lee la foto de impuestos');
 reset role;
@@ -94,25 +94,24 @@ reset role;
 select is((select array_agg(row(impuesto_id, medio::text, base, monto)::text order by impuesto_id, medio)
            from venta_impuestos where venta_id = :v1),
   array[row(:imp_a, 'efectivo', 20000.00, 600.00)::text],
-  'efectivo: solo el 3 % (la tasa es de tarjeta y el inactivo no cuenta)');
+  'efectivo: solo el 3 % (la tasa es de transferencia y el inactivo no cuenta)');
 select is((select array_agg(row(impuesto_id, medio::text, monto)::text order by impuesto_id, medio)
            from venta_impuestos where venta_id = :v2),
-  array[row(:imp_a, 'tarjeta', 600.00)::text, row(:imp_b, 'tarjeta', 150.00)::text],
-  'tarjeta: 3 % y la tasa fija de $ 150 por venta');
+  array[row(:imp_a, 'transferencia', 600.00)::text, row(:imp_b, 'transferencia', 150.00)::text],
+  'transferencia: 3 % y la tasa fija de $ 150 por venta');
 select is((select array_agg(row(impuesto_id, medio::text, base, monto)::text order by impuesto_id, medio)
            from venta_impuestos where venta_id = :v3),
-  array[row(:imp_a, 'efectivo', 5000.00, 150.00)::text, row(:imp_a, 'tarjeta', 15000.00, 450.00)::text,
-        row(:imp_b, 'tarjeta', 15000.00, 112.50)::text],
-  'pago mixto: el 3 % se reparte por medio y el fijo de tarjeta se prorratea (150 × 15.000 / 20.000)');
+  array[row(:imp_a, 'efectivo', 5000.00, 150.00)::text, row(:imp_a, 'transferencia', 15000.00, 450.00)::text,
+        row(:imp_b, 'transferencia', 15000.00, 112.50)::text],
+  'pago mixto: el 3 % se reparte por medio y el fijo de transferencia se prorratea (150 × 15.000 / 20.000)');
 select is((select array_agg(row(impuesto_id, medio::text, monto)::text order by impuesto_id, medio)
            from venta_impuestos where venta_id = :v5),
-  array[row(:imp_a, 'efectivo', 300.00)::text, row(:imp_a, 'transferencia', 300.00)::text,
-        row(:imp_a, 'tarjeta', 300.00)::text, row(:imp_f, 'efectivo', 33.34)::text,
-        row(:imp_f, 'transferencia', 33.33)::text, row(:imp_f, 'tarjeta', 33.33)::text],
-  'el redondeo del reparto queda en una parte: $ 100 en tres medios = 33,34 + 33,33 + 33,33');
+  array[row(:imp_a, 'efectivo', 45.05)::text, row(:imp_a, 'transferencia', 854.95)::text,
+        row(:imp_f, 'efectivo', 5.01)::text, row(:imp_f, 'transferencia', 94.99)::text],
+  'el redondeo del reparto queda en la parte más grande: 900 = 45,05 + 854,95 y 100 = 5,01 + 94,99');
 select is((select impuesto_nombre || ' ' || tipo || ' ' || valor from venta_impuestos
            where venta_id = :v2 and impuesto_id = :imp_b),
-  'Tasa tarjeta monto_fijo 150.00', 'la foto guarda nombre, tipo y valor');
+  'Tasa transferencia monto_fijo 150.00', 'la foto guarda nombre, tipo y valor');
 
 -- Admin: anula una venta, cambia el impuesto y carga una venta con fecha pasada -------------------
 select pg_temp.como(:'admin');
@@ -121,8 +120,9 @@ update impuestos set valor = 5, nombre = 'IIBB' where id = :imp_a;
 select is((select monto from venta_impuestos where venta_id = :v1), 600.00,
   'cambiar el impuesto no cambia la foto de las ventas anteriores');
 select (registrar_venta_pasada('2026-01-15', '10:00', :caja, :servicio, 'transferencia', 20000)).id as v6 \gset
-select is((select array_agg(row(impuesto_id, medio::text, monto)::text) from venta_impuestos where venta_id = :v6),
-  array[row(:imp_a, 'transferencia', 1000.00)::text], 'las ventas con fecha pasada también llevan impuestos');
+select is((select array_agg(row(impuesto_id, medio::text, monto)::text order by impuesto_id) from venta_impuestos where venta_id = :v6),
+  array[row(:imp_a, 'transferencia', 1000.00)::text, row(:imp_b, 'transferencia', 150.00)::text],
+  'las ventas con fecha pasada también llevan impuestos (el 5 % y la tasa de transferencia)');
 select throws_ok(format('delete from impuestos where id = %s', :imp_a), '23503', null,
   'un impuesto usado no se borra');
 select lives_ok(format('delete from impuestos where id = %s', :imp_e), 'uno sin uso se borra');
@@ -138,21 +138,21 @@ select is((select monto from venta_impuestos where venta_id = :v8 and impuesto_i
 -- Reporte -------------------------------------------------------------------------------------------
 select pg_temp.como(:'admin');
 select is(
-  (select array_agg(row(agrupacion, nombre, cantidad_ventas, total, total_efectivo, total_transferencia, total_tarjeta)::text
+  (select array_agg(row(agrupacion, nombre, cantidad_ventas, total, total_efectivo, total_transferencia)::text
                     order by agrupacion = 'impuesto', total desc)
    from resumen_impuestos(fecha_local(now()), fecha_local(now()))),
   array[
-    row('total', 'Total', 5, 4062.50, 2083.34, 333.33, 1645.83)::text,
-    row('impuesto', 'IIBB', 5, 3700.00, 2050.00, 300.00, 1350.00)::text,
-    row('impuesto', 'Tasa tarjeta', 2, 262.50, 0.00, 0.00, 262.50)::text,
-    row('impuesto', 'Fijo servicio dos', 1, 100.00, 33.34, 33.33, 33.33)::text
+    row('total', 'Total', 5, 4062.50, 1800.06, 2262.44)::text,
+    row('impuesto', 'IIBB', 5, 3700.00, 1795.05, 1904.95)::text,
+    row('impuesto', 'Tasa transferencia', 2, 262.50, 0.00, 262.50)::text,
+    row('impuesto', 'Fijo servicio dos', 1, 100.00, 5.01, 94.99)::text
   ],
   'hoy: total y por impuesto (nombre actual), por medio, sin la venta anulada ni la de fecha pasada');
-select is((select total from resumen_impuestos('2026-01-01', '2026-12-31') where agrupacion = 'total'), 5062.50,
+select is((select total from resumen_impuestos('2026-01-01', '2026-12-31') where agrupacion = 'total'), 5212.50,
   'el año suma también la venta con fecha pasada de enero');
 select is((select row(cantidad_ventas, total_transferencia)::text from resumen_impuestos('2026-01-01', '2026-01-31')
            where agrupacion = 'total'),
-  row(1, 1000.00)::text, 'enero: solo la venta con fecha pasada');
+  row(1, 1150.00)::text, 'enero: solo la venta con fecha pasada');
 select is((select total from resumen_impuestos(p_turno_id => :turno) where agrupacion = 'total'), 4062.50,
   'por turno: las ventas de ese turno (la de fecha pasada no tiene turno)');
 select is((select row(cantidad_ventas, total)::text from resumen_impuestos(p_turno_id => :turno_x)

@@ -26,6 +26,7 @@ import { SelectorCaja } from "../componentes/SelectorCaja";
 import { SinCajasAbiertas } from "../componentes/SinCajasAbiertas";
 import { TablaVentas } from "../componentes/TablaVentas";
 import { FiltrosVentas } from "../componentes/FiltrosVentas";
+import { DialogoCertificadosServicios } from "../componentes/DialogoCertificadosServicios";
 import { ResumenVentasTurno } from "../componentes/ResumenVentasTurno";
 import { filtrarVentas, hayFiltros, SIN_FILTROS, type FiltroVentas } from "../lib/filtrar-ventas";
 import {
@@ -206,6 +207,7 @@ function PanelHistorial({
         <div className="flex flex-wrap items-stretch gap-3">
           <EfectivoEnCaja turnoId={turnoId} />
           <ResumenVentasTurno turnoId={turnoId} grande />
+          <DialogoCertificadosServicios turnoId={turnoId} grande />
         </div>
       </div>
       {ventas.data && <FiltrosVentas grande ventas={ventas.data} onCambiar={setFiltro} />}

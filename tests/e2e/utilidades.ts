@@ -124,7 +124,7 @@ export async function esperarCaja(page: Page, caja: string) {
   await expect(selector.or(titulo).first()).toContainText(caja);
 }
 
-const ORDEN_MEDIOS = ["Efectivo", "Transferencia", "Tarjeta"] as const;
+const ORDEN_MEDIOS = ["Efectivo", "Transferencia"] as const;
 
 /** Cómo paga una condicional: el total o el 50% (el resto, al volver). */
 type PagoCondicional = "Total" | "50%";

@@ -17,7 +17,7 @@ import {
 } from "../lib/pestanas";
 
 /**
- * Fondos (solo admin): efectivo (la caja de cambio), transferencia y crédito/débito, con saldos y
+ * Fondos (solo admin): efectivo (la caja de cambio) y transferencia, con saldos y
  * totales del rango, el libro de cada cuenta y las ventas mixtas (informativas). Todos los montos
  * vienen de la BD (`resumen_fondos`, `v_movimientos_fondos`, `resumen_ventas_mixtas`, `v_ventas_mixtas`).
  * La pestaña elegida queda en la URL (`?pestana=`) y se recuerda para la próxima vez.

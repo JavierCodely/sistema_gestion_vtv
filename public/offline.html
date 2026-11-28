@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="es-AR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#16a34a" />
+    <title>Sin conexión · Sistema VTV</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --fondo: #ffffff;
+        --texto: #0a0a0a;
+        --suave: #525252;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --fondo: #0a0a0a;
+          --texto: #fafafa;
+          --suave: #a3a3a3;
+        }
+      }
+      body {
+        margin: 0;
+        min-height: 100svh;
+        display: grid;
+        place-items: center;
+        padding: 16px;
+        box-sizing: border-box;
+        background: var(--fondo);
+        color: var(--texto);
+        font-family: system-ui, sans-serif;
+        text-align: center;
+      }
+      img {
+        width: 72px;
+        height: 72px;
+      }
+      h1 {
+        font-size: 1.5rem;
+        margin: 16px 0 8px;
+      }
+      p {
+        color: var(--suave);
+        margin: 0 0 24px;
+        max-width: 28rem;
+      }
+      button {
+        font: inherit;
+        font-weight: 600;
+        padding: 12px 24px;
+        border: 0;
+        border-radius: 8px;
+        background: #16a34a;
+        color: #ffffff;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/iconos/icono-192.png" alt="" />
+      <h1>Sin conexión</h1>
+      <p>
+        El sistema necesita internet para registrar ventas y leer la caja. Revisá la conexión y
+        volvé a intentar.
+      </p>
+      <button type="button" onclick="location.reload()">Reintentar</button>
+    </main>
+  </body>
+</html>

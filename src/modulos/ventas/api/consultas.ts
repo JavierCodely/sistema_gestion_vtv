@@ -32,7 +32,6 @@ export type Turno = Pick<
   | "ventas_cantidad"
   | "ventas_efectivo"
   | "ventas_transferencia"
-  | "ventas_tarjeta"
   | "ventas_total"
   | "gastos_total"
   | "neto"
@@ -63,7 +62,7 @@ export const claves = {
 };
 
 const COLUMNAS_TURNO =
-  "id, caja_nombre, abierto_por_nombre, atendido_por, abierto_en, cerrado_en, abierto, observaciones, ventas_cantidad, ventas_efectivo, ventas_transferencia, ventas_tarjeta, ventas_total, gastos_total, neto, efectivo_inicial, gastos_efectivo, efectivo_en_caja, efectivo_cierre, total_efectivo";
+  "id, caja_nombre, abierto_por_nombre, atendido_por, abierto_en, cerrado_en, abierto, observaciones, ventas_cantidad, ventas_efectivo, ventas_transferencia, ventas_total, gastos_total, neto, efectivo_inicial, gastos_efectivo, efectivo_en_caja, efectivo_cierre, total_efectivo";
 
 /**
  * Turnos con apertura (día de negocio, hora AR: `v_turnos.fecha_apertura`) en el rango, del más

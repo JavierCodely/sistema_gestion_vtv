@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { ErrorFormulario } from "@/compartido/componentes/ErrorFormulario";
 import { clavesDescuentos } from "@/compartido/lib/claves-descuentos";
@@ -33,7 +33,7 @@ import {
 } from "../api/consultas";
 import { mitadCondicional, saldoCondicional } from "../lib/condicional";
 import { CAMPO_GRANDE } from "../lib/estilos";
-import { pagosMixtos, revisarPagoMixto, type MedioResto } from "../lib/pago-mixto";
+import { pagosMixtos, revisarPagoMixto } from "../lib/pago-mixto";
 import { detallePagos } from "../lib/pagos";
 import { validarVenta } from "../lib/validaciones";
 import { calcularVuelto, limpiarPatente } from "../lib/vuelto";
@@ -45,7 +45,7 @@ import { DialogoPatenteRepetida } from "./DialogoPatenteRepetida";
 import { ListaOpciones } from "./ListaOpciones";
 import { PasoConfirmarVenta } from "./PasoConfirmarVenta";
 import { PasoEfectivo } from "./PasoEfectivo";
-import { PasoEfectivoMixto, PasoRestoMixto } from "./PasoPagoMixto";
+import { PasoEfectivoMixto } from "./PasoPagoMixto";
 import { UltimaVentaRegistrada, type UltimaVenta } from "./UltimaVentaRegistrada";
 
 type Paso =
@@ -59,7 +59,6 @@ type Paso =
   | "pago-condicional"
   | "medio"
   | "mixto"
-  | "mixto-resto"
   | "efectivo"
   | "confirmar";
 
@@ -92,8 +91,8 @@ interface Pendiente {
  * patente → (si ya tiene ventas) aviso con sus ventas anteriores y "¿Continuar?" → (si tiene una condicional vigente) la vuelta del servicio, que cobra lo que faltaba, o (si
  * venció) otra condicional o el servicio completo → categoría → servicio → (si el servicio tiene un
  * certificado condicional) el de siempre o el condicional → (si el servicio tiene) descuento →
- * (condicional sin descuento) total o 50% → medio de pago → (mixto) cuánto paga en efectivo → con qué
- * paga el resto → (con efectivo) cuánto entregó y el vuelto → confirmación con la patente en grande.
+ * (condicional sin descuento) total o 50% → medio de pago → (mixto) cuánto paga en efectivo (el resto
+ * va por transferencia) → (con efectivo) cuánto entregó y el vuelto → confirmación con la patente en grande.
  * Números o flechas para marcar, Enter para seguir, Esc para volver.
  *
  * Los montos en pantalla son una vista previa (precio del servicio, precio final que calculó la BD en
@@ -118,6 +117,12 @@ export function FormularioVenta({
   onTurnoNoDisponible: (mensaje: string) => void;
 }) {
   const registrar = useRegistrarVenta();
+  /**
+   * Candado de la confirmación: se toma en el mismo evento del primer Enter o clic. `registrar.isPending`
+   * y el botón deshabilitado recién cambian en el render siguiente, y un doble clic o doble Enter que
+   * llegue antes registraría dos ventas (la BD acepta la misma patente dos veces).
+   */
+  const enviando = useRef(false);
   const queryClient = useQueryClient();
   const [paso, setPaso] = useState<Paso>("patente");
   const [patente, setPatente] = useState("");
@@ -129,7 +134,6 @@ export function FormularioVenta({
   const [mitad, setMitad] = useState(false);
   const [medio, setMedio] = useState<OpcionMedio | null>(null);
   const [efectivoMixto, setEfectivoMixto] = useState("");
-  const [medioResto, setMedioResto] = useState<MedioResto | null>(null);
   const [errorMixto, setErrorMixto] = useState(false);
   const [recibido, setRecibido] = useState("");
   const [errorRecibido, setErrorRecibido] = useState<string | null>(null);
@@ -200,8 +204,8 @@ export function FormularioVenta({
         : (descuento?.precio_final ?? servicio?.precio ?? 0);
   const revisionMixto = revisarPagoMixto(efectivoMixto, precioFinal);
   const partesMixto =
-    revisionMixto.efectivo !== null && revisionMixto.resto !== null && medioResto !== null
-      ? pagosMixtos(revisionMixto.efectivo, revisionMixto.resto, medioResto)
+    revisionMixto.efectivo !== null && revisionMixto.resto !== null
+      ? pagosMixtos(revisionMixto.efectivo, revisionMixto.resto)
       : [];
 
   // Sin certificado condicional (o si no lleva hoja) el paso del certificado no existe. Si no se pudo
@@ -235,7 +239,6 @@ export function FormularioVenta({
   function limpiarCobro() {
     setMedio(null);
     setEfectivoMixto("");
-    setMedioResto(null);
     setRecibido("");
     setPendiente(null);
   }
@@ -371,7 +374,7 @@ export function FormularioVenta({
   }
 
   async function confirmar() {
-    if (!servicio || !pendiente || registrar.isPending) return;
+    if (!servicio || !pendiente || registrar.isPending || enviando.current) return;
     const { cobro, recibido: montoRecibido } = pendiente;
     const resultado = validarVenta({
       servicioId: servicio.id,
@@ -388,6 +391,7 @@ export function FormularioVenta({
       return;
     }
     setErrorServidor(null);
+    enviando.current = true;
     try {
       const venta = await registrar.mutateAsync({ ...resultado.datos, turnoId });
       // El efectivo cobrado sale de lo que devolvió la BD: el precio registrado o, en un pago mixto,
@@ -472,6 +476,8 @@ export function FormularioVenta({
       const aviso =
         vigentesDesc.length > 0 ? AVISO_DESCUENTO_NO_DISPONIBLE : AVISO_DESCUENTO_SIN_OTROS;
       volverARevisar(sigue ? mensaje : `${mensaje} ${aviso}`, { sinDescuento: !sigue });
+    } finally {
+      enviando.current = false;
     }
   }
 
@@ -492,11 +498,6 @@ export function FormularioVenta({
       setErrorMixto(true);
       return;
     }
-    irA("mixto-resto");
-  }
-
-  function elegirMedioResto(opcion: MedioResto) {
-    setMedioResto(opcion);
     setRecibido("");
     irA("efectivo");
   }
@@ -934,22 +935,6 @@ export function FormularioVenta({
           />
         )}
 
-        {pasoVisible === "mixto-resto" &&
-          servicio &&
-          revisionMixto.efectivo !== null &&
-          revisionMixto.resto !== null && (
-            <PasoRestoMixto
-              efectivo={revisionMixto.efectivo}
-              resto={revisionMixto.resto}
-              inicial={medioResto ?? undefined}
-              ocupado={registrar.isPending}
-              onElegir={elegirMedioResto}
-              onVolver={() => {
-                irA("mixto");
-              }}
-            />
-          )}
-
         {pasoVisible === "efectivo" && servicio && (
           <PasoEfectivo
             aCobrar={aCobrarEnEfectivo}
@@ -967,7 +952,7 @@ export function FormularioVenta({
               prepararConfirmacion(cobroEnEfectivo, null, "efectivo");
             }}
             onVolver={() => {
-              irA(esMixto ? "mixto-resto" : "medio");
+              irA(esMixto ? "mixto" : "medio");
             }}
           />
         )}

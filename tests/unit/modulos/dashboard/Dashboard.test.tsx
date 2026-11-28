@@ -89,8 +89,7 @@ const impuesto = (agrupacion: string, nombre: string, cantidad: number, total: n
   cantidad_ventas: cantidad,
   total,
   total_efectivo: total / 2,
-  total_transferencia: 0,
-  total_tarjeta: total / 2,
+  total_transferencia: total / 2,
 });
 
 beforeEach(() => {
@@ -98,7 +97,7 @@ beforeEach(() => {
     data: [
       impuesto("total", "Total", 6, 1800),
       impuesto("impuesto", "Ingresos brutos", 6, 1500),
-      impuesto("impuesto", "Tasa tarjeta", 2, 300),
+      impuesto("impuesto", "Tasa transferencia", 2, 300),
     ],
   });
 });
@@ -236,10 +235,10 @@ describe("Dashboard (admin)", () => {
     });
     expect(screen.getByText("6 ventas alcanzadas")).toBeInTheDocument();
     expect(normal(screen.getByTestId("dato-impuestos-efectivo").textContent)).toBe("$ 900,00");
-    expect(normal(screen.getByTestId("dato-impuestos-transferencia").textContent)).toBe("$ 0,00");
-    expect(normal(screen.getByTestId("dato-impuestos-tarjeta").textContent)).toBe("$ 900,00");
-    expect(celdas(screen.getByTestId("impuesto-Tasa tarjeta"))).toEqual([
-      "Tasa tarjeta",
+    expect(normal(screen.getByTestId("dato-impuestos-transferencia").textContent)).toBe("$ 900,00");
+    expect(screen.queryByTestId("dato-impuestos-tarjeta")).not.toBeInTheDocument();
+    expect(celdas(screen.getByTestId("impuesto-Tasa transferencia"))).toEqual([
+      "Tasa transferencia",
       "2",
       "$ 300,00",
     ]);

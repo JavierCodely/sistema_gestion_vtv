@@ -1,4 +1,4 @@
--- Migración 34: Fondos (efectivo, transferencia, tarjeta y ventas mixtas informativas).
+-- Migración 34: Fondos (efectivo, transferencia y ventas mixtas informativas). Sin tarjeta desde la 54.
 begin;
 \ir _helpers.psql
 select plan(77);
@@ -31,7 +31,6 @@ select pg_temp.como(:'admin');
 select
   sum(saldo) filter (where cuenta = 'efectivo')      as s0_ef,
   sum(saldo) filter (where cuenta = 'transferencia') as s0_tr,
-  sum(saldo) filter (where cuenta = 'tarjeta')       as s0_ta,
   sum(saldo)                                         as s0_total
 from resumen_fondos() \gset
 select
@@ -39,16 +38,16 @@ select
   sum(egresos)  filter (where cuenta = 'transferencia') as h0_tr_egr
 from resumen_fondos(fecha_local(now()), fecha_local(now())) \gset
 select is((select array_agg(cuenta::text order by cuenta) from resumen_fondos()),
-  array['efectivo', 'transferencia', 'tarjeta'],
-  'resumen_fondos devuelve las tres cuentas (Mixto no es una cuenta)');
+  array['efectivo', 'transferencia'],
+  'resumen_fondos devuelve las dos cuentas (sin tarjeta desde la migración 54; Mixto no es una cuenta)');
 reset role;
 
--- Ventas del cajero: transferencia, tarjeta y mixta -------------------------------------------------
+-- Ventas del cajero: dos por transferencia y una mixta---------------------------------------------
 select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja, 100) as turno \gset
 select (registrar_venta(:turno, :servicio, 'transferencia', 'aa111aa')).id as v_tr \gset
-select (registrar_venta(:turno, :servicio, 'tarjeta', p_patente => $p$AB123CD$p$)).id as v_ta \gset
+select (registrar_venta(:turno, :servicio, 'transferencia', p_patente => $p$AB123CD$p$)).id as v_tr2 \gset
 select (registrar_venta(:turno, :servicio, p_pagos =>
-  '[{"medio":"efectivo","monto":5000},{"medio":"transferencia","monto":7000},{"medio":"tarjeta","monto":8000}]', p_patente => $p$AB123CD$p$)).id as v_mx \gset
+  '[{"medio":"efectivo","monto":5000},{"medio":"transferencia","monto":15000}]', p_patente => $p$AB123CD$p$)).id as v_mx \gset
 
 -- El cajero no ve nada de Fondos (aunque la RLS le deja leer las ventas del turno abierto)
 select is((select count(*)::int from v_movimientos_fondos), 0, 'el cajero no ve el libro de fondos');
@@ -73,11 +72,11 @@ select is((select array_agg(row(cuenta::text, origen, monto)::text order by cuen
   array[row('transferencia', 'venta', 20000.00)::text], 'venta por transferencia: ingreso en transferencia');
 select is((select descripcion from v_movimientos_fondos where venta_id = :v_tr),
   'Servicio Test — AA111AA', 'la descripción de una venta lleva servicio y patente');
-select is((select array_agg(row(cuenta::text, origen, monto)::text order by cuenta) from v_movimientos_fondos where venta_id = :v_ta),
-  array[row('tarjeta', 'venta', 20000.00)::text], 'venta con tarjeta: ingreso en tarjeta');
+select is((select array_agg(row(cuenta::text, origen, monto)::text order by cuenta) from v_movimientos_fondos where venta_id = :v_tr2),
+  array[row('transferencia', 'venta', 20000.00)::text], 'otra venta por transferencia: también en transferencia');
 select is((select array_agg(row(cuenta::text, monto, pago_mixto)::text order by cuenta) from v_movimientos_fondos where venta_id = :v_mx),
-  array[row('transferencia', 7000.00, true)::text, row('tarjeta', 8000.00, true)::text],
-  'venta mixta: cada parte en su cuenta (el efectivo está en el cajón, no en la caja de cambio)');
+  array[row('transferencia', 15000.00, true)::text],
+  'venta mixta: la parte por transferencia en su cuenta (el efectivo está en el cajón, no en la caja de cambio)');
 select is((select row(cuenta::text, origen, monto, fecha_local, venta_pasada, usuario_nombre)::text
            from v_movimientos_fondos where venta_id = :v_pasada),
   row('transferencia', 'venta', 15000.00, '2026-11-01'::date, true, 'Usuario admin@test.local')::text,
@@ -91,27 +90,29 @@ select is((select array_agg(row(origen, monto, compra_id, gasto_id)::text) from 
   'compra por transferencia: una sola fila (por su gasto), sin doble conteo');
 select is((select descripcion from v_movimientos_fondos where compra_id = :compra),
   'Compra de certificados: Hoja Fondos', 'la compra muestra el certificado');
-select is((select count(*)::int from v_movimientos_fondos where cuenta = 'tarjeta' and origen not in ('venta', 'venta_anulada', 'manual')),
-  0, 'la tarjeta no tiene egresos automáticos');
+select is((select array_agg(e.enumlabel::text order by e.enumsortorder) from pg_enum e
+           where e.enumtypid = 'public.cuenta_fondos'::regtype),
+  array['efectivo', 'transferencia'], 'cuenta_fondos no tiene tarjeta (migración 54)');
 
 select is((select row(saldo - :s0_tr)::text from resumen_fondos() where cuenta = 'transferencia'),
-  row(37000.00)::text, 'saldo de transferencia: 20.000 + 7.000 + 15.000 − 3.000 − 2.000');
-select is((select row(saldo - :s0_ta)::text from resumen_fondos() where cuenta = 'tarjeta'),
-  row(28000.00)::text, 'saldo de tarjeta: 20.000 + 8.000');
+  row(65000.00)::text, 'saldo de transferencia: 20.000 + 20.000 + 15.000 (mixta) + 15.000 (pasada) − 3.000 − 2.000');
+select is((select array_agg(e.enumlabel::text order by e.enumsortorder) from pg_enum e
+           where e.enumtypid = 'public.medio_pago'::regtype),
+  array['efectivo', 'transferencia'], 'medio_pago no tiene tarjeta (migración 54)');
 
 -- Mixto (informativo) --------------------------------------------------------------------------------
-select is((select row(id, caja_nombre, servicio_nombre, usuario_nombre, precio, pago_efectivo, pago_transferencia, pago_tarjeta, anulada)::text
+select is((select row(id, caja_nombre, servicio_nombre, usuario_nombre, precio, pago_efectivo, pago_transferencia, anulada)::text
            from v_ventas_mixtas where id = :v_mx),
-  row(:v_mx, 'Caja Test', 'Servicio Test', 'Usuario cajero@test.local', 20000.00, 5000.00, 7000.00, 8000.00, false)::text,
+  row(:v_mx, 'Caja Test', 'Servicio Test', 'Usuario cajero@test.local', 20000.00, 5000.00, 15000.00, false)::text,
   'v_ventas_mixtas: la venta con su reparto por medio');
 select is((select pagos from v_ventas_mixtas where id = :v_mx),
-  '[{"medio":"efectivo","monto":5000.00},{"medio":"transferencia","monto":7000.00},{"medio":"tarjeta","monto":8000.00}]'::jsonb,
+  '[{"medio":"efectivo","monto":5000.00},{"medio":"transferencia","monto":15000.00}]'::jsonb,
   'v_ventas_mixtas: detalle de pagos en jsonb');
-select is((select count(*)::int from v_ventas_mixtas where id in (:v_tr, :v_ta, :v_pasada)), 0,
+select is((select count(*)::int from v_ventas_mixtas where id in (:v_tr, :v_tr2, :v_pasada)), 0,
   'las ventas de un solo medio no están en Mixto');
-select is((select row(cantidad_ventas, total, total_efectivo, total_transferencia, total_tarjeta, incluido_en_cuentas)::text
+select is((select row(cantidad_ventas, total, total_efectivo, total_transferencia, incluido_en_cuentas)::text
            from resumen_ventas_mixtas(fecha_local(now()), fecha_local(now()))),
-  row(1::bigint, 20000.00, 5000.00, 7000.00, 8000.00, true)::text,
+  row(1::bigint, 20000.00, 5000.00, 15000.00, true)::text,
   'resumen_ventas_mixtas: cantidad, total y reparto, marcado como ya incluido en las cuentas');
 select is((select cantidad_ventas from resumen_ventas_mixtas('2026-11-01', '2026-11-01')), 0::bigint,
   'resumen_ventas_mixtas respeta el rango');
@@ -123,7 +124,7 @@ select cerrar_turno(:turno);
 select is((select row(origen, monto)::text from v_movimientos_fondos where cuenta = 'efectivo' and tipo = 'cierre_turno' and turno_id = :turno),
   row('cierre_turno', 5100.00)::text, 'efectivo: el cierre trae 100 iniciales + 5.000 de la parte en efectivo de la mixta');
 -- Sin doble conteo: el total de todas las cuentas sube exactamente lo cobrado + el ingreso del turno − gastos.
--- Cobrado: 20.000 (transf.) + 20.000 (tarjeta) + 20.000 (mixta, repartida) + 15.000 (pasada) = 75.000;
+-- Cobrado: 20.000 + 20.000 (transf.) + 20.000 (mixta, repartida) + 15.000 (pasada) = 75.000;
 -- ingreso de 100 para el turno (el helper), gastos 3.000 + 2.000.
 select is((select sum(saldo) - :s0_total from resumen_fondos()), 70100.00::numeric,
   'el total de las cuentas cuenta la venta mixta una sola vez');
@@ -166,44 +167,42 @@ select is((select array_agg(row(origen, monto, compra_id)::text order by monto) 
   'compra corregida: la original, su reverso y la corregida');
 select is((select array_agg(row(cuenta::text, origen, monto)::text order by cuenta, monto) from v_movimientos_fondos where venta_id = :v_mx),
   array[row('efectivo', 'venta_anulada', -5000.00)::text,
-        row('transferencia', 'venta_anulada', -7000.00)::text, row('transferencia', 'venta', 7000.00)::text,
-        row('tarjeta', 'venta_anulada', -8000.00)::text, row('tarjeta', 'venta', 8000.00)::text],
+        row('transferencia', 'venta_anulada', -15000.00)::text, row('transferencia', 'venta', 15000.00)::text],
   'venta mixta anulada (turno cerrado): cada parte se revierte en su cuenta; el efectivo sale de la caja de cambio');
 select is((select row(anulada, anulada_motivo)::text from v_ventas_mixtas where id = :v_mx),
   row(true, 'Cliente arrepentido')::text, 'Mixto muestra la venta anulada');
 select is((select cantidad_ventas from resumen_ventas_mixtas()), 0::bigint,
   'resumen_ventas_mixtas no cuenta las anuladas');
 select is((select row(saldo - :s0_tr)::text from resumen_fondos() where cuenta = 'transferencia'),
-  row(12000.00)::text, 'saldo de transferencia: 37.000 − 20.000 + 3.000 + 2.000 − 3.000 − 7.000');
-select is((select row(saldo - :s0_ta)::text from resumen_fondos() where cuenta = 'tarjeta'),
-  row(20000.00)::text, 'saldo de tarjeta: 28.000 − 8.000');
+  row(32000.00)::text, 'saldo de transferencia: 65.000 − 20.000 + 3.000 + 2.000 − 3.000 − 15.000');
+select hasnt_column('public', 'v_ventas_mixtas', 'pago_tarjeta', 'v_ventas_mixtas no tiene tarjeta (migración 54)');
 -- En el día: ventas y sus anulaciones se compensan dentro de ingresos (no se cuentan dos veces).
 select is((select row(ingresos - :h0_tr_ing, egresos - :h0_tr_egr)::text
            from resumen_fondos(fecha_local(now()), fecha_local(now())) where cuenta = 'transferencia'),
-  row(0.00, 3000.00)::text, 'hoy en transferencia: ingresos 27.000 − 27.000 anulados; egresos 3.000 + 2.000 + 3.000 − 3.000 − 2.000');
+  row(20000.00, 3000.00)::text, 'hoy en transferencia: ingresos 55.000 − 35.000 anulados; egresos 3.000 + 2.000 + 3.000 − 3.000 − 2.000');
 reset role;
 
 -- Movimientos manuales -------------------------------------------------------------------------------
 select pg_temp.como(:'admin');
 select is((select row(cuenta::text, origen, tipo, sentido, monto, nota, descripcion, usuario_nombre)::text
-           from movimiento_fondos('tarjeta', 'fondo_inicial', 1000, '  Saldo al empezar  ')),
-  row('tarjeta', 'manual', 'fondo_inicial', 'ingreso', 1000.00, 'Saldo al empezar', 'Saldo inicial', 'Usuario admin@test.local')::text,
+           from movimiento_fondos('transferencia', 'fondo_inicial', 1000, '  Saldo al empezar  ')),
+  row('transferencia', 'manual', 'fondo_inicial', 'ingreso', 1000.00, 'Saldo al empezar', 'Saldo inicial', 'Usuario admin@test.local')::text,
   'saldo inicial manual: devuelve la fila del libro');
 select is((select row(cuenta::text, tipo, monto)::text from movimiento_fondos('transferencia', 'ingreso', 500, 'Aporte')),
   row('transferencia', 'ingreso', 500.00)::text, 'ingreso manual');
-select is((select row(cuenta::text, tipo, sentido, monto)::text from movimiento_fondos('tarjeta', 'retiro', 100, 'Retiro a banco')),
-  row('tarjeta', 'retiro', 'egreso', -100.00)::text, 'retiro manual: resta');
-select is((select row(saldo - :s0_ta)::text from resumen_fondos() where cuenta = 'tarjeta'),
-  row(20900.00)::text, 'el saldo de tarjeta suma los manuales');
+select is((select row(cuenta::text, tipo, sentido, monto)::text from movimiento_fondos('transferencia', 'retiro', 100, 'Retiro a banco')),
+  row('transferencia', 'retiro', 'egreso', -100.00)::text, 'retiro manual: resta');
+select is((select row(saldo - :s0_tr)::text from resumen_fondos() where cuenta = 'transferencia'),
+  row(33400.00)::text, 'el saldo de transferencia suma los manuales: 32.000 + 1.000 + 500 − 100');
 reset role;
-select format('No alcanza el saldo de crédito/débito: hay $ %s y el retiro es de $ 1.000.000,00',
-              public._pesos(:s0_ta + 20900)) as msg_retiro \gset
+select format('No alcanza el saldo de transferencias: hay $ %s y el retiro es de $ 1.000.000,00',
+              public._pesos(:s0_tr + 33400)) as msg_retiro \gset
 select pg_temp.como(:'admin');
-select throws_ok($$select movimiento_fondos('tarjeta', 'retiro', 1000000, 'Demasiado')$$, 'P0001', :'msg_retiro',
+select throws_ok($$select movimiento_fondos('transferencia', 'retiro', 1000000, 'Demasiado')$$, 'P0001', :'msg_retiro',
   'un retiro manual no puede dejar el saldo negativo');
-select lives_ok(format($$select movimiento_fondos('tarjeta', 'retiro', %s, 'Todo')$$, :s0_ta + 20900),
+select lives_ok(format($$select movimiento_fondos('transferencia', 'retiro', %s, 'Todo')$$, :s0_tr + 33400),
   'se puede retirar el saldo exacto');
-select is((select saldo from resumen_fondos() where cuenta = 'tarjeta'), 0.00::numeric(14,2), 'la tarjeta queda en cero');
+select is((select saldo from resumen_fondos() where cuenta = 'transferencia'), 0.00::numeric(14,2), 'la transferencia queda en cero');
 
 -- Un egreso automático nunca se rechaza: el saldo de transferencia puede quedar negativo
 select lives_ok(format($$select registrar_gasto(%s, 9000000, 'transferencia', 'Gasto grande')$$, :comida),
@@ -222,9 +221,9 @@ select throws_ok($$select movimiento_fondos('transferencia', 'ingreso', 10, null
 select throws_ok(format($$select movimiento_fondos('transferencia', 'ingreso', 10, '%s')$$, repeat('x', 501)), '22023',
   'La nota no puede superar los 500 caracteres', 'nota de más de 500');
 select throws_ok($$select movimiento_fondos(null, 'ingreso', 10, 'x')$$, '22023',
-  'Elegí la cuenta (efectivo, transferencia o tarjeta)', 'sin cuenta');
-select throws_ok($$select movimiento_fondos('tarjeta', null, 10, 'x')$$, '22023', 'Elegí el tipo de movimiento', 'sin tipo');
-select throws_ok($$insert into movimientos_fondos (cuenta, tipo, monto, nota, usuario_id) values ('tarjeta', 'ingreso', 1, 'x', auth.uid())$$,
+  'Elegí la cuenta (efectivo o transferencia)', 'sin cuenta');
+select throws_ok($$select movimiento_fondos('transferencia', null, 10, 'x')$$, '22023', 'Elegí el tipo de movimiento', 'sin tipo');
+select throws_ok($$insert into movimientos_fondos (cuenta, tipo, monto, nota, usuario_id) values ('transferencia', 'ingreso', 1, 'x', auth.uid())$$,
   '42501', null, 'ni el admin inserta directo en movimientos_fondos');
 
 -- Efectivo por la misma RPC: va a la caja de cambio (movimiento_efectivo)
@@ -271,7 +270,7 @@ update perfiles set activo = false where id = :'admin2';
 select pg_temp.como(:'admin2');
 select is((select count(*)::int from v_movimientos_fondos) + (select count(*)::int from v_ventas_mixtas), 0,
   'un admin desactivado no ve fondos');
-select throws_ok($$select movimiento_fondos('tarjeta', 'ingreso', 10, 'x')$$, '42501',
+select throws_ok($$select movimiento_fondos('transferencia', 'ingreso', 10, 'x')$$, '42501',
   'Usuario no autenticado o desactivado', 'un admin desactivado no carga movimientos');
 reset role;
 

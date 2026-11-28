@@ -71,7 +71,7 @@ test("cajas compartidas: el admin abre una caja, el cajero y el admin venden en 
   await expect(pc).toHaveURL("/caja");
   await expect(pc.getByRole("heading", { name: "¿En qué caja estás trabajando?" })).toBeVisible();
   await trabajarEnCaja(pc, cajaA);
-  await venderEnCaja(pc, { categoria, servicio, medio: "Tarjeta", patente: "CA111JE" });
+  await venderEnCaja(pc, { categoria, servicio, medio: "Transferencia", patente: "CA111JE" });
 
   // --- Admin: trabaja en la misma caja a la vez y vende
   await page.goto("/admin");
@@ -114,7 +114,7 @@ test("cajas compartidas: el admin abre una caja, el cajero y el admin venden en 
   await cerrarTurnoDesdeBarra(page, { caja: cajaA, observaciones: `Cierre ${sufijo}` });
 
   // --- Cajero, sin recargar: la venta se rechaza y vuelve a elegir caja con el aviso
-  await iniciarVentaEnCaja(pc, { categoria, servicio, medio: "Tarjeta" });
+  await iniciarVentaEnCaja(pc, { categoria, servicio, medio: "Transferencia" });
   await expect(pc.getByRole("heading", { name: "¿En qué caja estás trabajando?" })).toBeVisible();
   await expect(pc.getByRole("alert").filter({ hasText: cajaA })).toContainText("se cerró");
   // Elige la otra caja abierta y sigue vendiendo ahí
@@ -125,7 +125,7 @@ test("cajas compartidas: el admin abre una caja, el cajero y el admin venden en 
       .or(pc.getByRole("heading", { name: cajaB, exact: true }))
       .first(),
   ).toContainText(cajaB);
-  await venderEnCaja(pc, { categoria, servicio, medio: "Tarjeta", patente: "OT333RA" });
+  await venderEnCaja(pc, { categoria, servicio, medio: "Transferencia", patente: "OT333RA" });
   await contextoCajero.close();
 
   // --- El turno cerrado de la caja A tiene las dos ventas; la de la caja B quedó en la B

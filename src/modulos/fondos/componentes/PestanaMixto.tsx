@@ -22,17 +22,12 @@ function tarjetas(resumen: ResumenVentasMixtas | null) {
       titulo: "Por transferencia",
       valor: formatearMoneda(resumen?.total_transferencia),
     },
-    {
-      id: "tarjeta",
-      titulo: "Con crédito/débito",
-      valor: formatearMoneda(resumen?.total_tarjeta),
-    },
   ];
 }
 
 /**
  * Ventas con pago mixto: informativa, sin saldo ni movimientos manuales. Cada parte ya está en su
- * cuenta (transferencia y crédito/débito como venta; el efectivo, en el cajón hasta el cierre del
+ * cuenta (transferencia como venta; el efectivo, en el cajón hasta el cierre del
  * turno): estos totales nunca se suman a las cuentas.
  */
 export function PestanaMixto({ rango }: { rango: RangoFechas | null }) {
@@ -44,8 +39,8 @@ export function PestanaMixto({ rango }: { rango: RangoFechas | null }) {
         <Info aria-hidden />
         <AlertTitle>Ya están incluidas en las otras pestañas</AlertTitle>
         <AlertDescription>
-          Cada parte de una venta mixta ya figura en Efectivo, Transferencia o Crédito/Débito. Estos
-          totales son informativos: no se suman a los de las cuentas.
+          Cada parte de una venta mixta ya figura en Efectivo o en Transferencia. Estos totales son
+          informativos: no se suman a los de las cuentas.
         </AlertDescription>
       </Alert>
 
@@ -63,7 +58,7 @@ export function PestanaMixto({ rango }: { rango: RangoFechas | null }) {
             </Alert>
           ) : (
             <div className="flex flex-col gap-2">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {tarjetas(resumen.data).map(({ id, titulo, valor }) => (
                   <Card key={id}>
                     <CardHeader>

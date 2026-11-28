@@ -105,7 +105,7 @@ test("descuentos: el admin crea uno y lo habilita para un servicio; el cajero ve
   await ingresarEfectivo(page, "20.000", `Cambio ${sufijo}`);
   await abrirTurnoComoAdmin(page, { caja, efectivo: "10.000" });
 
-  // --- Cajero: vende con el descuento y pago mixto (efectivo + tarjeta)
+  // --- Cajero: vende con el descuento y pago mixto (efectivo + transferencia)
   const contextoCajero = await browser.newContext();
   const pc = await contextoCajero.newPage();
   await ingresar(pc, cajero);
@@ -172,21 +172,15 @@ test("descuentos: el admin crea uno y lo habilita para un servicio; el cajero ve
   await opcionDescuento.click();
   await expect(pc.getByTestId("precio")).toHaveText(/\$\s?18\.000,00/);
   await expect(pc.getByRole("listbox", { name: "4. Medio de pago" })).toBeFocused();
-  await pc.keyboard.press("4");
+  await pc.keyboard.press("3");
   await pc.keyboard.press("Enter");
 
   const efectivoMixto = pc.getByLabel("5. Pago mixto: ¿cuánto paga en efectivo? ($)");
   await expect(efectivoMixto).toBeFocused();
   await pc.keyboard.type("5.000");
   await expect(pc.getByTestId("resto-mixto")).toHaveText(/\$\s?13\.000,00/);
-  await pc.keyboard.press("Enter");
-  const resto = pc.getByRole("listbox", { name: "5. ¿Con qué paga el resto?" });
-  await expect(resto).toBeFocused();
-  await pc.keyboard.press("ArrowRight");
-  await expect(resto.getByRole("option", { name: /Débito \/ Crédito/ })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expect(pc.getByText("Resto por transferencia")).toBeVisible();
+  // El resto va siempre por transferencia (migración 54): Enter sigue a cuánto entregó
   await pc.keyboard.press("Enter");
 
   await expect(pc.getByLabel("6. ¿Cuánto te entregó en efectivo? ($)")).toBeFocused();
@@ -200,7 +194,7 @@ test("descuentos: el admin crea uno y lo habilita para un servicio; el cajero ve
   ).toBeVisible();
   const ultima = pc.getByTestId("ultima-venta");
   await expect(ultima).toContainText(`Descuento ${descuento}`);
-  await expect(ultima).toContainText(/Efectivo \$\s?5\.000,00 \+ Tarjeta \$\s?13\.000,00/);
+  await expect(ultima).toContainText(/Efectivo \$\s?5\.000,00 \+ Transferencia \$\s?13\.000,00/);
   await expect(ultima).toContainText(/Vuelto \$\s?5\.000,00/);
 
   // Historial del cajero: "Mixto" con el detalle y el descuento
@@ -211,7 +205,7 @@ test("descuentos: el admin crea uno y lo habilita para un servicio; el cajero ve
     .filter({ hasText: servicio });
   await expect(filaCajero).toContainText("AC456BD");
   await expect(filaCajero).toContainText(
-    /Mixto\s*Efectivo \$\s?5\.000,00 \+ Tarjeta \$\s?13\.000,00/,
+    /Mixto\s*Efectivo \$\s?5\.000,00 \+ Transferencia \$\s?13\.000,00/,
   );
   await expect(filaCajero).toContainText(descuento);
   await expect(filaCajero).toContainText(/−\$\s?2\.000,00 · lista \$\s?20\.000,00/);
@@ -227,12 +221,12 @@ test("descuentos: el admin crea uno y lo habilita para un servicio; el cajero ve
     .click();
   const filaAdmin = page.getByRole("row").filter({ hasText: servicio });
   await expect(filaAdmin).toContainText(
-    /Mixto\s*Efectivo \$\s?5\.000,00 \+ Tarjeta \$\s?13\.000,00/,
+    /Mixto\s*Efectivo \$\s?5\.000,00 \+ Transferencia \$\s?13\.000,00/,
   );
   await expect(filaAdmin).toContainText(descuento);
   await expect(filaAdmin).toContainText(/−\$\s?2\.000,00 · lista \$\s?20\.000,00/);
   await expect(page.getByTestId("total-Efectivo")).toHaveText(/5\.000,00/);
-  await expect(page.getByTestId("total-Tarjeta")).toHaveText(/13\.000,00/);
+  await expect(page.getByTestId("total-Transferencia")).toHaveText(/13\.000,00/);
   await expect(page.getByTestId("total-Total ventas")).toHaveText(/18\.000,00/);
   // Solo la parte en efectivo entra a la caja del turno: 10.000 inicial + 5.000
   await expect(page.getByTestId("efectivo-en-caja")).toHaveText(/15\.000,00/);

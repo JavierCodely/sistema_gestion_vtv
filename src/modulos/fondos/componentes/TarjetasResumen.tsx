@@ -7,7 +7,7 @@ import { CUENTAS } from "../lib/fondos";
 import { SaldoCuenta } from "./SaldoCuenta";
 import { TarjetaResumenCuenta } from "./TarjetaResumenCuenta";
 
-/** Una tarjeta por cuenta (efectivo, transferencia, crédito/débito) con `resumen_fondos` del rango. */
+/** Una tarjeta por cuenta (efectivo y transferencia) con `resumen_fondos` del rango. */
 export function TarjetasResumen({ rango }: { rango: RangoFechas }) {
   const resumen = useResumenFondos(rango);
 

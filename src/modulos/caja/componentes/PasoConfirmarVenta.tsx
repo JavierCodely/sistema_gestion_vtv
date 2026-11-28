@@ -20,7 +20,7 @@ export function PasoConfirmarVenta({
   patente: string;
   servicio: string;
   precio: number;
-  /** "Efectivo", "Tarjeta", "Mixto: …" o "Sin cargo". */
+  /** "Efectivo", "Transferencia", "Mixto: …" o "Sin cargo". */
   medio: string;
   /** Datos extra (vuelto, condicional al 50%, vuelta de condicional). */
   detalle: string[];

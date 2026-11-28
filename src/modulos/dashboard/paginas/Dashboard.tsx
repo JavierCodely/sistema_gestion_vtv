@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { Cargando } from "@/compartido/componentes/Cargando";
 import { FiltroPeriodo } from "@/compartido/componentes/FiltroPeriodo";
 import { mensajeDeError } from "@/compartido/lib/errores";
@@ -11,6 +11,7 @@ import {
 } from "@/compartido/lib/periodo";
 import { Alert, AlertDescription } from "@/compartido/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/compartido/ui/card";
+import { Bloque, Dato } from "../componentes/Tarjetas";
 import { useResumenImpuestos } from "@/modulos/impuestos/api/consultas";
 import { useTurnosDelPeriodo } from "@/modulos/ventas/api/consultas";
 import {
@@ -29,58 +30,6 @@ const aRanking = (fila: FilaResumenVentas | FilaResumenGastos): FilaRanking => (
   total: fila.total,
   extra: "total_descontado" in fila ? fila.total_descontado : undefined,
 });
-
-/** Tarjeta de un número grande (KPI). */
-function Dato({
-  etiqueta,
-  valor,
-  detalle,
-  id,
-}: {
-  etiqueta: string;
-  valor: string;
-  detalle?: ReactNode;
-  id: string;
-}) {
-  return (
-    <Card size="sm">
-      <CardHeader>
-        <CardDescription>{etiqueta}</CardDescription>
-        <CardTitle className="text-2xl tabular-nums" data-testid={`dato-${id}`}>
-          {valor}
-        </CardTitle>
-        {detalle && <p className="text-xs text-muted-foreground">{detalle}</p>}
-      </CardHeader>
-    </Card>
-  );
-}
-
-/** Bloque con título, descripción y su contenido o el estado vacío. */
-function Bloque({
-  titulo,
-  descripcion,
-  vacio,
-  children,
-}: {
-  titulo: string;
-  descripcion: string;
-  vacio: string | null;
-  children: ReactNode;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          <h3>{titulo}</h3>
-        </CardTitle>
-        <CardDescription>{descripcion}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {vacio ? <p className="py-6 text-center text-muted-foreground">{vacio}</p> : children}
-      </CardContent>
-    </Card>
-  );
-}
 
 function SeccionVentas({ filtro }: { filtro: FiltroDashboard }) {
   const resumen = useResumenVentas(filtro);
@@ -247,11 +196,6 @@ function SeccionImpuestos({ filtro }: { filtro: FiltroDashboard }) {
           id="impuestos-transferencia"
           etiqueta="En transferencia"
           valor={formatearMoneda(total?.total_transferencia)}
-        />
-        <Dato
-          id="impuestos-tarjeta"
-          etiqueta="En débito/crédito"
-          valor={formatearMoneda(total?.total_tarjeta)}
         />
         <Dato
           id="impuestos-cantidad"

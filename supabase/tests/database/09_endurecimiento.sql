@@ -49,7 +49,7 @@ select throws_ok($$update caja_efectivo set saldo = 'NaN'$$, '23514', null,
 
 -- Largo de textos
 select pg_temp.como(:'cajero');
-select throws_ok(format($$select registrar_venta(%s, %s, 'tarjeta', 'ABC123456789')$$, :turno, :servicio),
+select throws_ok(format($$select registrar_venta(%s, %s, 'transferencia', 'ABC123456789')$$, :turno, :servicio),
   '23514', null, 'una patente de más de 10 caracteres se rechaza');
 select throws_ok(format($$select registrar_gasto(%s, 10, 'transferencia', %L, %s)$$, :comida, repeat('x', 501), :turno),
   '23514', null, 'una nota de más de 500 caracteres se rechaza');

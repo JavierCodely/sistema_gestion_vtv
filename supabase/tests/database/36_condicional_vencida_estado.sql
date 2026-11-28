@@ -28,10 +28,10 @@ reset role;
 select pg_temp.abrir_turno_para(:'admin', :'cajero', :caja, 100) as turno \gset
 -- RA: vigente (vuelta en plazo). RB: vencida (vuelta fuera de plazo). RC: vencida (se cobra de nuevo).
 -- RD: vencida (otra condicional).
-select (registrar_venta(:turno, :auto, 'tarjeta', 'RA111AA', p_condicional => true)).id as c_ra \gset
-select (registrar_venta(:turno, :auto, 'tarjeta', 'RB222BB', p_condicional => true)).id as c_rb \gset
-select (registrar_venta(:turno, :auto, 'tarjeta', 'RC333CC', p_condicional => true)).id as c_rc \gset
-select (registrar_venta(:turno, :auto, 'tarjeta', 'RD444DD', p_condicional => true)).id as c_rd \gset
+select (registrar_venta(:turno, :auto, 'transferencia', 'RA111AA', p_condicional => true)).id as c_ra \gset
+select (registrar_venta(:turno, :auto, 'transferencia', 'RB222BB', p_condicional => true)).id as c_rb \gset
+select (registrar_venta(:turno, :auto, 'transferencia', 'RC333CC', p_condicional => true)).id as c_rc \gset
+select (registrar_venta(:turno, :auto, 'transferencia', 'RD444DD', p_condicional => true)).id as c_rd \gset
 reset role;
 update ventas set condicional_vence = fecha_local(now()) - 1 where id in (:c_rb, :c_rc, :c_rd);
 select pg_temp.como(:'cajero');
@@ -47,10 +47,10 @@ select is((select row(vuelta_de, vuelta_fuera_de_plazo, condicional_vencida_de):
 
 -- Se cobra de nuevo: la condicional vencida queda resuelta --------------------------------------------
 select pg_temp.como(:'cajero');
-select (registrar_venta(:turno, :moto, 'tarjeta', 'RC333CC')).id as v_otro_servicio \gset
+select (registrar_venta(:turno, :moto, 'transferencia', 'RC333CC')).id as v_otro_servicio \gset
 select is((select condicional_vencida_de from ventas where id = :v_otro_servicio), null::bigint,
   'otro servicio no toca la condicional vencida');
-select (registrar_venta(:turno, :auto, 'tarjeta', 'RC333CC')).id as v_rc \gset
+select (registrar_venta(:turno, :auto, 'transferencia', 'RC333CC')).id as v_rc \gset
 reset role;
 select is((select row(precio, vuelta_de, condicional_vencida_de, vuelta_fuera_de_plazo)::text from ventas where id = :v_rc),
   row(60000.00::numeric(12,2), null::bigint, :c_rc::bigint, false)::text,
@@ -61,7 +61,7 @@ select is((select count(*)::int from condicionales_de_patente('RC333CC')), 0,
 select throws_ok(format('select registrar_venta(%s, %s, %L, %L, p_vuelta_vencida => %s)', :turno, :auto, 'efectivo', 'RC333CC', :c_rc),
   'P0001', 'La condicional de la patente RC333CC ya se cobró de nuevo en otra venta: revisá el historial',
   'y no admite la vuelta');
-select (registrar_venta(:turno, :auto, 'tarjeta', 'RC333CC')).id as v_rc2 \gset
+select (registrar_venta(:turno, :auto, 'transferencia', 'RC333CC')).id as v_rc2 \gset
 reset role;
 select is((select condicional_vencida_de from ventas where id = :v_rc2), null::bigint,
   'una venta después ya no la marca');
@@ -75,7 +75,7 @@ select is((select count(*)::int from condicionales_de_patente('RC333CC') where n
   'anular la venta libera la condicional vencida');
 
 -- Otra condicional: también es cobrar de nuevo ----------------------------------------------------------
-select (registrar_venta(:turno, :auto, 'tarjeta', 'RD444DD', p_condicional => true)).id as v_rd \gset
+select (registrar_venta(:turno, :auto, 'transferencia', 'RD444DD', p_condicional => true)).id as v_rd \gset
 reset role;
 select is((select row(condicional_vencida_de, condicional_vence is not null)::text from ventas where id = :v_rd),
   row(:c_rd::bigint, true)::text, 'otra condicional después de la vencida queda registrada');
@@ -86,7 +86,7 @@ reset role;
 
 -- Ventas con fecha pasada: no se marcan -----------------------------------------------------------------
 select pg_temp.como(:'admin');
-select (registrar_venta_pasada('2026-11-01', '10:00', :caja, :auto, 'tarjeta', 60000, 'RC333CC')).id as v_pasada \gset
+select (registrar_venta_pasada('2026-11-01', '10:00', :caja, :auto, 'transferencia', 60000, 'RC333CC')).id as v_pasada \gset
 reset role;
 select is((select condicional_vencida_de from ventas where id = :v_pasada), null::bigint,
   'una venta con fecha pasada no se marca');
